@@ -1,0 +1,58 @@
+Slopix 0.5 — final test results
+ISO SHA256: e44a9323498021b42db14e9930b30c900abe5b69ebe8415352c6e1028e2c9b13
+
+PASS — complete make test suite on this ISO
+  Host: 2 Rust tests and independent C/Rust ABI allocator tests
+  Host: C renderer (all four models, absolute-time/depth/clipping), graphics
+        alpha/clipping/stride guards, runtime unaligned/end/overlap boundaries,
+        private DOOM arena exhaustion/coalescing/free/realloc and WAD streams
+        under ASan/UBSan; leak scanning disabled for container compatibility
+  Host: PNG sizes/RGBA/transparency/reproducibility/halo filtering, telemetry
+  Guest QEMU: cold boot, desktop, all Terminal commands, editing/history,
+        255-byte command boundary, unknown/empty/repeated commands, scroll ring
+        rollover, rapid typing, dual Ctrl and Caps press/release cases
+  Guest QEMU: actual physical-page exhaustion/canary/free cycles; all free
+        pages restored; invalid and double frees rejected; repeat with apps
+  Guest QEMU: HPET and explicitly disabled-HPET PIT fallback cold boots
+  Guest QEMU: window drag, focus, maximize/restore, close/minimize/reopen,
+        cursor/dirty restoration, screen boundaries, actual reboot request
+  Guest QEMU: enlarged Dock pixels, neighboring growth, animated click bounds,
+        restoration to 64px, input occlusion below maximized windows
+  Guest QEMU: cube/teapot/circle/torus animate, FPS text updates, keyboard and
+        mouse model selection, Terminal input during animation
+  Guest QEMU: real Freedoom title -> playable level, held W movement, Ctrl
+        ammunition consumption, focus-loss key release including queued key-up
+        + focus switch, Terminal input and all three apps, memory exhaustion
+        while game arena remains reserved, all game window lifecycle controls,
+        occlusion pause, save/load limitation message, in-game Quit -> usable
+        desktop -> reopen, sustained concurrent game/teapot/Terminal activity
+
+PASS — separate 15-second idle / 60-second animation stability run
+PASS — separate 20-second active Freedoom performance run
+PASS — five additional default-machine cold boot + command checks
+PASS — five additional no-ACPI cold boot + command checks (HPET still detected)
+PASS — preserved Moonrise 0.4 source/ISO entries match its original ZIP
+PASS — final ELF has no undefined symbols or host interpreter/dynamic libc
+
+Measured results are in PERFORMANCE.md and raw build/*.json / logs.
+Guest tests run inside Slopix under QEMU; host tests do not substitute for them.
+The cold-boots.json elapsed values include QMP/typing and are NOT boot-time
+benchmarks. The previous release was not overwritten.
+
+Observed failure retained, not hidden:
+One earlier automated launch timed out before any kernel serial output. Its
+captured CPU state was SeaBIOS real mode at CS=f000 / IP=754d, reading I/O port
+0x608; no Slopix kernel entry was observed. Root cause is not established.
+The interrupted suite was not counted as a pass. Five fresh default-machine
+boots and the final complete suite subsequently passed with unchanged boot
+arguments. Evidence: build/firmware-stall-full-test.log,
+build/firmware-stall-failure-registers.txt and PNG. A transient pre-kernel stall
+remains a known observation; no claim of universal firmware reliability.
+
+Other limits:
+No sound, mouse aiming, multiplayer or persistent saves/configs. No filesystem,
+userspace, process isolation or general kernel heap. DOOM retains its bounded
+arena/session on close. First launch initializes synchronously. Fatal engine
+errors show an app error state; arbitrary C faults can still affect the kernel.
+First-level gameplay tested, not every Freedoom map or a full campaign.
+QEMU BIOS/PS2/std VGA only; real hardware and Docker build were not tested.
