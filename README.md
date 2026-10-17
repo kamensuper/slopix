@@ -1,5 +1,4 @@
-# Slopix
-
+# Slopix — an experimental x86-64 OS
 **An AI-generated OS. Human-directed chaos.**
 
 Slopix is an experimental x86-64 hobby operating system written in Assembly, C, and Rust. Its code is generated with AI, with a human directing the design, features, and development.
