@@ -1,5 +1,5 @@
 # Third-party components
-
+This document records the origins, licenses, and attribution requirements of third-party components used by Slopix.
 The first-party kernel components and original PNG artwork are MIT-licensed.
 The combined DoomGeneric-containing kernel is distributed under GPL-2.0-or-later
 with full corresponding source; see COPYING and DOOM-PORT.md. The raster
