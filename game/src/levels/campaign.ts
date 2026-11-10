@@ -1,8 +1,12 @@
-/** The campaign: three chapters of hand-built levels, plus the metadata menus need. */
+/**
+ * The campaign: the ten featured levels in three worlds, plus the metadata menus need.
+ * The older 30-level set (chapter1-3.ts) stays in the source as LEGACY_LEVELS but is not played.
+ */
 import type { CampaignMeta, ChapterMeta, LevelDef, LevelMeta, ThemeId } from '../core/types';
 import { CHAPTER_1 } from './chapter1';
 import { CHAPTER_2 } from './chapter2';
 import { CHAPTER_3 } from './chapter3';
+import { FEATURED } from './featured';
 
 export interface ChapterDef {
   id: string;
@@ -12,14 +16,15 @@ export interface ChapterDef {
   levels: LevelDef[];
 }
 
-export const CHAPTERS: ChapterDef[] = [
-  { id: '1', title: 'Grasslands', subtitle: 'Green hills and wobbly towers', theme: 'grasslands', levels: CHAPTER_1 },
-  { id: '2', title: 'Desert', subtitle: 'New birds, new tricks', theme: 'desert', levels: CHAPTER_2 },
-  { id: '3', title: 'Snowlands', subtitle: 'Frozen fortresses', theme: 'snowlands', levels: CHAPTER_3 },
-];
+const THEMES: ThemeId[] = ['grasslands', 'desert', 'snowlands'];
 
-/** Every level in campaign order. */
+export const CHAPTERS: ChapterDef[] = FEATURED.map((chapter, i) => ({ ...chapter, theme: THEMES[i] as ThemeId }));
+
+/** Every campaign level in order. */
 export const LEVELS: LevelDef[] = CHAPTERS.flatMap((chapter) => chapter.levels);
+
+/** The earlier, unpolished level set; kept for reference and tooling, not part of the campaign. */
+export const LEGACY_LEVELS: LevelDef[] = [...CHAPTER_1, ...CHAPTER_2, ...CHAPTER_3];
 
 function buildMeta(): CampaignMeta {
   const chapters: ChapterMeta[] = [];
@@ -44,7 +49,7 @@ function buildMeta(): CampaignMeta {
 
 export const CAMPAIGN: CampaignMeta = buildMeta();
 
-/** "2-7" style label of a level. */
+/** "2-3" style label of a level. */
 export function levelLabel(index: number): string {
   const meta = CAMPAIGN.levels[index];
   return meta ? `${meta.chapter + 1}-${meta.number}` : '';

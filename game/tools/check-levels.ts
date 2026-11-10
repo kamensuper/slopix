@@ -83,12 +83,19 @@ function checkStable(level: LevelDef): string[] {
   const sim = new GameSim(level);
   sim.events.length = 0;
   const problems: string[] = [];
+  const start = new Map<number, { x: number; y: number }>();
+  for (const e of [...sim.blocks, ...sim.pigs]) start.set(e.id, { x: e.x, y: e.y });
   for (let i = 0; i < 60 * 6; i++) {
     sim.step();
     for (const e of sim.events) {
-      if (e.type === 'blockDamaged' || e.type === 'blockDestroyed' || e.type === 'pigDamaged' || e.type === 'pigDefeated') problems.push(`${e.type} at t=${(sim.tick / 60).toFixed(2)}`);
+      if (e.type === 'blockDamaged' || e.type === 'blockDestroyed' || e.type === 'pigDamaged' || e.type === 'pigDefeated' || e.type === 'jointBroken') problems.push(`${e.type} at t=${(sim.tick / 60).toFixed(2)}`);
     }
     sim.events.length = 0;
+  }
+  // Nothing may drift noticeably before it is hit (a hanging deck may settle a little).
+  for (const e of [...sim.blocks, ...sim.pigs]) {
+    const s = start.get(e.id);
+    if (s && Math.hypot(e.x - s.x, e.y - s.y) > 0.3) problems.push(`${e.kind} ${e.id} drifted ${Math.hypot(e.x - s.x, e.y - s.y).toFixed(2)}m`);
   }
   return problems.slice(0, 3);
 }
