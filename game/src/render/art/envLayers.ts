@@ -83,14 +83,24 @@ export interface GroundDef {
   over?: LayerFill[];
 }
 
+export interface BackdropFrame {
+  /** Canvas extent in layer units: x in [0, w], y in [top, bottom] (horizon at y = 0). */
+  w: number;
+  top: number;
+  bottom: number;
+  /** Horizontal range that is on screen when the backdrop is centred. */
+  viewL: number;
+  viewR: number;
+}
+
 export type AmbientKind = 'pollen' | 'sand' | 'snow';
 
 export interface SceneDef {
   /**
    * Paints sky and far scenery into the opaque backdrop. The context is in layer units, origin
-   * at the left edge on the horizon, y down; the rectangle [0, w] x [top, bottom] must be covered.
+   * at the left edge on the horizon, y down; the whole frame rectangle must be covered.
    */
-  paintBackdrop(ctx: CanvasRenderingContext2D, w: number, top: number, bottom: number, seed: number): void;
+  paintBackdrop(ctx: CanvasRenderingContext2D, frame: BackdropFrame, seed: number): void;
   backdropPx: number;
   backdropPv: number;
   layers: ParallaxLayer[];
@@ -183,7 +193,11 @@ export class EnvRenderer {
     const horizon = this.horizon(view);
     c.setTransform(dpr * unit, 0, 0, dpr * unit, 0, dpr * (this.my + horizon));
     const wUnits = (W + this.mx * 2) / unit;
-    scene.paintBackdrop(c, wUnits, -(this.my + horizon) / unit, (H - horizon) / unit, seed);
+    scene.paintBackdrop(
+      c,
+      { w: wUnits, top: -(this.my + horizon) / unit, bottom: (H - horizon) / unit, viewL: this.mx / unit, viewR: (this.mx + W) / unit },
+      seed,
+    );
     this.backdrop = canvas;
     this.backKey = key;
   }
