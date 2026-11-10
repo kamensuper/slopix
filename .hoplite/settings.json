@@ -19,7 +19,7 @@
 		},
 		"run": {
 			"enabled": true,
-			"command": "cd 'game' && npm run dev"
+			"command": "cd game && npx vite build && npx vite preview --port 5173 --strictPort"
 		},
 		"archive": {
 			"enabled": true,
