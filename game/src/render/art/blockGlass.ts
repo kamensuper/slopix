@@ -8,7 +8,7 @@ import { insetPolygon, insideGeo, mixSeed, outlinePath, paintBevel, randomInside
 import type { DamageStage } from './types';
 
 const OUTLINE = 4.5;
-const EDGE_TINT = 'rgba(52, 150, 196, 0.55)';
+const EDGE_TINT = 'rgba(40, 140, 180, 0.62)';
 const CRACK_WHITE = 'rgba(255, 255, 255, 0.95)';
 const CRACK_DARK = 'rgba(28, 92, 128, 0.55)';
 
@@ -40,9 +40,10 @@ function paintPane(ctx: CanvasRenderingContext2D, geo: BlockGeo, rng: Rng): void
   const hh = geo.h / 2;
   // Body: pale and clear towards the light, deeper blue where the light passes through more glass.
   const body = ctx.createLinearGradient(-hw, -hh, hw * 0.4 + hh, hh + hw * 0.2);
-  body.addColorStop(0, 'rgba(226, 248, 255, 0.62)');
-  body.addColorStop(0.5, 'rgba(160, 222, 244, 0.5)');
-  body.addColorStop(1, 'rgba(96, 180, 222, 0.66)');
+  // Slightly cyan, so panes stay distinct from a blue sky.
+  body.addColorStop(0, 'rgba(232, 252, 255, 0.74)');
+  body.addColorStop(0.5, 'rgba(150, 222, 238, 0.6)');
+  body.addColorStop(1, 'rgba(70, 168, 206, 0.76)');
   ctx.fillStyle = body;
   ctx.fillRect(-hw - 2, -hh - 2, geo.w + 4, geo.h + 4);
 

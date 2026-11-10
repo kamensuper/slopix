@@ -623,7 +623,7 @@
 }
 .panel-scroll {
   width: 100%;
-  max-height: calc(100dvh - 230px);
+  max-height: calc(100dvh - 252px);
   overflow-y: auto;
   padding: 16px 10px 22px;
   touch-action: pan-y;
@@ -1069,6 +1069,21 @@
     display: flex;
     flex-direction: column;
     text-align: center;
+    padding: 8px 8px 10px;
+  }
+  .howto-step .step-art {
+    width: auto;
+    align-self: center;
+  }
+  .howto-step .art-howto {
+    width: auto;
+    height: 74px;
+  }
+  .step-title {
+    font-size: 18px;
+  }
+  .step-text {
+    font-size: 13px;
   }
   .bird-roster {
     grid-template-columns: repeat(2, 1fr);
@@ -1092,6 +1107,7 @@
     padding: 6px 12px 8px;
     font-size: 17px;
   }
+  .pause-actions .btn:last-child,
   .pause-actions .btn.big {
     grid-column: 1 / -1;
     min-height: 54px;
