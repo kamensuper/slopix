@@ -20,12 +20,38 @@ const PREVIEW_STRIDE = 6;
 const SPRING_STIFFNESS = 520;
 const SPRING_DAMPING_EMPTY = 9;
 const SPRING_DAMPING_LOADED = 46;
-const BAND_REST_WIDTH = 0.17;
-const BAND_DARK = '#3a160c';
-const BAND_LIGHT = '#7a3521';
-const POUCH = '#5a3a20';
+/** Frame follow-through after a release: a stiff, lightly damped sway about the base. */
+const SWAY_STIFFNESS = 150;
+const SWAY_DAMPING = 5.5;
+const SWAY_KICK = 0.55;
+/** Rubber band width at rest (m); it thins as it stretches. */
+const BAND_REST_WIDTH = 0.13;
+const BAND_REST_LENGTH = 0.5;
+/** Band colours at rest and under full tension: the rubber pales and warms as it stretches. */
+const BAND = { base: '#6a2a16', light: '#b25a3a', strained: '#a8401f', strainedLight: '#ff9d6e' } as const;
+const LEATHER = '#7a4a26';
+const LEATHER_DARK = '#4a2a14';
+const LEATHER_LIGHT = '#b77a45';
+const STITCH = '#f1d8a8';
+/** Leather pouch thickness (m) and how far it wraps round the bird (radians either side). */
+const POUCH_THICK = 0.12;
+const POUCH_WRAP = 1.05;
 const MIN_ANGLE = -25 * DEG;
 const MAX_ANGLE = 88 * DEG;
+
+interface PouchShape {
+  cx: number;
+  cy: number;
+  r: number;
+  /** World angle of the middle of the pouch (pointing away from the target). */
+  mid: number;
+  spread: number;
+  /** End tied to the far band and end tied to the near band. */
+  backX: number;
+  backY: number;
+  frontX: number;
+  frontY: number;
+}
 
 export class SlingView {
   /** Pouch offset from the anchor in world metres. */
@@ -49,6 +75,10 @@ export class SlingView {
   private idleHopIndex = -1;
   private idleHopT = 0;
   private idleHopTimer = 2.5;
+  private clock = 0;
+  private sway = 0;
+  private swayV = 0;
+  private readonly shape: PouchShape = { cx: 0, cy: 0, r: 0.3, mid: Math.PI, spread: POUCH_WRAP, backX: 0, backY: 0, frontX: 0, frontY: 0 };
   private readonly pose: BirdPose = { time: 0, state: 'idle', blink: 0, pull: 0, lookX: 0.4, lookY: 0, abilityUsed: false, fuse: 0, flash: 0 };
 
   constructor(
@@ -159,6 +189,8 @@ export class SlingView {
     launchVelocity(this.pull.x, this.pull.y, this.velocity);
     this.springVx = this.velocity.x * 1.2;
     this.springVy = this.velocity.y * 1.2;
+    // The frame lurches towards the target and rings back.
+    this.swayV -= SWAY_KICK * pullPower(shot.x, shot.y);
     this.loaded = null;
     return shot;
   }
@@ -169,7 +201,16 @@ export class SlingView {
   }
 
   update(dt: number, waiting: number): void {
+    this.clock += dt;
     if (this.hop < 1) this.hop = Math.min(1, this.hop + dt / HOP_TIME);
+    {
+      const steps = Math.max(1, Math.ceil(dt / 0.008));
+      const h = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        this.swayV += (-SWAY_STIFFNESS * this.sway - SWAY_DAMPING * this.swayV) * h;
+        this.sway += this.swayV * h;
+      }
+    }
     if (!this.dragging && !this.keyboard) {
       const damping = this.loaded ? SPRING_DAMPING_LOADED : SPRING_DAMPING_EMPTY;
       // Sub-step the stiff spring so it stays stable at low frame rates.
