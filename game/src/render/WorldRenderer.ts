@@ -10,7 +10,7 @@ import type { BirdType, BlockMaterial, BlockShape, DecorDef, PigVariant, Terrain
 import type { ProjectileType } from '../sim/entities';
 import { paintBird, paintEgg } from './art/birds';
 import { paintBlock } from './art/blocks';
-import { DECOR, paintDecor, paintForeground, paintGround, paintSky, paintTerrain } from './art/environment';
+import { DECOR, paintDecor, paintDecorGlow, paintForeground, paintGround, paintSky, paintTerrain } from './art/environment';
 import { paintPig, paintPigAccessory } from './art/pigs';
 import { paintParticle, paintSlingshotBack, paintSlingshotFront } from './art/props';
 import {
@@ -34,9 +34,11 @@ import { SpriteCache, type Sprite } from './SpriteCache';
 const SPRITE_SCALE = RENDER.spritePxPerMeter / ART_UNITS_PER_METER;
 /** Outlines may spill a few units over the nominal shape. */
 const SPILL = 4;
+/** Terrain artwork (grass blades, snow lumps) may rise this far above its collision shape. */
+const TERRAIN_SPILL = 16;
 /** Number of look variations kept per block type. */
 const SEED_VARIANTS = 4;
-const SLING_BOUNDS = { left: -120, top: -340, width: 240, height: 360 };
+const SLING_BOUNDS = { left: -90, top: -345, width: 180, height: 365 };
 const PARTICLE_SCALE = 1.5;
 
 export interface BlockLook {
@@ -53,12 +55,15 @@ export class WorldRenderer {
   private ctx!: CanvasRenderingContext2D;
   private cam!: Camera;
   private dpr = 1;
-  private skyCanvas: HTMLCanvasElement | null = null;
-  private skyKey = '';
   private readonly env: EnvView = { width: 1, height: 1, camX: 0, camY: 0, zoom: 30, time: 0, groundY: 0, worldWidth: 44 };
+  /** Accessibility: freezes wind sway and ambient particles in the environment. */
+  reducedMotion = false;
 
-  /** Call first every frame. */
-  begin(ctx: CanvasRenderingContext2D, camera: Camera, dpr: number, time: number, worldWidth: number): void {
+  /**
+   * Call first every frame. `envSeed` varies the backdrop composition per level (defaults to a
+   * hash of the level width).
+   */
+  begin(ctx: CanvasRenderingContext2D, camera: Camera, dpr: number, time: number, worldWidth: number, envSeed?: number): void {
     this.ctx = ctx;
     this.cam = camera;
     this.dpr = dpr;
@@ -71,6 +76,8 @@ export class WorldRenderer {
     env.time = time;
     env.groundY = camera.groundY;
     env.worldWidth = worldWidth;
+    env.reducedMotion = this.reducedMotion;
+    env.seed = envSeed;
     this.screenSpace();
   }
 
@@ -88,25 +95,10 @@ export class WorldRenderer {
 
   // ------------------------------------------------------------------ environment
 
+  /** Sky, clouds and parallax scenery (the backdrop is cached; nearer layers are flat vector fills). */
   drawSky(theme: ThemeId): void {
     this.screenSpace();
-    // A full-screen gradient fill is the most expensive pass in software-rasterised browsers,
-    // so paint it once per theme and size and blit the cached copy.
-    const w = Math.ceil(this.env.width * this.dpr);
-    const h = Math.ceil(this.env.height * this.dpr);
-    const key = `${theme}|${w}|${h}`;
-    if (this.skyKey !== key) {
-      const canvas = this.skyCanvas ?? document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const c = canvas.getContext('2d', { alpha: false })!;
-      c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-      paintSky(c, theme, this.env);
-      this.skyCanvas = canvas;
-      this.skyKey = key;
-    }
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.ctx.drawImage(this.skyCanvas!, 0, 0);
+    paintSky(this.ctx, theme, this.env);
     this.screenSpace();
   }
 
@@ -147,7 +139,9 @@ export class WorldRenderer {
       spec = { shape: 'rect', w: (piece.w ?? 1) * ART_UNITS_PER_METER, h: (piece.h ?? 1) * ART_UNITS_PER_METER };
     }
     const key = `terrain|${theme}|${index}|${spec.w.toFixed(0)}|${spec.h.toFixed(0)}|${piece.shape}|${piece.points?.length ?? 0}`;
-    const sprite = this.sprites.get(key, -spec.w / 2 - SPILL, -spec.h / 2 - SPILL, spec.w + SPILL * 2, spec.h + SPILL * 2, SPRITE_SCALE, (c) =>
+    // Grass blades / snow lumps may poke a little above the collision silhouette.
+    const pad = TERRAIN_SPILL;
+    const sprite = this.sprites.get(key, -spec.w / 2 - pad, -spec.h / 2 - pad, spec.w + pad * 2, spec.h + pad * 2, SPRITE_SCALE, (c) =>
       paintTerrain(c, theme, spec, index + 1),
     );
     const angle = (piece.angle ?? 0) * DEG;
@@ -159,14 +153,29 @@ export class WorldRenderer {
   drawDecor(decor: DecorDef, index: number): void {
     const info = DECOR[decor.kind];
     if (!info) return;
+    const scale = decor.scale ?? 1;
+    const y = decor.y ?? 0;
+    if (!this.cam.sees(decor.x, y + (info.h * scale) / 2, (Math.max(info.w, info.h) * scale) / 2 + 0.5)) return;
     const w = info.w * ART_UNITS_PER_METER;
     const h = info.h * ART_UNITS_PER_METER;
     const seed = index % SEED_VARIANTS;
     const sprite = this.sprites.get(`decor|${decor.kind}|${seed}`, -w / 2 - SPILL, -h - SPILL, w + SPILL * 2, h + SPILL * 2, SPRITE_SCALE, (c) =>
       paintDecor(c, decor.kind, seed + 1),
     );
-    const scale = decor.scale ?? 1;
-    this.blit(sprite, decor.x, decor.y ?? 0, 0, decor.flip ? -scale : scale, scale);
+    this.blit(sprite, decor.x, y, 0, decor.flip ? -scale : scale, scale);
+    // Lights (lanterns) get a separately cached, gently flickering additive glow.
+    if (info.glow) {
+      const r = info.glow.r * ART_UNITS_PER_METER;
+      const glow = this.sprites.get(`decorglow|${decor.kind}`, -r, -r, r * 2, r * 2, SPRITE_SCALE * 0.5, (c) => paintDecorGlow(c, decor.kind));
+      const t = this.env.time;
+      const flicker = this.reducedMotion ? 0.85 : 0.8 + 0.12 * Math.sin(t * 7.3 + index) + 0.08 * Math.sin(t * 13.1 + index * 2);
+      const ctx = this.ctx;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = flicker;
+      this.blit(glow, decor.x + info.glow.x * scale, y + info.glow.y * scale, 0, scale, scale);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
   }
 
   // ------------------------------------------------------------------ blocks

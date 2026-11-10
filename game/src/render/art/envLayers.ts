@@ -83,14 +83,24 @@ export interface GroundDef {
   over?: LayerFill[];
 }
 
+export interface BackdropFrame {
+  /** Canvas extent in layer units: x in [0, w], y in [top, bottom] (horizon at y = 0). */
+  w: number;
+  top: number;
+  bottom: number;
+  /** Horizontal range that is on screen when the backdrop is centred. */
+  viewL: number;
+  viewR: number;
+}
+
 export type AmbientKind = 'pollen' | 'sand' | 'snow';
 
 export interface SceneDef {
   /**
    * Paints sky and far scenery into the opaque backdrop. The context is in layer units, origin
-   * at the left edge on the horizon, y down; the rectangle [0, w] x [top, bottom] must be covered.
+   * at the left edge on the horizon, y down; the whole frame rectangle must be covered.
    */
-  paintBackdrop(ctx: CanvasRenderingContext2D, w: number, top: number, bottom: number, seed: number): void;
+  paintBackdrop(ctx: CanvasRenderingContext2D, frame: BackdropFrame, seed: number): void;
   backdropPx: number;
   backdropPv: number;
   layers: ParallaxLayer[];
@@ -183,7 +193,11 @@ export class EnvRenderer {
     const horizon = this.horizon(view);
     c.setTransform(dpr * unit, 0, 0, dpr * unit, 0, dpr * (this.my + horizon));
     const wUnits = (W + this.mx * 2) / unit;
-    scene.paintBackdrop(c, wUnits, -(this.my + horizon) / unit, (H - horizon) / unit, seed);
+    scene.paintBackdrop(
+      c,
+      { w: wUnits, top: -(this.my + horizon) / unit, bottom: (H - horizon) / unit, viewL: this.mx / unit, viewR: (this.mx + W) / unit },
+      seed,
+    );
     this.backdrop = canvas;
     this.backKey = key;
   }
@@ -487,25 +501,29 @@ function cloudPaths(c: CloudDef): { shade: Path2D; base: Path2D; light: Path2D }
     const shade = new Path2D();
     const base = new Path2D();
     const light = new Path2D();
-    for (const [x, y, r] of c.lobes) {
+    const lobes = c.lobes;
+    const minX = Math.min(...lobes.map(([x, , r]) => x - r));
+    const maxX = Math.max(...lobes.map(([x, , r]) => x + r));
+    const rMin = Math.min(...lobes.map(([, , r]) => r));
+    for (const [x, y, r] of lobes) {
       shade.moveTo(x + r, y);
       shade.arc(x, y, r, 0, Math.PI * 2);
-      // Base: lobes nudged up-left leave a lavender rim at the lower right.
-      const bx = x - r * 0.07;
-      const by = y - r * 0.12;
-      base.moveTo(bx + r * 0.95, by);
-      base.arc(bx, by, r * 0.95, 0, Math.PI * 2);
-      // Light: sunlit caps on the upper-left of each lobe.
-      const lx = x - r * 0.22;
-      const ly = y - r * 0.32;
-      light.moveTo(lx + r * 0.6, ly);
-      light.arc(lx, ly, r * 0.6, 0, Math.PI * 2);
+      // Base: lobes lifted a little leave a cool shaded belly and lower-right rim.
+      const bx = x - r * 0.06;
+      const by = y - r * 0.2;
+      base.moveTo(bx + r * 0.94, by);
+      base.arc(bx, by, r * 0.94, 0, Math.PI * 2);
+      // Light: sunlit caps on the upper-left of the upper lobes.
+      if (y + r < -rMin * 0.6 || r > rMin * 1.6) {
+        const lx = x - r * 0.24;
+        const ly = y - r * 0.34;
+        light.moveTo(lx + r * 0.58, ly);
+        light.arc(lx, ly, r * 0.58, 0, Math.PI * 2);
+      }
     }
-    // Flat-ish bellies.
-    const minX = Math.min(...c.lobes.map(([x, , r]) => x - r * 0.6));
-    const maxX = Math.max(...c.lobes.map(([x, , r]) => x + r * 0.6));
-    shade.rect(minX, -c.lobes[0]![2] * 0.9, maxX - minX, c.lobes[0]![2] * 0.9);
-    base.rect(minX + 6, -c.lobes[0]![2] * 1.1, maxX - minX - 10, c.lobes[0]![2] * 0.92);
+    // Flat belly: a rounded slab under the lobes.
+    shade.rect(minX + rMin, -rMin, maxX - minX - rMin * 2, rMin);
+    base.rect(minX + rMin, -rMin * 1.2, maxX - minX - rMin * 2.2, rMin * 0.4);
     paths = { shade, base, light };
     cloudCache.set(c, paths);
   }

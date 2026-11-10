@@ -521,7 +521,9 @@ export function addPoly(path: CanvasPath, pts: Pts): void {
 
 /** A polygon geometry with the same yardsticks as `geo` (for bevels on hewn silhouettes). */
 export function polyGeo(geo: BlockGeo, pts: Pts): BlockGeo {
-  return { ...geo, shape: geo.shape === 'circle' ? 'rect' : geo.shape, pts, radius: 0 };
+  let perimeter = 0;
+  for (let i = 0; i < pts.length / 2; i++) perimeter += edgeFrame(pts, i).len;
+  return { ...geo, shape: geo.shape === 'circle' ? 'rect' : geo.shape, pts, radius: 0, perimeter };
 }
 
 /**
