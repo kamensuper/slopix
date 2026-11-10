@@ -14,6 +14,8 @@ import { FloatingText } from '../../render/FloatingText';
 import { ParticleSystem } from '../../render/ParticleSystem';
 import type { WorldRenderer } from '../../render/WorldRenderer';
 import { GameSim, type WinSummary } from '../../sim/GameSim';
+import { solveAim } from '../../sim/aim';
+import { pullFromAim } from '../../sim/slingshot';
 import { ActorViews } from './ActorViews';
 import { Feedback } from './Feedback';
 import { SlingView } from './SlingView';
@@ -443,6 +445,12 @@ export class PlayScene implements Scene {
     r.screenSpace();
     this.texts.draw(ctx, cam);
     r.end();
+  }
+
+  /** Test helper: the pouch offset that sends the loaded bird through a world point (low arc). */
+  aimPull(targetX: number, targetY: number, power: number): { x: number; y: number } | null {
+    const angle = solveAim(this.sim.anchor, targetX, targetY, power).low;
+    return angle === null ? null : pullFromAim(angle, power, { x: 0, y: 0 });
   }
 
   /** Debug / test helpers exposed through window.__game. */
