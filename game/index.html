@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#58c0f5" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="description" content="Flock Fury - a slingshot physics game. Fling birds, topple towers, pop pigs." />
+    <title>Flock Fury</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <style>
+      /* Boot screen: inline so it paints before any script or stylesheet has loaded. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #58c0f5;
+        overflow: hidden;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: linear-gradient(#49b4f0, #bfeaff);
+        color: #fff;
+        font: 700 22px/1.2 system-ui, sans-serif;
+        text-shadow: 0 2px 0 rgba(0, 60, 110, 0.35);
+        transition: opacity 0.45s ease;
+      }
+      #boot.done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot-bar {
+        width: min(280px, 60vw);
+        height: 16px;
+        border-radius: 10px;
+        background: rgba(0, 60, 110, 0.25);
+        border: 3px solid #fff;
+        overflow: hidden;
+      }
+      #boot-fill {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(#ffe36b, #ffb629);
+        transition: width 0.2s ease;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game" aria-label="Flock Fury game"></canvas>
+      <div id="ui"></div>
+    </div>
+    <div id="boot" role="status" aria-live="polite">
+      <div id="boot-text">Loading</div>
+      <div id="boot-bar"><div id="boot-fill"></div></div>
+    </div>
+    <noscript>Flock Fury needs JavaScript to run.</noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
