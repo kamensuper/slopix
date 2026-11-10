@@ -1,0 +1,31 @@
+{
+  "name": "flock-fury",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Flock Fury - an original slingshot physics game in the spirit of the classic bird-flinging games (HTML5 Canvas, TypeScript, Planck.js, Vite)",
+  "type": "module",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "levels:check": "tsx tools/check-levels.ts",
+    "shot": "node tools/shot.mjs",
+    "e2e": "node tools/e2e/run.mjs"
+  },
+  "dependencies": {
+    "planck": "^1.5.1"
+  },
+  "devDependencies": {
+    "@fontsource-variable/fredoka": "^5.3.0",
+    "@fontsource/lilita-one": "^5.3.0",
+    "@types/node": "^26.6.6",
+    "playwright-core": "^1.65.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
+  }
+}
