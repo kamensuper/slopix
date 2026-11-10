@@ -239,6 +239,7 @@ async function main(): Promise<void> {
     const avg = timings.reduce((a, b) => a + b, 0) / timings.length;
     const text = `paint-ms avg ${avg.toFixed(2)} max ${max.toFixed(2)} n ${timings.length}`;
     console.log(text);
+    (window as unknown as { __paintMs?: string }).__paintMs = text;
     ctx.fillStyle = '#2b1a12cc';
     ctx.fillRect(8, H - 26, 300, 20);
     label(text, 14, H - 11);

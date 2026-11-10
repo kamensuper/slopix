@@ -149,6 +149,7 @@ export class EnvRenderer {
   private readonly strips = new Map<ParallaxLayer, Strip>();
   private readonly clouds = new Map<CloudDef, Strip>();
   private ground: Strip | null = null;
+  private groundZoom = 0;
 
   constructor(private readonly scenes: (theme: ThemeId) => SceneDef) {}
 
@@ -350,9 +351,12 @@ export class EnvRenderer {
     const k = view.zoom / 100;
     // Deepest ground ever visible: the camera keeps the ground line above the bottom band (+ shake).
     const depthPx = view.height * CAMERA.groundBand + 40;
-    const key = `${theme}|${view.zoom}|${dpr}|${depthPx}`;
+    const key = `${theme}|${dpr}|${depthPx}`;
     let tile = this.ground;
-    if (tile && tile.key === key) return tile;
+    // The eased camera zoom creeps towards its target forever; a 0.05 % tolerance keeps the
+    // cached tile (misalignment stays below ~1 px across a tile).
+    if (tile && tile.key === key && Math.abs(this.groundZoom / view.zoom - 1) < 5e-4) return tile;
+    this.groundZoom = view.zoom;
     const canvas = tile?.canvas ?? document.createElement('canvas');
     canvas.width = Math.max(1, Math.round((g.tile / 100) * view.zoom * dpr));
     canvas.height = Math.max(1, Math.ceil((GROUND_TOP * k + depthPx) * dpr));
