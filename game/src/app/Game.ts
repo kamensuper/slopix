@@ -147,6 +147,7 @@ export class Game {
       onFinished: (won, summary, score) => !backdrop && this.finishLevel(won, summary, score),
       onPauseRequest: () => !backdrop && this.actions.requestPause(),
       onRestartRequest: () => !backdrop && this.actions.restart(),
+      reducedMotion: () => this.save.getSettings().reducedMotion,
     };
   }
 

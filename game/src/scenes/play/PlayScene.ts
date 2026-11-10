@@ -6,6 +6,7 @@ import type { IAudioManager } from '../../audio/types';
 import { BIRDS, CAMERA, PHYSICS, SCORE, TICK } from '../../core/config';
 import type { SimEvent } from '../../core/events';
 import { clamp, clamp01 } from '../../core/math';
+import { INK } from '../../core/palette';
 import type { BirdType, LevelDef } from '../../core/types';
 import type { Scene, Viewport } from '../../app/Scene';
 import type { PointerInfo } from '../../input/InputManager';
@@ -31,6 +32,14 @@ export interface PlayHost {
   onFinished(won: boolean, summary: WinSummary | null, score: number): void;
   onPauseRequest(): void;
   onRestartRequest(): void;
+  /** Player asked for reduced motion (less shake, no slow motion). */
+  reducedMotion(): boolean;
+}
+
+/** Rope and revolute joints both expose their body-local anchors. */
+interface LocalAnchors {
+  getLocalAnchorA(): { x: number; y: number };
+  getLocalAnchorB(): { x: number; y: number };
 }
 
 type CamMode = 'intro' | 'sling' | 'follow' | 'free' | 'overview';
@@ -80,7 +89,9 @@ export class PlayScene implements Scene {
       audio: host.audio,
       actors: this.actors,
       theme: level.theme,
-      slowMotion: (s) => (this.slowLeft = Math.max(this.slowLeft, s)),
+      slowMotion: (s) => {
+        if (!this.host.reducedMotion()) this.slowLeft = Math.max(this.slowLeft, s);
+      },
       now: () => this.time,
     });
     this.camera.setBounds({ minX: Math.min(-2, level.slingshot.x - 8), maxX: level.world.width + 4, maxY: level.world.height });
@@ -136,6 +147,16 @@ export class PlayScene implements Scene {
     this.setMode(this.mode === 'overview' ? 'sling' : 'overview');
   }
 
+  private pigFocusX(): number | null {
+    let sum = 0;
+    let n = 0;
+    for (const pig of this.sim.pigs) {
+      sum += pig.x;
+      n++;
+    }
+    return n > 0 ? sum / n : null;
+  }
+
   private updateCamera(dt: number): void {
     this.modeTime += dt;
     const bird = this.sim.activeBird;
@@ -151,10 +172,17 @@ export class PlayScene implements Scene {
         this.applyOverviewTarget();
         break;
       case 'follow': {
-        if (bird && bird.alive) {
-          const zoom = this.slingZoom() * 0.85;
+        if (bird && bird.alive && !bird.impacted) {
+          // Zoom out on high arcs so the bird and the ground stay in frame.
+          const fit = this.view.height / (bird.y + 7);
+          const zoom = Math.min(this.slingZoom() * 0.85, fit);
           const lead = clamp(bird.vx * 0.25, -3, 4);
-          this.camera.setTarget(bird.x + lead, bird.y, zoom);
+          this.camera.setTarget(bird.x + lead, bird.y * 0.6 + 2, zoom);
+        } else if (bird && bird.alive) {
+          // After impact, frame the action between the bird and the remaining pigs instead of chasing a rolling bird.
+          this.camera.smooth = 0.45;
+          const focus = this.pigFocusX();
+          this.camera.setTarget(focus === null ? bird.x : (bird.x + focus) / 2, Math.max(4, bird.y), this.slingZoom() * 0.8);
         } else if (this.sim.phase === 'aiming') {
           this.setMode('sling');
         }
@@ -202,6 +230,9 @@ export class PlayScene implements Scene {
         this.endTimer = 1 + waiting.length * 0.45;
         break;
       }
+      case 'jointBroken':
+        this.host.audio.play('wood_hit', { intensity: 0.9, rate: 1.6 });
+        break;
       case 'levelLost':
         this.host.audio.play('level_fail');
         this.host.audio.play('pig_oink', { intensity: 1 });
@@ -215,6 +246,7 @@ export class PlayScene implements Scene {
 
   update(dt: number): void {
     this.time += dt;
+    this.camera.motionScale = this.host.reducedMotion() ? 0.25 : 1;
     if (!this.paused) {
       const scale = this.slowLeft > 0 ? SLOW_SCALE : 1;
       this.slowLeft = Math.max(0, this.slowLeft - dt);
@@ -432,6 +464,7 @@ export class PlayScene implements Scene {
       );
     }
     this.actors.drawPigs(r, sim, alpha, this.time);
+    this.drawJoints(ctx, alpha);
     this.actors.drawGhosts(r, this.time);
     this.sling.drawQueue(r, this.waiting(), this.time, this.sim.phase === 'aiming');
     this.actors.drawBirds(r, sim, alpha, this.time);
@@ -445,6 +478,94 @@ export class PlayScene implements Scene {
     r.screenSpace();
     this.texts.draw(ctx, cam);
     r.end();
+  }
+
+  /** Ropes (with sag when slack), hooks and hinge bolts. Anchors follow the interpolated bodies. */
+  private drawJoints(ctx: CanvasRenderingContext2D, alpha: number): void {
+    const joints = this.sim.joints;
+    if (joints.length === 0) return;
+    const cam = this.camera;
+    this.host.renderer.screenSpace();
+    const z = cam.zoom;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const j of joints) {
+      if (!j.alive) continue;
+      const local = j.joint as unknown as LocalAnchors;
+      const a = this.anchorOf(j.a, local.getLocalAnchorA(), alpha, this.ptA);
+      if (j.kind === 'pin') {
+        this.drawBolt(ctx, cam.toScreenX(a.x), cam.toScreenY(a.y), z);
+        continue;
+      }
+      const b = j.b ? this.anchorOf(j.b, local.getLocalAnchorB(), alpha, this.ptB) : j.joint.getAnchorB();
+      const max = (j.joint as unknown as { getMaxLength(): number }).getMaxLength();
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      const sag = Math.sqrt(Math.max(0, max * max - d * d)) * 0.5;
+      const x0 = cam.toScreenX(a.x);
+      const y0 = cam.toScreenY(a.y);
+      const x1 = cam.toScreenX(b.x);
+      const y1 = cam.toScreenY(b.y);
+      const cx = (x0 + x1) / 2;
+      const cy = (y0 + y1) / 2 + sag * z;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx, cy, x1, y1);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = Math.max(2.5, 0.12 * z);
+      ctx.stroke();
+      ctx.strokeStyle = '#c99a5b';
+      ctx.lineWidth = Math.max(1.5, 0.075 * z);
+      ctx.stroke();
+      // Twisted fibre: short light dashes along the rope.
+      ctx.setLineDash([Math.max(2, 0.08 * z), Math.max(2, 0.08 * z)]);
+      ctx.strokeStyle = '#ecd1a0';
+      ctx.lineWidth = Math.max(0.8, 0.03 * z);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (!j.b) this.drawHook(ctx, x1, y1, z);
+    }
+  }
+
+  private readonly ptA = { x: 0, y: 0 };
+  private readonly ptB = { x: 0, y: 0 };
+
+  private anchorOf(e: { px: number; py: number; pangle: number; x: number; y: number; angle: number }, local: { x: number; y: number }, alpha: number, out: { x: number; y: number }): { x: number; y: number } {
+    const x = e.px + (e.x - e.px) * alpha;
+    const y = e.py + (e.y - e.py) * alpha;
+    const angle = e.pangle + (e.angle - e.pangle) * alpha;
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    out.x = x + local.x * c - local.y * s;
+    out.y = y + local.x * s + local.y * c;
+    return out;
+  }
+
+  private drawBolt(ctx: CanvasRenderingContext2D, x: number, y: number, z: number): void {
+    const r = Math.max(2.5, 0.11 * z);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#9aa6b2';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, 0.035 * z);
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.35, 0, Math.PI * 2);
+    ctx.fillStyle = '#e8eef4';
+    ctx.fill();
+  }
+
+  /** Iron ring screwed into the world where a rope is tied off. */
+  private drawHook(ctx: CanvasRenderingContext2D, x: number, y: number, z: number): void {
+    const r = Math.max(3, 0.13 * z);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(2.5, 0.09 * z);
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1.2, 0.05 * z);
+    ctx.strokeStyle = '#7d8894';
+    ctx.stroke();
   }
 
   /** Test helper: the pouch offset that sends the loaded bird through a world point (low arc). */

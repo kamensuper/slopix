@@ -126,3 +126,48 @@ describe('structures', () => {
     expect(h.events('pigDamaged').length + h.events('pigDefeated').length).toBeGreaterThan(0);
   });
 });
+
+describe('joints', () => {
+  // A wooden platform hanging from two ropes with a pig on it, held by a wooden hanger piece.
+  const swing = () =>
+    makeLevel(['red'], (b) => {
+      b.block('wood', 'rect', 24, 4, 3, 0.25);
+      const deck = b.last;
+      b.pig('small', 24, 4.125);
+      b.block('wood', 'rect', 22.6, 7, 0.25, 0.25);
+      const hook = b.last;
+      b.pin(hook, 22.6, 7);
+      b.rope(deck, 22.6, 4.1, hook, 22.6, 7);
+      b.rope(deck, 25.4, 4.1, null, 25.4, 7);
+    });
+
+  it('hold a hanging platform still', () => {
+    const h = new Harness(swing());
+    const deck = h.sim.blocks[0]!;
+    const y0 = deck.y;
+    h.seconds(4);
+    expect(h.sim.joints).toHaveLength(3);
+    expect(Math.abs(deck.y - y0)).toBeLessThan(0.05);
+    expect(h.sim.pigs[0]!.hp).toBe(h.sim.pigs[0]!.maxHp);
+    expect(h.events('blockDamaged')).toHaveLength(0);
+  });
+
+  it('let go when the hanger piece is destroyed', () => {
+    const h = new Harness(swing());
+    h.seconds(1);
+    const hanger = h.sim.blocks[1]!;
+    h.sim.applyDamage(hanger, 1e6, hanger.x, hanger.y);
+    h.seconds(2);
+    expect(h.sim.joints.length).toBeLessThan(3);
+    // The free end drops: the deck now hangs from one rope and tilts steeply.
+    expect(Math.abs(h.sim.blocks[0]!.angle)).toBeGreaterThan(0.6);
+  });
+
+  it('snap ropes that are overloaded', () => {
+    const level = swing();
+    level.joints![2]!.strength = 1;
+    const h = new Harness(level);
+    h.seconds(1);
+    expect(h.events('jointBroken').length).toBeGreaterThan(0);
+  });
+});

@@ -13,6 +13,7 @@ import {
   type BlockMaterial,
   type BlockShape,
   type DecorDef,
+  type JointDef,
   type LevelDef,
   type PigDef,
   type PigVariant,
@@ -26,6 +27,7 @@ export const LEVEL_LIMITS = {
   maxBirds: 12,
   maxTerrain: 60,
   maxDecor: 80,
+  maxJoints: 60,
   minWidth: 24,
   maxWidth: 120,
   minHeight: 12,
@@ -199,6 +201,30 @@ function readDecor(r: Reader, raw: unknown, where: string, bounds: { w: number; 
   return decor;
 }
 
+function readJoint(r: Reader, raw: unknown, where: string, blockCount: number): JointDef | null {
+  if (!isDict(raw)) {
+    r.problems.push(`${where} must be an object`);
+    return null;
+  }
+  const joint: JointDef = {
+    kind: r.oneOf<JointDef['kind']>(raw, 'kind', where, ['rope', 'pin']),
+    a: Math.round(r.num(raw, 'a', where, 0, Math.max(0, blockCount - 1))),
+    ax: r.num(raw, 'ax', where, -40, 200),
+    ay: r.num(raw, 'ay', where, -5, 80),
+  };
+  if (raw.b !== undefined) {
+    joint.b = Math.round(r.num(raw, 'b', where, 0, Math.max(0, blockCount - 1)));
+    if (joint.b === joint.a) r.problems.push(`${where} must connect two different blocks`);
+  }
+  if (raw.bx !== undefined || raw.by !== undefined) {
+    joint.bx = r.num(raw, 'bx', where, -40, 200);
+    joint.by = r.num(raw, 'by', where, -5, 80);
+  }
+  if (joint.kind === 'rope' && joint.bx === undefined) r.problems.push(`${where} (rope) needs bx/by`);
+  if (raw.strength !== undefined) joint.strength = r.num(raw, 'strength', where, 1, 1e6);
+  return joint;
+}
+
 /** Validates arbitrary data and returns a clean LevelDef. Throws LevelFormatError listing every problem. */
 export function normalizeLevel(input: unknown): LevelDef {
   if (!isDict(input)) throw new LevelFormatError(['level must be an object']);
@@ -249,6 +275,12 @@ export function normalizeLevel(input: unknown): LevelDef {
     if (item) decor.push(item);
   }
 
+  const joints: JointDef[] = [];
+  for (const [i, raw] of r.list(input, 'joints', 'level', LEVEL_LIMITS.maxJoints, false).entries()) {
+    const joint = readJoint(r, raw, `joints[${i}]`, blocks.length);
+    if (joint) joints.push(joint);
+  }
+
   const starsRaw = isDict(input.stars) ? input.stars : {};
   const two = Math.round(r.num(starsRaw, 'two', 'stars', 0, 1e7, 0));
   const three = Math.round(r.num(starsRaw, 'three', 'stars', 0, 1e7, 0));
@@ -267,6 +299,7 @@ export function normalizeLevel(input: unknown): LevelDef {
     stars: { two, three },
   };
   if (decor.length > 0) level.decor = decor;
+  if (joints.length > 0) level.joints = joints;
   if (typeof input.hint === 'string' && input.hint.length > 0) level.hint = input.hint.slice(0, 160);
 
   if (r.problems.length > 0) throw new LevelFormatError(r.problems);

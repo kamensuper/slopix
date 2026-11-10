@@ -60,8 +60,12 @@ export type PigExpression =
   | 'idle'
   /** Sees a bird coming: wide eyes. */
   | 'worried'
+  /** A bird is about to hit / something right next to it broke: eyes popping, mouth agape. */
+  | 'surprised'
   /** Just got hit: wincing. */
   | 'hurt'
+  /** Shortly after a hit: spiral eyes, stars circling the head. */
+  | 'stunned'
   /** A shot missed / the player lost: laughing, eyes closed. */
   | 'laugh'
   /** Defeat pose used for the short pop animation: dizzy, tongue out. */
@@ -83,6 +87,8 @@ export interface PigPose {
   lookY?: number;
   /** White hit-flash overlay strength 0..1. */
   flash?: number;
+  /** Strength of the current expression 0..1 (default 1): lets worry build up gradually. */
+  intensity?: number;
 }
 
 /** Pieces that fly off a pig; painted centred on the origin at the same scale as the pig that wore them. */

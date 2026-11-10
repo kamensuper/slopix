@@ -1,5 +1,5 @@
 /** Runtime entities of the simulation: plain data records attached to physics bodies. */
-import type { Body } from 'planck';
+import type { Body, Joint } from 'planck';
 import type { BirdType, BlockMaterial, BlockShape, PigVariant } from '../core/types';
 import type { Point } from './geometry';
 
@@ -93,3 +93,14 @@ export interface TerrainEntity {
 
 export type DynamicEntity = BlockEntity | PigEntity | BirdEntity;
 export type Entity = DynamicEntity | TerrainEntity;
+
+export interface JointEntity {
+  kind: 'rope' | 'pin';
+  joint: Joint;
+  /** Reaction force (N) above which the joint snaps; Infinity = unbreakable. */
+  strength: number;
+  alive: boolean;
+  a: BlockEntity;
+  /** null = fixed to the world. */
+  b: BlockEntity | null;
+}

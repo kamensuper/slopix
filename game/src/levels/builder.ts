@@ -16,6 +16,7 @@ import type {
   BlockMaterial,
   BlockShape,
   DecorDef,
+  JointDef,
   LevelDef,
   PigDef,
   PigVariant,
@@ -29,6 +30,7 @@ export class LevelBuilder {
   private readonly pigs: PigDef[] = [];
   private readonly terrain: TerrainDef[] = [];
   private readonly decorItems: DecorDef[] = [];
+  private readonly jointList: JointDef[] = [];
   private width = 44;
   private height = 24;
   private slingX = 6;
@@ -136,6 +138,32 @@ export class LevelBuilder {
     return this;
   }
 
+  /** Index of the most recently added block (for joints). */
+  get last(): number {
+    return this.blocks.length - 1;
+  }
+
+  /**
+   * Rope from block `a` at (ax, ay) to block `b` at (bx, by), or to a fixed hook when `b` is null.
+   * Its length is the distance between the anchors.
+   */
+  rope(a: number, ax: number, ay: number, b: number | null, bx: number, by: number, strength?: number): this {
+    const joint: JointDef = { kind: 'rope', a, ax, ay, bx, by };
+    if (b !== null) joint.b = b;
+    if (strength !== undefined) joint.strength = strength;
+    this.jointList.push(joint);
+    return this;
+  }
+
+  /** Hinge between block `a` and block `b` (or the world when `b` is null) at (x, y). */
+  pin(a: number, x: number, y: number, b: number | null = null, strength?: number): this {
+    const joint: JointDef = { kind: 'pin', a, ax: x, ay: y };
+    if (b !== null) joint.b = b;
+    if (strength !== undefined) joint.strength = strength;
+    this.jointList.push(joint);
+    return this;
+  }
+
   /** Non-colliding scenery standing on the ground (or at height `y`). */
   decor(kind: string, x: number, options: { y?: number; scale?: number; flip?: boolean; front?: boolean } = {}): this {
     const item: DecorDef = { kind, x };
@@ -159,6 +187,7 @@ export class LevelBuilder {
       pigs: this.pigs,
       terrain: this.terrain,
       decor: this.decorItems,
+      joints: this.jointList,
       stars: { two: this.starTwo, three: this.starThree },
       hint: this.hintText,
     });

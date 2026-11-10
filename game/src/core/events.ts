@@ -41,6 +41,7 @@ export type SimEvent =
   | { type: 'armorBroken'; id: number; variant: PigVariant; x: number; y: number; vx: number; vy: number }
   | { type: 'pigDefeated'; id: number; variant: PigVariant; x: number; y: number; vx: number; vy: number; remaining: number }
   | { type: 'score'; points: number; x: number; y: number; reason: ScoreReason }
+  | { type: 'jointBroken'; kind: 'rope' | 'pin'; x: number; y: number }
   | { type: 'shotResolved'; pigsLeft: number; birdsLeft: number }
   | { type: 'levelWon'; baseScore: number; clearBonus: number; unusedBirds: number; birdBonus: number; score: number }
   | { type: 'levelLost'; score: number; pigsLeft: number };

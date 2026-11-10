@@ -6,14 +6,14 @@
  * reads entity transforms and drains `events`. The same class runs headless in tests and in the
  * level solver.
  */
-import { World, type Body, type Contact } from 'planck';
+import { RevoluteJoint, RopeJoint, World, type Body, type Contact, type Joint } from 'planck';
 import { DAMAGE, EXPLOSIONS, MATERIALS, PHYSICS, PIGS, SCORE, SHOT, SLING, SUBSTEP, TNT_CHAIN_DELAY, WORLD } from '../core/config';
 import type { ExplosionSource, ExpireReason, ScoreReason, SimEvent, SurfaceKind } from '../core/events';
 import type { BirdType, LevelDef } from '../core/types';
 import { BirdSystem } from './BirdSystem';
 import { createBlock, createPig, createProjectile, createTerrain, type ProjectileSpawn } from './bodies';
 import { DamageSystem } from './DamageSystem';
-import type { BirdEntity, BlockEntity, DynamicEntity, Entity, PigEntity, TerrainEntity } from './entities';
+import type { BirdEntity, BlockEntity, DynamicEntity, Entity, JointEntity, PigEntity, TerrainEntity } from './entities';
 import { pushFromBlast } from './explosions';
 import type { XY } from './geometry';
 
@@ -65,6 +65,8 @@ export class GameSim {
   blocks: BlockEntity[] = [];
   pigs: PigEntity[] = [];
   birds: BirdEntity[] = [];
+  /** Live ropes and hinges. */
+  joints: JointEntity[] = [];
   /** Filled while stepping; the consumer reads the events and then sets `events.length = 0`. */
   readonly events: SimEvent[] = [];
   /** World position of the launch anchor (pouch at rest). */
@@ -107,6 +109,7 @@ export class GameSim {
     this.terrain = createTerrain(this.world, level, this.nextId++);
     for (const def of level.blocks) this.blocks.push(createBlock(this.world, def, this.nextId++));
     for (const def of level.pigs) this.pigs.push(createPig(this.world, def, this.nextId++));
+    this.createJoints(level);
     this.pigsTotal = this.pigs.length;
     this.pigsAlive = this.pigs.length;
 
@@ -118,6 +121,54 @@ export class GameSim {
 
     const first = this.queue[0];
     if (first) this.emit({ type: 'birdReady', bird: first, remaining: this.queue.length });
+  }
+
+  // ------------------------------------------------------------------ joints
+
+  private createJoints(level: LevelDef): void {
+    for (const def of level.joints ?? []) {
+      const a = this.blocks[def.a];
+      const b = def.b !== undefined ? this.blocks[def.b] : null;
+      if (!a) continue;
+      const bodyB = b ? b.body : this.terrain.body;
+      let joint: Joint | null;
+      if (def.kind === 'rope') {
+        const bx = def.bx ?? def.ax;
+        const by = def.by ?? def.ay;
+        const anchorA = a.body.getLocalPoint({ x: def.ax, y: def.ay });
+        const anchorB = bodyB.getLocalPoint({ x: bx, y: by });
+        const maxLength = Math.max(0.05, Math.hypot(bx - def.ax, by - def.ay));
+        joint = this.world.createJoint(new RopeJoint({ bodyA: a.body, bodyB, localAnchorA: anchorA, localAnchorB: anchorB, maxLength, collideConnected: true }));
+      } else {
+        joint = this.world.createJoint(new RevoluteJoint({ collideConnected: false }, a.body, bodyB, { x: def.ax, y: def.ay }));
+      }
+      if (joint) this.joints.push({ kind: def.kind, joint, strength: def.strength ?? Infinity, alive: true, a, b });
+    }
+  }
+
+  /** Snaps overloaded joints and forgets joints whose pieces were destroyed. */
+  private checkJoints(): void {
+    if (this.joints.length === 0) return;
+    let dirty = false;
+    for (const j of this.joints) {
+      if (!j.alive) continue;
+      if (!j.a.alive || (j.b && !j.b.alive)) {
+        // Planck destroys joints together with their bodies.
+        j.alive = false;
+        dirty = true;
+        continue;
+      }
+      if (j.strength === Infinity) continue;
+      const force = j.joint.getReactionForce(1 / SUBSTEP);
+      if (Math.hypot(force.x, force.y) > j.strength) {
+        const p = j.joint.getAnchorA();
+        this.world.destroyJoint(j.joint);
+        j.alive = false;
+        dirty = true;
+        this.emit({ type: 'jointBroken', kind: j.kind, x: p.x, y: p.y });
+      }
+    }
+    if (dirty) this.joints = this.joints.filter((j) => j.alive);
   }
 
   // ------------------------------------------------------------------ public API
@@ -160,6 +211,7 @@ export class GameSim {
     this.fireBlasts();
     for (let i = 0; i < PHYSICS.substeps; i++) {
       this.world.step(SUBSTEP, PHYSICS.velocityIterations, PHYSICS.positionIterations);
+      this.checkJoints();
       this.stepCount++;
       this.flushRemovals();
     }

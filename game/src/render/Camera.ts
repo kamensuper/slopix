@@ -35,6 +35,8 @@ export class Camera {
   /** Time constants of the easing, seconds. */
   smooth: number = CAMERA.followSmooth;
   zoomSmooth: number = CAMERA.zoomSmooth;
+  /** Scales screen shake and camera impulses (reduced-motion setting lowers it). */
+  motionScale = 1;
 
   private bounds: CameraBounds = { minX: -4, maxX: 48, maxY: 28 };
   private trauma = 0;
@@ -123,13 +125,13 @@ export class Camera {
 
   /** Adds screen shake; `amount` 0..1 accumulates and decays on its own. */
   shake(amount: number): void {
-    this.trauma = Math.min(1, this.trauma + amount);
+    this.trauma = Math.min(1, this.trauma + amount * this.motionScale);
   }
 
   /** Camera impulse: knocks the view in a direction (metres per second), it springs back by itself. */
   kick(vx: number, vy: number): void {
-    this.kickVx += vx;
-    this.kickVy += vy;
+    this.kickVx += vx * this.motionScale;
+    this.kickVy += vy * this.motionScale;
   }
 
   /** Centre of the rendered view including shake and kick. */

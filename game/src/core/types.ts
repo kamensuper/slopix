@@ -66,6 +66,27 @@ export interface TerrainDef {
   angle?: number;
 }
 
+/**
+ * Connection between two blocks, or between a block and the static world.
+ * rope - holds pieces together up to its length (slack allowed); snaps above `strength` newtons.
+ * pin  - hinge: the pieces may rotate about the shared anchor.
+ */
+export interface JointDef {
+  kind: 'rope' | 'pin';
+  /** Index into `blocks` of the first piece. */
+  a: number;
+  /** Index into `blocks` of the second piece; omitted = fixed to the world (a hook / nail). */
+  b?: number;
+  /** World anchor on piece A, metres. */
+  ax: number;
+  ay: number;
+  /** World anchor on piece B / the world (pins use the A anchor). */
+  bx?: number;
+  by?: number;
+  /** Force at which the joint breaks; omitted = only breaks when a piece is destroyed. */
+  strength?: number;
+}
+
 /** Purely visual scenery (no physics). */
 export interface DecorDef {
   kind: string;
@@ -98,6 +119,7 @@ export interface LevelDef {
   blocks: BlockDef[];
   pigs: PigDef[];
   terrain: TerrainDef[];
+  joints?: JointDef[];
   decor?: DecorDef[];
   stars: StarThresholds;
   /** One-line hint shown when the level starts. */
