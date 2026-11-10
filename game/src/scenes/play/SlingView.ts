@@ -6,6 +6,7 @@
 import { BIRDS, PHYSICS, SLING } from '../../core/config';
 import { clamp, DEG, ease } from '../../core/math';
 import { INK } from '../../core/palette';
+import { mixHex } from '../../render/art/materialUtil';
 import type { BirdType } from '../../core/types';
 import type { BirdPose } from '../../render/art/types';
 import type { Camera } from '../../render/Camera';
@@ -17,15 +18,43 @@ const HOP_HEIGHT = 1.3;
 const PREVIEW_POINTS = 80;
 /** Sub-steps between preview dots (6 sub-steps at 120 Hz = 0.05 s). */
 const PREVIEW_STRIDE = 6;
+/** Preview dots drift along the path at this many samples per second. */
+const PREVIEW_DRIFT = 2.2;
 const SPRING_STIFFNESS = 520;
 const SPRING_DAMPING_EMPTY = 9;
 const SPRING_DAMPING_LOADED = 46;
-const BAND_REST_WIDTH = 0.17;
-const BAND_DARK = '#3a160c';
-const BAND_LIGHT = '#7a3521';
-const POUCH = '#5a3a20';
+/** Frame follow-through after a release: a stiff, lightly damped sway about the base. */
+const SWAY_STIFFNESS = 150;
+const SWAY_DAMPING = 5.5;
+const SWAY_KICK = 0.4;
+/** Rubber band width at rest (m); it thins as it stretches. */
+const BAND_REST_WIDTH = 0.13;
+const BAND_REST_LENGTH = 0.5;
+/** Band colours at rest and under full tension: the rubber pales and warms as it stretches. */
+const BAND = { base: '#6a2a16', light: '#b25a3a', strained: '#a8401f', strainedLight: '#ff9d6e' } as const;
+const LEATHER = '#7a4a26';
+const LEATHER_DARK = '#4a2a14';
+const LEATHER_LIGHT = '#b77a45';
+const STITCH = '#f1d8a8';
+/** Leather pouch thickness (m) and how far it wraps round the bird (radians either side). */
+const POUCH_THICK = 0.12;
+const POUCH_WRAP = 1.05;
 const MIN_ANGLE = -25 * DEG;
 const MAX_ANGLE = 88 * DEG;
+
+interface PouchShape {
+  cx: number;
+  cy: number;
+  r: number;
+  /** World angle of the middle of the pouch (pointing away from the target). */
+  mid: number;
+  spread: number;
+  /** End tied to the far band and end tied to the near band. */
+  backX: number;
+  backY: number;
+  frontX: number;
+  frontY: number;
+}
 
 export class SlingView {
   /** Pouch offset from the anchor in world metres. */
@@ -49,6 +78,10 @@ export class SlingView {
   private idleHopIndex = -1;
   private idleHopT = 0;
   private idleHopTimer = 2.5;
+  private clock = 0;
+  private sway = 0;
+  private swayV = 0;
+  private readonly shape: PouchShape = { cx: 0, cy: 0, r: 0.3, mid: Math.PI, spread: POUCH_WRAP, backX: 0, backY: 0, frontX: 0, frontY: 0 };
   private readonly pose: BirdPose = { time: 0, state: 'idle', blink: 0, pull: 0, lookX: 0.4, lookY: 0, abilityUsed: false, fuse: 0, flash: 0 };
 
   constructor(
@@ -159,6 +192,8 @@ export class SlingView {
     launchVelocity(this.pull.x, this.pull.y, this.velocity);
     this.springVx = this.velocity.x * 1.2;
     this.springVy = this.velocity.y * 1.2;
+    // The frame lurches towards the target and rings back.
+    this.swayV -= SWAY_KICK * pullPower(shot.x, shot.y);
     this.loaded = null;
     return shot;
   }
@@ -169,7 +204,16 @@ export class SlingView {
   }
 
   update(dt: number, waiting: number): void {
+    this.clock += dt;
     if (this.hop < 1) this.hop = Math.min(1, this.hop + dt / HOP_TIME);
+    {
+      const steps = Math.max(1, Math.ceil(dt / 0.008));
+      const h = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        this.swayV += (-SWAY_STIFFNESS * this.sway - SWAY_DAMPING * this.swayV) * h;
+        this.sway += this.swayV * h;
+      }
+    }
     if (!this.dragging && !this.keyboard) {
       const damping = this.loaded ? SPRING_DAMPING_LOADED : SPRING_DAMPING_EMPTY;
       // Sub-step the stiff spring so it stays stable at low frame rates.
@@ -221,78 +265,214 @@ export class SlingView {
 
   // ------------------------------------------------------------------ drawing
 
-  /** Trunk, far arm and the band behind the bird. */
+  /** Trunk, far arm, the leather pouch cradling the bird from behind and the far band. */
   drawBack(r: WorldRenderer, ctx: CanvasRenderingContext2D, cam: Camera): void {
-    r.drawSlingshotBack(this.baseX, this.baseY);
+    r.drawSlingshotBack(this.baseX, this.baseY, this.sway);
     r.screenSpace();
-    this.drawBand(ctx, cam, this.baseX + SLING.forkBack.x, this.baseY + SLING.forkBack.y, 0.8);
+    const s = this.pouchShape();
+    this.drawPouchCup(ctx, cam, s);
+    const [tx, ty] = this.forkTip(SLING.forkBack);
+    this.drawBand(ctx, cam, tx, ty, s.backX, s.backY, true);
   }
 
-  /** Band in front of the bird, the pouch and the near arm. */
+  /** Near band, the pouch ends wrapping round the bird, and the near arm. */
   drawFront(r: WorldRenderer, ctx: CanvasRenderingContext2D, cam: Camera): void {
     r.screenSpace();
-    this.drawPouch(ctx, cam);
-    this.drawBand(ctx, cam, this.baseX + SLING.forkFront.x, this.baseY + SLING.forkFront.y, 1);
-    r.drawSlingshotFront(this.baseX, this.baseY);
+    const s = this.shape;
+    const [tx, ty] = this.forkTip(SLING.forkFront);
+    this.drawPouchTabs(ctx, cam, s);
+    this.drawBand(ctx, cam, tx, ty, s.frontX, s.frontY, false);
+    r.drawSlingshotFront(this.baseX, this.baseY, this.sway);
     r.screenSpace();
   }
 
-  /** Where the bands meet: behind the loaded bird, or the bare pouch. */
-  private pouchPoint(out: Vec): Vec {
-    const cx = this.hop >= 1 ? this.anchorX + this.pull.x : this.anchorX;
-    const cy = this.hop >= 1 ? this.anchorY + this.pull.y : this.anchorY;
-    if (!this.loaded || this.hop < 1) {
-      out.x = cx;
-      out.y = cy;
-      return out;
-    }
+  /** World position of a fork tip, following the sway of the frame. */
+  private forkTip(tip: { x: number; y: number }): [number, number] {
+    const c = Math.cos(this.sway);
+    const s = Math.sin(this.sway);
+    return [this.baseX + tip.x * c - tip.y * s, this.baseY + tip.x * s + tip.y * c];
+  }
+
+  /** Tension 0..1 while aiming (drives colour, tremble and the bird's anticipation). */
+  private tension(): number {
+    return this.aiming ? this.power : 0;
+  }
+
+  /** Small fast shiver once the pull is nearly maxed out (world metres). */
+  private tremble(phase: number): number {
+    const t = this.tension();
+    if (t < 0.82) return 0;
+    return Math.sin(this.clock * 71 + phase) * 0.014 * ((t - 0.82) / 0.18);
+  }
+
+  /** Where the pouch sits: wrapped round the back of the loaded bird, or hanging empty. */
+  private pouchShape(): PouchShape {
+    const s = this.shape;
     const len = Math.hypot(this.pull.x, this.pull.y);
     const ux = len > 0.05 ? this.pull.x / len : -1;
     const uy = len > 0.05 ? this.pull.y / len : 0;
-    const radius = BIRDS[this.loaded].radius * 0.85;
-    out.x = cx + ux * radius;
-    out.y = cy + uy * radius;
-    return out;
+    s.mid = Math.atan2(uy, ux);
+    if (this.loaded && this.hop >= 1) {
+      s.cx = this.anchorX + this.pull.x + this.tremble(1.3);
+      s.cy = this.anchorY + this.pull.y + this.tremble(2.1);
+      s.r = BIRDS[this.loaded].radius * 1.02;
+      s.spread = POUCH_WRAP;
+    } else {
+      // Empty: a short curved strap whose middle sits on the band junction.
+      s.r = 0.26;
+      s.spread = 0.85;
+      const px = this.hop >= 1 ? this.anchorX + this.pull.x : this.anchorX;
+      const py = this.hop >= 1 ? this.anchorY + this.pull.y : this.anchorY;
+      s.cx = px - ux * s.r;
+      s.cy = py - uy * s.r;
+    }
+    const ax = s.cx + Math.cos(s.mid + s.spread) * s.r;
+    const ay = s.cy + Math.sin(s.mid + s.spread) * s.r;
+    const bx = s.cx + Math.cos(s.mid - s.spread) * s.r;
+    const by = s.cy + Math.sin(s.mid - s.spread) * s.r;
+    // Tie each band to the end that keeps the pair shortest, so they never cross needlessly.
+    const [fbx, fby] = this.forkTip(SLING.forkBack);
+    const [ffx, ffy] = this.forkTip(SLING.forkFront);
+    const straight = Math.hypot(ax - fbx, ay - fby) + Math.hypot(bx - ffx, by - ffy);
+    const swapped = Math.hypot(bx - fbx, by - fby) + Math.hypot(ax - ffx, ay - ffy);
+    if (straight <= swapped) {
+      s.backX = ax;
+      s.backY = ay;
+      s.frontX = bx;
+      s.frontY = by;
+    } else {
+      s.backX = bx;
+      s.backY = by;
+      s.frontX = ax;
+      s.frontY = ay;
+    }
+    return s;
   }
 
-  private drawBand(ctx: CanvasRenderingContext2D, cam: Camera, tipX: number, tipY: number, shade: number): void {
-    const end = this.pouchPoint(this.velocity);
+  /** A rubber band with real thickness: ink edge, body, and a highlight along the lit side. */
+  private drawBand(ctx: CanvasRenderingContext2D, cam: Camera, tipX: number, tipY: number, endX: number, endY: number, far: boolean): void {
+    const dx = endX - tipX;
+    const dy = endY - tipY;
+    const length = Math.hypot(dx, dy) || 1e-3;
+    const nx = -dy / length;
+    const ny = dx / length;
+    const tension = this.tension();
+    // Slack bands sag a little; taut ones shiver.
+    const sag = Math.max(0, BAND_REST_LENGTH * 0.8 - length) * 0.35;
+    const shiver = this.tremble(far ? 0 : 2.4) * 1.6;
+    const mx = (tipX + endX) / 2 + nx * shiver;
+    const my = (tipY + endY) / 2 + ny * shiver - sag;
+    const width = BAND_REST_WIDTH * clamp(Math.sqrt(BAND_REST_LENGTH / Math.max(0.15, length)), 0.42, 1.05) * cam.zoom;
     const x0 = cam.toScreenX(tipX);
     const y0 = cam.toScreenY(tipY);
-    const x1 = cam.toScreenX(end.x);
-    const y1 = cam.toScreenY(end.y);
-    const length = Math.hypot(end.x - tipX, end.y - tipY);
-    // Rubber thins as it stretches.
-    const width = BAND_REST_WIDTH * clamp(Math.sqrt(0.45 / Math.max(0.2, length)), 0.45, 1) * cam.zoom;
+    const xm = cam.toScreenX(mx);
+    const ym = cam.toScreenY(my);
+    const x1 = cam.toScreenX(endX);
+    const y1 = cam.toScreenY(endY);
+    const strain = clamp((tension - 0.35) / 0.65, 0, 1);
+    const shade = far ? 0.32 : 0;
+    const base = mixHex(mixHex(BAND.base, BAND.strained, strain), '#1a0a04', shade);
+    const light = mixHex(mixHex(BAND.light, BAND.strainedLight, strain), '#1a0a04', shade);
     ctx.lineCap = 'round';
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = width + Math.max(1.5, cam.zoom * 0.045);
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
+    ctx.quadraticCurveTo(xm * 2 - (x0 + x1) / 2, ym * 2 - (y0 + y1) / 2, x1, y1);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = width + Math.max(2, cam.zoom * 0.05);
     ctx.stroke();
-    ctx.strokeStyle = shade < 1 ? BAND_DARK : BAND_LIGHT;
+    ctx.strokeStyle = base;
     ctx.lineWidth = width;
+    ctx.stroke();
+    // Highlight: a thin streak shifted towards the light.
+    const off = width * 0.22;
+    const ox = (ny > 0 ? -1 : 1) * off * Math.abs(nx) * 0.3;
+    const oy = -off;
+    ctx.beginPath();
+    ctx.moveTo(x0 + ox, y0 + oy);
+    ctx.quadraticCurveTo(xm * 2 - (x0 + x1) / 2 + ox, ym * 2 - (y0 + y1) / 2 + oy, x1 + ox, y1 + oy);
+    ctx.strokeStyle = light;
+    ctx.lineWidth = Math.max(1, width * 0.28);
+    ctx.globalAlpha = 0.85;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Knot where the band is tied round the fork.
+    const knot = Math.max(2, width * 0.75);
+    ctx.beginPath();
+    ctx.arc(x0, y0, knot, 0, Math.PI * 2);
+    ctx.fillStyle = base;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.2, cam.zoom * 0.025);
+    ctx.strokeStyle = INK;
     ctx.stroke();
   }
 
-  private drawPouch(ctx: CanvasRenderingContext2D, cam: Camera): void {
-    const p = this.pouchPoint(this.velocity);
-    const len = Math.hypot(this.pull.x, this.pull.y);
-    // The pouch lies across the pull direction.
-    const nx = len > 0.05 ? -this.pull.y / len : 0;
-    const ny = len > 0.05 ? this.pull.x / len : 1;
-    const half = 0.24;
+  /** Leather cup behind the bird with a stitched seam and inner shading. */
+  private drawPouchCup(ctx: CanvasRenderingContext2D, cam: Camera, s: PouchShape): void {
+    const x = cam.toScreenX(s.cx);
+    const y = cam.toScreenY(s.cy);
+    const r = s.r * cam.zoom;
+    const thick = POUCH_THICK * cam.zoom;
+    // Screen angles run clockwise, world angles counter-clockwise.
+    const a0 = -(s.mid + s.spread);
+    const a1 = -(s.mid - s.spread);
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cam.toScreenX(p.x - nx * half), cam.toScreenY(p.y - ny * half));
-    ctx.lineTo(cam.toScreenX(p.x + nx * half), cam.toScreenY(p.y + ny * half));
+    ctx.arc(x, y, r, a0, a1);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = cam.zoom * 0.3;
+    ctx.lineWidth = thick + Math.max(2.5, cam.zoom * 0.06);
     ctx.stroke();
-    ctx.strokeStyle = POUCH;
-    ctx.lineWidth = cam.zoom * 0.2;
+    ctx.strokeStyle = LEATHER;
+    ctx.lineWidth = thick;
     ctx.stroke();
+    // Darker inner face where the bird presses in, lighter outer rim.
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.arc(x, y, r - thick * 0.25, a0 + 0.08, a1 - 0.08);
+    ctx.strokeStyle = LEATHER_DARK;
+    ctx.lineWidth = thick * 0.4;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r + thick * 0.3, a0 + 0.12, a1 - 0.12);
+    ctx.strokeStyle = LEATHER_LIGHT;
+    ctx.lineWidth = Math.max(1, thick * 0.16);
+    ctx.stroke();
+    if (thick > 4) {
+      ctx.setLineDash([Math.max(1.5, thick * 0.35), Math.max(1.5, thick * 0.3)]);
+      ctx.beginPath();
+      ctx.arc(x, y, r + thick * 0.05, a0 + 0.15, a1 - 0.15);
+      ctx.strokeStyle = STITCH;
+      ctx.lineWidth = Math.max(1, thick * 0.12);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  /** The two pouch ends fold round the front of the bird where the bands are tied. */
+  private drawPouchTabs(ctx: CanvasRenderingContext2D, cam: Camera, s: PouchShape): void {
+    const size = POUCH_THICK * 0.62 * cam.zoom;
+    for (const [wx, wy] of [
+      [s.backX, s.backY],
+      [s.frontX, s.frontY],
+    ] as const) {
+      const x = cam.toScreenX(wx);
+      const y = cam.toScreenY(wy);
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fillStyle = LEATHER;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.5, cam.zoom * 0.04);
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+      // Brass eyelet.
+      ctx.beginPath();
+      ctx.arc(x - size * 0.1, y - size * 0.1, size * 0.38, 0, Math.PI * 2);
+      ctx.fillStyle = '#e0b04a';
+      ctx.fill();
+      ctx.lineWidth = Math.max(0.8, size * 0.14);
+      ctx.strokeStyle = '#6b4a10';
+      ctx.stroke();
+    }
   }
 
   /** The bird in the pouch (or on its way there). */
@@ -311,7 +491,11 @@ export class SlingView {
     // Tilt towards the launch direction and squash a little as the tension builds (anticipation).
     const angle = aiming ? clamp(Math.atan2(-this.pull.y, -this.pull.x), -0.6, 0.9) * Math.min(1, power * 1.5) : 0;
     const squash = aiming ? 1 - 0.08 * power : 1 + Math.sin(time * 2.6) * 0.02;
-    r.drawBird(type, this.birdX(), this.birdY(), angle, BIRDS[type].radius, pose, 2 - squash, squash);
+    // Same shiver as the pouch, so bird and leather move as one.
+    const ready = this.hop >= 1;
+    const x = this.birdX() + (ready ? this.tremble(1.3) : 0);
+    const y = this.birdY() + (ready ? this.tremble(2.1) : 0);
+    r.drawBird(type, x, y, angle, BIRDS[type].radius, pose, 2 - squash, squash);
   }
 
   /**
@@ -351,28 +535,79 @@ export class SlingView {
     return out;
   }
 
-  /** Dotted predicted flight path. */
+  /**
+   * Predicted flight path and the power gauge. The dots drift slowly along the path; each dot is
+   * interpolated between two consecutive predicted samples, so it always lies on the trajectory.
+   */
   drawPreview(ctx: CanvasRenderingContext2D, cam: Camera): void {
     const count = this.previewCount;
     if (count < 2) return;
-    const skip = this.loaded ? BIRDS[this.loaded].radius + 0.15 : 0.5;
+    this.drawPowerArc(ctx, cam);
+    const skip = this.loaded ? BIRDS[this.loaded].radius + 0.2 : 0.5;
     const x0 = this.preview[0] as number;
     const y0 = this.preview[1] as number;
-    ctx.strokeStyle = INK;
-    for (let i = 1; i < count; i++) {
-      const wx = this.preview[i * 2] as number;
-      const wy = this.preview[i * 2 + 1] as number;
+    const drift = (this.clock * PREVIEW_DRIFT) % 1;
+    let shown = 0;
+    for (let i = 0; i < count - 1; i++) {
+      const ax = this.preview[i * 2] as number;
+      const ay = this.preview[i * 2 + 1] as number;
+      const wx = ax + ((this.preview[i * 2 + 2] as number) - ax) * drift;
+      const wy = ay + ((this.preview[i * 2 + 3] as number) - ay) * drift;
       if (Math.hypot(wx - x0, wy - y0) < skip) continue;
-      const t = i / PREVIEW_POINTS;
-      const radius = Math.max(1.6, (0.085 - 0.045 * t) * cam.zoom);
-      ctx.globalAlpha = 0.95 - 0.6 * t;
+      const t = (i + drift) / PREVIEW_POINTS;
+      // The first dots fade in so the path grows out of the bird instead of starting abruptly.
+      const intro = Math.min(1, (shown + drift) / 2.5);
+      shown++;
+      const radius = Math.max(1.6, (0.092 - 0.05 * t) * cam.zoom) * (0.7 + 0.3 * intro);
+      const alpha = (0.95 - 0.65 * t) * intro;
+      const x = cam.toScreenX(wx);
+      const y = cam.toScreenY(wy);
+      ctx.globalAlpha = alpha * 0.35;
       ctx.beginPath();
-      ctx.arc(cam.toScreenX(wx), cam.toScreenY(wy), radius, 0, Math.PI * 2);
+      ctx.arc(x + radius * 0.25, y + radius * 0.35, radius * 1.05, 0, Math.PI * 2);
+      ctx.fillStyle = INK;
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
-      ctx.lineWidth = Math.max(1, radius * 0.45);
+      ctx.lineWidth = Math.max(0.8, radius * 0.32);
+      ctx.strokeStyle = 'rgba(43, 26, 18, 0.7)';
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
+  }
+
+  /** A slim arc behind the bird, centred on the pull direction, that grows and warms with power. */
+  private drawPowerArc(ctx: CanvasRenderingContext2D, cam: Camera): void {
+    if (!this.loaded || this.hop < 1) return;
+    const power = this.power;
+    if (power < 0.05) return;
+    const x = cam.toScreenX(this.birdX());
+    const y = cam.toScreenY(this.birdY());
+    const r = (BIRDS[this.loaded].radius + 0.3) * cam.zoom;
+    const dir = -Math.atan2(this.pull.y, this.pull.x);
+    const half = 0.12 + power * 0.62;
+    const color = power < 0.5 ? mixHex('#ffffff', '#ffd84a', power / 0.5) : mixHex('#ffd84a', '#ff6a2a', (power - 0.5) / 0.5);
+    const full = power > 0.985;
+    const width = Math.max(3, cam.zoom * 0.08);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(x, y, r, dir - half, dir + half);
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = width + 3;
+    ctx.stroke();
+    ctx.globalAlpha = full ? 0.75 + 0.25 * Math.sin(this.clock * 14) : 0.85;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.stroke();
+    // A bright bead marks the aim direction.
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(dir) * r, y + Math.sin(dir) * r, width * (full ? 0.95 : 0.75), 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
     ctx.globalAlpha = 1;
   }
 

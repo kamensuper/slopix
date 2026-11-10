@@ -156,20 +156,21 @@ export function pine(path: Path2D, x: number, base: number, h: number, w: number
 /** Simple cumulus prototype: circles along a flat base. Returns [cx, cy, r] lobes in local units. */
 export function cloudLobes(w: number, h: number, rng: Rng): [number, number, number][] {
   const lobes: [number, number, number][] = [];
-  const n = Math.max(3, Math.round(w / (h * 0.75)));
+  const n = Math.max(3, Math.round(w / (h * 0.55)));
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0.5 : i / (n - 1);
     const edge = Math.sin(t * Math.PI);
-    const r = h * (0.28 + edge * 0.38) * rng.range(0.85, 1.12);
+    const r = h * (0.24 + edge * 0.24) * rng.range(0.9, 1.1);
     const cx = -w / 2 + r + t * (w - 2 * r);
-    lobes.push([cx, -r * 0.95, r]);
+    // Lobes sit on a common flat base line (y = 0).
+    lobes.push([cx, -r, r]);
   }
-  // A couple of crown lobes for a lively silhouette.
-  const crowns = 1 + Math.floor(rng.next() * 2);
+  // Crown lobes, biggest left of centre (towards the sun) for a lively, asymmetric silhouette.
+  const crowns = 2 + Math.floor(rng.next() * 2);
   for (let i = 0; i < crowns; i++) {
-    const cx = rng.range(-w * 0.22, w * 0.18);
-    const r = h * rng.range(0.42, 0.55);
-    lobes.push([cx, -h + r, r]);
+    const cx = -w * 0.2 + (i / Math.max(1, crowns - 1)) * w * 0.38 + rng.range(-w * 0.05, w * 0.05);
+    const r = h * (i === 0 ? rng.range(0.42, 0.5) : rng.range(0.3, 0.42));
+    lobes.push([cx, -h + r + rng.range(0, h * 0.14), r]);
   }
   return lobes;
 }
@@ -178,3 +179,72 @@ export function cloudLobes(w: number, h: number, rng: Rng): [number, number, num
 export function addLobes(path: Path2D, lobes: [number, number, number][], dx = 0, dy = 0, k = 1): void {
   for (const [x, y, r] of lobes) circle(path, x + dx, y + dy, r * k);
 }
+
+// ---------------------------------------------------------------- layer helpers
+
+export interface Fill3 {
+  path: Path2D;
+  color: string;
+  alpha?: number;
+  dx?: number;
+  dy?: number;
+}
+
+/**
+ * Cel-shaded silhouette from one ridge path: a sunlit rim along the crest, shade on slopes that
+ * face away from the top-left sun, and the base tone in between.
+ */
+export function celRidge(path: Path2D, light: string, base: string, shade: string, rim: number, shadeShift: number): Fill3[] {
+  return [
+    { path, color: light },
+    { path, color: shade, dy: rim },
+    { path, color: base, dx: -shadeShift, dy: rim * 1.15 },
+  ];
+}
+
+/** Three-tone canopy from overlapping circles (shade, base nudged up-left, light caps). */
+export function celCircles(circles: Circle[], shadeC: string, baseC: string, lightC: string, lightK = 0.55): Fill3[] {
+  const shade = new Path2D();
+  const base = new Path2D();
+  const light = new Path2D();
+  for (const c of circles) {
+    const [x, y, r] = c;
+    circle(shade, x, y, r);
+    circle(base, x - r * 0.1, y - r * 0.14, r * 0.9);
+    if (c[3] !== 0) circle(light, x - r * 0.3, y - r * 0.36, r * lightK);
+  }
+  return [
+    { path: shade, color: shadeC },
+    { path: base, color: baseC },
+    { path: light, color: lightC },
+  ];
+}
+
+/** Tapered curved grass blade rooted at (x, 0) in a y-down space. */
+export function blade(path: Path2D, x: number, h: number, w: number, lean: number): void {
+  path.moveTo(x - w, 2);
+  path.quadraticCurveTo(x - w * 0.3 + lean * 0.3, -h * 0.55, x + lean, -h);
+  path.quadraticCurveTo(x + w * 0.4 + lean * 0.3, -h * 0.5, x + w, 2);
+  path.closePath();
+}
+
+/** Small tuft of blades. */
+export function tuft(path: Path2D, x: number, h: number, rng: Rng, blades = 5): void {
+  for (let i = 0; i < blades; i++) {
+    const t = blades === 1 ? 0 : i / (blades - 1) - 0.5;
+    blade(path, x + t * h * 0.5, h * rng.range(0.55, 1) * (1 - Math.abs(t) * 0.5), h * 0.07, t * h * 0.7 + rng.range(-0.1, 0.1) * h);
+  }
+}
+
+/**
+ * One broadleaf crown as a cluster of three lobes standing on `gy` (only the main lobe gets a
+ * sunlit cap, so forests read as masses of trees rather than rows of beads).
+ */
+export function broadleaf(out: Circle[], x: number, gy: number, r: number, rng: Rng): void {
+  out.push([x - r * 0.62, gy - r * 0.62, r * rng.range(0.6, 0.75), 0]);
+  out.push([x + r * 0.6, gy - r * 0.58, r * rng.range(0.6, 0.78), 0]);
+  out.push([x + rng.range(-0.15, 0.15) * r, gy - r * 1.05, r, 1]);
+}
+
+/** [x, y, r, lit?]: lit = 0 skips the light cap. */
+export type Circle = [number, number, number] | [number, number, number, number];

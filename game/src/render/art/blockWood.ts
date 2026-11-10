@@ -184,22 +184,26 @@ function grain(ctx: CanvasRenderingContext2D, L: number, T: number, knot: Knot |
   ctx.stroke(light);
 }
 
+/** A knot: an elongated, ringed lens of darker wood that the grain flows around. */
 function paintKnot(ctx: CanvasRenderingContext2D, k: Knot, t: WoodTones): void {
-  ctx.beginPath();
-  ctx.ellipse(k.x, k.y, k.r * 1.7, k.r * 1.05, 0, 0, TAU);
-  ctx.fillStyle = rgba(t.grain, 0.35);
+  const lens = (rx: number, ry: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(k.x - rx, k.y);
+    ctx.quadraticCurveTo(k.x, k.y - ry * 1.5, k.x + rx, k.y);
+    ctx.quadraticCurveTo(k.x, k.y + ry * 1.5, k.x - rx, k.y);
+    ctx.closePath();
+  };
+  lens(k.r * 2.1, k.r * 0.85);
+  ctx.fillStyle = rgba(t.grain, 0.22);
   ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(k.x, k.y, k.r * 1.1, k.r * 0.72, 0, 0, TAU);
-  ctx.fillStyle = t.knot;
+  ctx.lineWidth = 1.1;
+  ctx.strokeStyle = rgba(t.grain, 0.55);
+  ctx.stroke();
+  lens(k.r * 1.25, k.r * 0.55);
+  ctx.fillStyle = rgba(t.knot, 0.8);
   ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(k.x + k.r * 0.1, k.y + k.r * 0.06, k.r * 0.55, k.r * 0.36, 0, 0, TAU);
-  ctx.fillStyle = t.ring;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(k.x - k.r * 0.45, k.y - k.r * 0.3, k.r * 0.32, k.r * 0.16, -0.2, 0, TAU);
-  ctx.fillStyle = rgba(t.grainLight, 0.7);
+  lens(k.r * 0.55, k.r * 0.26);
+  ctx.fillStyle = rgba(t.crack, 0.75);
   ctx.fill();
 }
 
