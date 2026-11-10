@@ -399,10 +399,10 @@ function ground(): GroundDef {
   const sway = [0, 1, 2].map((g) => {
     const back = new Path2D();
     const front = new Path2D();
-    for (let u = 30 + g * 47; u < tile - 30; u += rng.range(110, 230)) {
+    for (let u = 30 + g * 47; u < tile - 30; u += rng.range(300, 560)) {
       const h = rng.range(26, 50);
-      tuft(back, u, h, rng, 5);
-      tuft(front, u + 6, h * 0.75, rng, 4);
+      tuft(back, u, h, rng, 4);
+      tuft(front, u + 6, h * 0.75, rng, 3);
     }
     return { phase: g * 2.1, fills: [{ path: back, color: '#3a9036' }, { path: front, color: '#86d24f' }] };
   });

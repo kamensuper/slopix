@@ -121,6 +121,28 @@ interface Strip {
   under: string;
 }
 
+interface LayerStrip {
+  key: string;
+  /** Tile width in device pixels. */
+  width: number;
+  /** Translucent skyline pieces (x, y in strip pixels). */
+  chunks: { canvas: HTMLCanvasElement; x: number; y: number }[];
+  /** Opaque part of the strip from row `bodyY` down. */
+  body: HTMLCanvasElement;
+  bodyY: number;
+  under: string;
+}
+
+/** Copies a canvas 1:1 at an integer position, skipping rows at or below `clipBottom`. */
+function blitRows(ctx: CanvasRenderingContext2D, img: HTMLCanvasElement, dx: number, dy: number, clipBottom: number): void {
+  const top = Math.max(0, -dy);
+  const rows = Math.min(img.height, clipBottom - dy) - top;
+  if (rows <= 0) return;
+  ctx.drawImage(img, 0, top, img.width, rows, dx, dy + top, img.width, rows);
+}
+
+const CHUNK = 512;
+const ZOOM_TOLERANCE = 5e-4;
 const BACK_MARGIN_V = 0.18;
 /** Room above the ground line in the cached ground tile (design units): lip, blades, flowers. */
 const GROUND_TOP = 40;
@@ -146,9 +168,11 @@ export class EnvRenderer {
   private lastCamY = 0;
   private gust = 0;
   private seedCounter = 1;
-  private readonly strips = new Map<ParallaxLayer, Strip>();
+  private readonly strips = new Map<ParallaxLayer, LayerStrip>();
   private readonly clouds = new Map<CloudDef, Strip>();
   private ground: Strip | null = null;
+  private groundZoom = 0;
+  private lastZoom = 0;
 
   constructor(private readonly scenes: (theme: ThemeId) => SceneDef) {}
 
@@ -170,45 +194,69 @@ export class EnvRenderer {
     const back = this.backdrop!;
     const shiftX = Math.max(-this.mx, Math.min(this.mx, (view.camX - view.worldWidth / 2) * view.zoom * scene.backdropPx));
     const shiftY = Math.min(this.my, lift * scene.backdropPv);
+    const unit = H / LAYER_UNITS;
+    const Hd = Math.round(H * dpr);
+    const Wd = Math.round(W * dpr);
+
+    // Plan the parallax strips first: every opaque layer body hides whatever lies below its top
+    // edge in farther layers, so each farther draw is clipped there (the screen is covered
+    // roughly once instead of four times). The ground covers everything below the ground line.
+    const plans = scene.layers.map((layer) => {
+      const strip = this.layerStrip(layer, H, dpr);
+      const base = horizon + lift * layer.pv + (layer.lift ?? 0) * unit;
+      const y = Math.round((base + layer.top * unit) * dpr);
+      const offset = (-view.camX * view.zoom * layer.px - ((seed * 7919) % layer.tile) * unit) * dpr;
+      return { strip, y, x0: Math.round(mod(offset, strip.width)) - strip.width, clip: Hd };
+    });
+    let cover = view.groundY < H + 40 ? Math.round((view.groundY + view.zoom * 0.2) * dpr) : Hd;
+    for (let i = plans.length - 1; i >= 0; i--) {
+      const p = plans[i]!;
+      p.clip = Math.min(Hd, cover);
+      cover = Math.min(cover, p.y + p.strip.bodyY);
+    }
+
+    // 1. Opaque backdrop at an integer device-pixel offset.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(back, Math.round((-this.mx - shiftX) * dpr), Math.round((-this.my + shiftY) * dpr));
+    blitRows(ctx, back, Math.round((-this.mx - shiftX) * dpr), Math.round((-this.my + shiftY) * dpr), Math.min(Hd, cover));
 
     // 2. Clouds.
     this.drawClouds(ctx, scene, view, dpr, horizon - lift * 0.14);
 
     // 3. Baked parallax strips, far to near, at integer device pixels (no resampling).
-    const unit = H / LAYER_UNITS;
-    const Hd = Math.round(H * dpr);
-    const Wd = Math.round(W * dpr);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    for (const layer of scene.layers) {
-      const strip = this.layerStrip(layer, H, dpr);
-      const base = horizon + lift * layer.pv + (layer.lift ?? 0) * unit;
-      const y = Math.round((base + layer.top * unit) * dpr);
-      if (y >= Hd) continue;
-      const cw = strip.canvas.width;
-      const offset = (-view.camX * view.zoom * layer.px - ((seed * 7919) % layer.tile) * unit) * dpr;
-      let x = Math.round(mod(offset, cw)) - cw;
-      for (; x < Wd; x += cw) if (x + cw > 0) ctx.drawImage(strip.canvas, x, y);
-      const below = y + strip.canvas.height;
-      if (below < Hd) {
+    for (const { strip, y, x0, clip } of plans) {
+      if (y >= clip) continue;
+      for (let x = x0; x < Wd; x += strip.width) {
+        if (x + strip.width <= 0) continue;
+        for (const ch of strip.chunks) {
+          const dx = x + ch.x;
+          if (dx >= Wd || dx + ch.canvas.width <= 0) continue;
+          blitRows(ctx, ch.canvas, dx, y + ch.y, clip);
+        }
+        blitRows(ctx, strip.body, x, y + strip.bodyY, clip);
+      }
+      const below = y + strip.bodyY + strip.body.height;
+      if (below < clip) {
         ctx.fillStyle = strip.under;
-        ctx.fillRect(0, below, Wd, Hd - below);
+        ctx.fillRect(0, below, Wd, clip - below);
       }
     }
   }
 
-  /** Paints a parallax layer once into a horizontally tileable strip at device resolution. */
-  private layerStrip(layer: ParallaxLayer, H: number, dpr: number): Strip {
+  /**
+   * Paints a parallax layer once into a horizontally tileable strip at device resolution, then
+   * splits it into an opaque body (fast copy) and cropped translucent chunks along the skyline.
+   */
+  private layerStrip(layer: ParallaxLayer, H: number, dpr: number): LayerStrip {
     const key = `${Math.round(H * dpr)}`;
-    let strip = this.strips.get(layer);
-    if (strip && strip.key === key) return strip;
+    const cached = this.strips.get(layer);
+    if (cached && cached.key === key) return cached;
     const unit = H / LAYER_UNITS;
-    const canvas = strip?.canvas ?? document.createElement('canvas');
+    const canvas = document.createElement('canvas');
     // The canvas width is an exact whole number of pixels per tile so copies butt seamlessly.
     canvas.width = Math.max(1, Math.round(layer.tile * unit * dpr));
     canvas.height = Math.max(1, Math.ceil((layer.bottom - layer.top) * unit * dpr));
-    const c = canvas.getContext('2d')!;
+    const c = canvas.getContext('2d', { willReadFrequently: true })!;
     c.setTransform(canvas.width / layer.tile, 0, 0, unit * dpr, 0, -layer.top * unit * dpr);
     for (const f of layer.fills) {
       c.save();
@@ -229,9 +277,49 @@ export class EnvRenderer {
       c.fillRect(-10, from, layer.tile + 20, layer.bottom - from);
       c.globalCompositeOperation = 'source-over';
     }
+    const w = canvas.width;
+    const h = canvas.height;
+    const data = c.getImageData(0, 0, w, h).data;
+    const alphaAt = (x: number, y: number) => data[(y * w + x) * 4 + 3]!;
+    // Opaque body: the rows below the last row with any (sampled) transparency.
+    let bodyY = 0;
+    for (let y = h - 1; y >= 0 && !bodyY; y--) {
+      for (let x = 0; x < w; x += 2) {
+        if (alphaAt(x, y) < 255) {
+          bodyY = y + 1;
+          break;
+        }
+      }
+    }
+    bodyY = Math.min(bodyY, h - 1);
+    const body = document.createElement('canvas');
+    body.width = w;
+    body.height = h - bodyY;
+    const bc = body.getContext('2d', { alpha: false })!;
+    bc.drawImage(canvas, 0, bodyY, w, h - bodyY, 0, 0, w, h - bodyY);
+    // Translucent skyline chunks, each cropped to its first painted row.
+    const chunks: LayerStrip['chunks'] = [];
+    for (let x0 = 0; x0 < w; x0 += CHUNK) {
+      const cw = Math.min(CHUNK, w - x0);
+      let top = bodyY;
+      for (let y = 0; y < bodyY && top === bodyY; y++) {
+        for (let x = x0; x < x0 + cw; x++) {
+          if (alphaAt(x, y) > 0) {
+            top = y;
+            break;
+          }
+        }
+      }
+      if (top >= bodyY) continue;
+      const chunk = document.createElement('canvas');
+      chunk.width = cw;
+      chunk.height = bodyY - top;
+      chunk.getContext('2d')!.drawImage(canvas, x0, top, cw, bodyY - top, 0, 0, cw, bodyY - top);
+      chunks.push({ canvas: chunk, x: x0, y: top });
+    }
     // Below the strip the layer continues as a flat fill of its bottom colour.
-    const px = c.getImageData(Math.floor(canvas.width / 2), canvas.height - 1, 1, 1).data;
-    strip = { canvas, key, under: `rgb(${px[0]},${px[1]},${px[2]})` };
+    const o = ((h - 1) * w + Math.floor(w / 2)) * 4;
+    const strip: LayerStrip = { key, width: w, chunks, body, bodyY, under: `rgb(${data[o]},${data[o + 1]},${data[o + 2]})` };
     this.strips.set(layer, strip);
     return strip;
   }
@@ -318,16 +406,32 @@ export class EnvRenderer {
     const last = Math.floor((view.camX + W / 2 / view.zoom) / tileM);
     const Wd = Math.round(W * dpr);
     const Hd = Math.round(H * dpr);
-    const y = Math.round((groundY - GROUND_TOP * k) * dpr);
-    let x = Math.round(((first * tileM - view.camX) * view.zoom + W / 2) * dpr);
+    const ratio = view.zoom / this.groundZoom;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    for (let i = first; i <= last && x < Wd; i++, x += tile.canvas.width) ctx.drawImage(tile.canvas, x, y);
-    if (y + tile.canvas.height < Hd) {
+    let bottom: number;
+    if (Math.abs(ratio - 1) < ZOOM_TOLERANCE) {
+      const y = Math.round((groundY - GROUND_TOP * k) * dpr);
+      let x = Math.round(((first * tileM - view.camX) * view.zoom + W / 2) * dpr);
+      for (let i = first; i <= last && x < Wd; i++, x += tile.canvas.width) ctx.drawImage(tile.canvas, x, y);
+      bottom = y + tile.canvas.height;
+    } else {
+      // Mid zoom transition: stretch the cached tile with nearest-neighbour sampling (about six
+      // times cheaper than smoothed resampling); it is re-baked once the zoom settles.
+      ctx.imageSmoothingEnabled = false;
+      const y = (groundY - GROUND_TOP * k) * dpr;
+      const w = tile.canvas.width * ratio;
+      const h = tile.canvas.height * ratio;
+      for (let i = first; i <= last; i++) ctx.drawImage(tile.canvas, ((i * tileM - view.camX) * view.zoom + W / 2) * dpr, y, w + 1, h);
+      ctx.imageSmoothingEnabled = true;
+      bottom = Math.floor(y + h);
+    }
+    if (bottom < Hd) {
       ctx.fillStyle = g.deep;
-      ctx.fillRect(0, y + tile.canvas.height, Wd, Hd - y - tile.canvas.height);
+      ctx.fillRect(0, bottom, Wd, Hd - bottom);
     }
     // Wind-swept tufts stay vector so they can sway.
-    const sway = !view.reducedMotion && view.zoom > 12;
+    const sway = !view.reducedMotion;
+    if (view.zoom < 18) return;
     for (let i = first; i <= last; i++) {
       const sx = (i * tileM - view.camX) * view.zoom + W / 2;
       for (const group of g.sway) {
@@ -350,9 +454,18 @@ export class EnvRenderer {
     const k = view.zoom / 100;
     // Deepest ground ever visible: the camera keeps the ground line above the bottom band (+ shake).
     const depthPx = view.height * CAMERA.groundBand + 40;
-    const key = `${theme}|${view.zoom}|${dpr}|${depthPx}`;
+    const key = `${theme}|${dpr}|${depthPx}`;
     let tile = this.ground;
-    if (tile && tile.key === key) return tile;
+    const settled = Math.abs(this.lastZoom / view.zoom - 1) < 2e-4;
+    this.lastZoom = view.zoom;
+    if (tile && tile.key === key) {
+      // The eased camera zoom creeps towards its target forever: within a 0.05 % tolerance the
+      // tile is blitted 1:1 (under ~1 px of drift across a tile); while zooming it is stretched,
+      // and only re-painted once the zoom settles or drifts far.
+      const off = Math.abs(view.zoom / this.groundZoom - 1);
+      if (off < ZOOM_TOLERANCE || (!settled && off < 0.3)) return tile;
+    }
+    this.groundZoom = view.zoom;
     const canvas = tile?.canvas ?? document.createElement('canvas');
     canvas.width = Math.max(1, Math.round((g.tile / 100) * view.zoom * dpr));
     canvas.height = Math.max(1, Math.ceil((GROUND_TOP * k + depthPx) * dpr));
