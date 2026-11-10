@@ -10,7 +10,7 @@ function firstFlight(): LevelDef {
   const b = new LevelBuilder('1-1', 'First Flight', T, ['red', 'red', 'red']);
   b.size(44, 22).hint('Drag the bird back, aim and let go!');
   hut(b, 25.5, 0, { w: 3.2, pig: 'small', roof: 'wood' });
-  return b.stars(9000, 16000).build();
+  return b.stars(17000, 26000).build();
 }
 
 /** 1-2: two huts at different distances teach range control. */
@@ -19,7 +19,7 @@ function twoHuts(): LevelDef {
   b.size(46, 22).hint('Pull further back to fly further.');
   hut(b, 21, 0, { pig: 'small' });
   hut(b, 31, 0, { w: 3, pig: 'medium', roof: 'wood' });
-  return b.stars(16000, 24000).build();
+  return b.stars(15000, 23000).build();
 }
 
 /** 1-3: a pig on a grassy hill behind a short fence: lob it, or knock the fence onto it. */
@@ -32,7 +32,7 @@ function hilltop(): LevelDef {
   b.plank('wood', 27.2, 4.4, 1.4);
   b.pig('small', 29.3, 3);
   b.pig('small', 20, 0);
-  return b.stars(14000, 22000).build();
+  return b.stars(15000, 23000).build();
 }
 
 /** 1-4: two-storey wooden tower. Taking out a lower post brings the top floor down. */
@@ -40,7 +40,7 @@ function timberTower(): LevelDef {
   const b = new LevelBuilder('1-4', 'Timber Tower', T, ['red', 'red', 'red']);
   b.size(46, 24).hint('Knock out the supports and let gravity do the rest.');
   tower(b, 28, 0, [{ w: 3, pig: 'small' }, { w: 3, pig: 'small' }], 'wood');
-  return b.stars(16000, 24000).build();
+  return b.stars(15000, 23000).build();
 }
 
 /** 1-5: tall wooden dominoes topple into the pigs' shelter. */
@@ -50,7 +50,7 @@ function dominoes(): LevelDef {
   for (let i = 0; i < 5; i++) b.post('wood', 22 + i * 1.6, 0, 3, 0.35);
   hut(b, 32.5, 0, { w: 3, pig: 'medium' });
   b.pig('small', 35.5, 0);
-  return b.stars(20000, 30000).build();
+  return b.stars(15000, 23000).build();
 }
 
 /** 1-6: two-room fort with roofs; the shared middle post is the weak point. */
@@ -66,7 +66,7 @@ function woodenFort(): LevelDef {
   b.tri('wood', 26.5, top, 2.2, 1);
   b.tri('wood', 29.5, top, 2.2, 1);
   b.rect('wood', 28, top, 0.5, 0.5);
-  return b.stars(22000, 32000).build();
+  return b.stars(21000, 32000).build();
 }
 
 /** 1-7: glass enters. A three-floor house with a fragile middle storey and a stone cap. */
@@ -76,7 +76,7 @@ function glassHouse(): LevelDef {
   tower(b, 27.5, 0, [{ w: 3.2, pig: 'small' }, { w: 3.2, mat: 'glass', pig: 'small' }, { w: 3.2, top: 'stone', pig: 'medium' }], 'wood');
   b.ball('stone', 33, 0, 1);
   b.pig('small', 35, 0);
-  return b.stars(26000, 38000).build();
+  return b.stars(29000, 44000).build();
 }
 
 /** 1-8: heavy stone blocks perched on thin wooden stilts above the pigs. */
@@ -91,7 +91,7 @@ function stoneCap(): LevelDef {
     b.rect('stone', x + 0.5, top, 0.9, 0.9);
     b.pig('small', x, 0);
   }
-  return b.stars(16000, 26000).build();
+  return b.stars(15000, 23000).build();
 }
 
 /** 1-9: twin towers joined by a bridge plank; one tower falling drags on the other. */
@@ -102,19 +102,19 @@ function twinTowers(): LevelDef {
   const right = tower(b, 31, 0, [{ w: 2.6, pig: 'medium' }, { w: 2.6, mat: 'glass', pig: 'small' }]);
   b.plank('wood', 28, Math.max(left, right), 6.6);
   b.rect('stone', 28, Math.max(left, right) + 0.25, 0.8, 0.8);
-  return b.stars(32000, 46000).build();
+  return b.stars(18000, 27000).build();
 }
 
 /** 1-10: the Grasslands citadel on a raised plinth, with a helmet pig in the keep. */
 function citadel(): LevelDef {
-  const b = new LevelBuilder('1-10', 'Grassland Citadel', T, ['red', 'red', 'red', 'red', 'red']);
+  const b = new LevelBuilder('1-10', 'Grassland Citadel', T, ['red', 'red', 'red', 'red', 'red', 'red']);
   b.size(52, 26).hint('Helmets soak up hits. Hit them hard.');
   const base = b.ledge(32, 0, 9, 1);
   wall(b, 26.4, 0, 1, 2, 'wood');
   hut(b, 29.5, base, { w: 2.6, mat: 'glass', top: 'wood', pig: 'small' });
-  tower(b, 32.8, base, [{ w: 3, mat: 'stone', top: 'wood', pig: 'helmet', thick: 0.4 }, { w: 3, pig: 'small' }], 'wood');
+  tower(b, 32.8, base, [{ w: 3, mat: 'wood', top: 'wood', pig: 'helmet', thick: 0.3 }, { w: 3, pig: 'small' }], 'wood');
   hut(b, 36.2, base, { w: 2.6, pig: 'medium', roof: 'glass' });
-  return b.stars(36000, 52000).build();
+  return b.stars(26000, 39000).build();
 }
 
 export const CHAPTER_1: LevelDef[] = [firstFlight(), twoHuts(), hilltop(), timberTower(), dominoes(), woodenFort(), glassHouse(), stoneCap(), twinTowers(), citadel()];

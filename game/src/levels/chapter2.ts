@@ -11,7 +11,7 @@ function speedTrap(): LevelDef {
   b.size(50, 24).hint('Chuck: tap while flying to boost!');
   for (let i = 0; i < 4; i++) hut(b, 24 + i * 3, 0, { w: 2.8, pig: i % 2 === 1 ? 'small' : null });
   b.pig('small', 36.5, 0);
-  return b.stars(24000, 36000).build();
+  return b.stars(15000, 22000).build();
 }
 
 /** 2-2: The Blues. A greenhouse of glass, three pigs in three panes. */
@@ -19,7 +19,7 @@ function greenhouse(): LevelDef {
   const b = new LevelBuilder('2-2', 'Greenhouse', T, ['blues', 'blues', 'blues']);
   b.size(48, 24).hint('The Blues: tap to split into three!');
   for (let i = 0; i < 3; i++) tower(b, 25 + i * 2.8, 0, [{ w: 2.6, mat: 'glass', pig: 'small' }, { w: 2.6, mat: 'glass' }]);
-  return b.stars(26000, 38000).build();
+  return b.stars(22000, 33000).build();
 }
 
 /** 2-3: Bomb. A stone bunker with an armoured pig that only an explosion cracks open. */
@@ -31,7 +31,7 @@ function bunker(): LevelDef {
   b.pig('armored', 28, 0);
   b.plank('stone', 28, 2.2, 4.8, 0.5);
   b.pig('small', 32.5, 0);
-  return b.stars(16000, 26000).build();
+  return b.stars(18000, 27000).build();
 }
 
 /** 2-4: Matilda. Pigs in a sunken pit, protected from the side. Drop eggs from above. */
@@ -42,12 +42,12 @@ function eggDrop(): LevelDef {
   b.ledge(34, 0, 2, 3.5);
   hut(b, 27, 0, { w: 2.4, pig: 'small' });
   hut(b, 31, 0, { w: 2.4, pig: 'medium' });
-  return b.stars(18000, 28000).build();
+  return b.stars(23000, 34000).build();
 }
 
 /** 2-5: one target per bird type, in launch order. */
 function provingGrounds(): LevelDef {
-  const b = new LevelBuilder('2-5', 'Proving Grounds', T, ['chuck', 'blues', 'bomb', 'matilda', 'red']);
+  const b = new LevelBuilder('2-5', 'Proving Grounds', T, ['chuck', 'blues', 'bomb', 'matilda', 'red', 'bomb']);
   b.size(52, 26).hint('Each bird has a favourite target.');
   b.post('wood', 20, 0, 2);
   b.post('wood', 21.5, 0, 2);
@@ -61,11 +61,11 @@ function provingGrounds(): LevelDef {
   const ledge = b.ledge(38, 0, 7, 1.5);
   b.rect('stone', 36, ledge, 1, 2);
   b.rect('stone', 40, ledge, 1, 2);
-  b.plank('stone', 38, ledge + 2, 5, 0.5);
-  b.pig('armored', 38, ledge);
+  b.plank('wood', 38, ledge + 2, 5, 0.5);
+  b.pig('helmet', 38, ledge);
   b.tnt(42.5, 0);
   b.pig('large', 45, 0);
-  return b.stars(50000, 75000).build();
+  return b.stars(35000, 53000).build();
 }
 
 /** 2-6: TNT stored next to the pigs' shelters. One good hit sets off a chain. */
@@ -78,7 +78,7 @@ function tntDepot(): LevelDef {
   b.tnt(31.4, 0);
   b.tnt(31.4, 0.8);
   hut(b, 34, 0, { w: 2.8, pig: 'helmet' });
-  return b.stars(30000, 45000).build();
+  return b.stars(26000, 39000).build();
 }
 
 /** 2-7: a fortified mesa. Lob onto it, or bring the overhanging tower down onto the pig below. */
@@ -89,12 +89,12 @@ function mesa(): LevelDef {
   tower(b, 30, 5, [{ w: 2.6, pig: 'small' }, { w: 2.6, mat: 'glass', pig: 'small' }], 'wood');
   hut(b, 33, 5, { w: 2.2, pig: 'medium' });
   b.pig('small', 36.5, 0);
-  return b.stars(30000, 44000).build();
+  return b.stars(30000, 46000).build();
 }
 
 /** 2-8: a stone boulder sits on a ledge above the pigs, held only by a glass chock. */
 function boulderRun(): LevelDef {
-  const b = new LevelBuilder('2-8', 'Boulder Run', T, ['blues', 'red', 'chuck']);
+  const b = new LevelBuilder('2-8', 'Boulder Run', T, ['blues', 'red', 'chuck', 'red']);
   b.size(52, 26).hint('Free the boulder!');
   const shelf = b.ledge(27, 0, 4, 4);
   b.ball('stone', 27.8, shelf, 1.4);
@@ -102,7 +102,7 @@ function boulderRun(): LevelDef {
   hut(b, 31.5, 0, { w: 2.6, mat: 'glass', top: 'wood', pig: 'medium' });
   hut(b, 34.5, 0, { w: 2.6, pig: 'small' });
   b.pig('small', 37, 0);
-  return b.stars(26000, 38000).build();
+  return b.stars(14000, 22000).build();
 }
 
 /** 2-9: a stepped pyramid of stone and glass with a big pig at its heart. */
@@ -118,7 +118,7 @@ function pyramid(): LevelDef {
   hut(b, 30.4, 2.8, { w: 3.6, mat: 'glass', top: 'wood', pig: 'small' });
   b.tri('stone', 30.4, 5.05, 2.6, 1.2);
   b.pig('small', 37.5, 0);
-  return b.stars(36000, 52000).build();
+  return b.stars(28000, 42000).build();
 }
 
 /** 2-10: the sandstorm fortress. Three wings, each weak to a different bird. */
@@ -132,7 +132,7 @@ function fortress(): LevelDef {
   b.tnt(35.8, base);
   b.tnt(40.2, base);
   b.pig('large', 43.5, 0);
-  return b.stars(60000, 85000).build();
+  return b.stars(37000, 55000).build();
 }
 
 export const CHAPTER_2: LevelDef[] = [speedTrap(), greenhouse(), bunker(), eggDrop(), provingGrounds(), tntDepot(), mesa(), boulderRun(), pyramid(), fortress()];

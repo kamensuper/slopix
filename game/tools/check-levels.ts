@@ -93,7 +93,7 @@ function checkStable(level: LevelDef): string[] {
   return problems.slice(0, 3);
 }
 
-function solve(level: LevelDef): { won: boolean; score: number; birdsUsed: number; pigsLeft: number } {
+function solve(level: LevelDef): { won: boolean; score: number; birdsUsed: number; pigsLeft: number; left: string } {
   let prefix: Action[] = [];
 
   for (let shot = 0; shot < level.birds.length; shot++) {
@@ -104,18 +104,22 @@ function solve(level: LevelDef): { won: boolean; score: number; birdsUsed: numbe
       .sort((a, b) => a.x - b.x)
       .slice(0, MAX_TARGETS)
       .flatMap((p) => [{ x: p.x, y: p.y }, { x: p.x - 1.4, y: p.y + 0.6 }]);
-    let round: Trial | null = null;
+    const candidates: { angle: number; power: number; x: number; y: number }[] = [];
     for (const t of targets) {
       for (const power of POWERS) {
         const aim = solveAim(sim.anchor, t.x, t.y, power);
-        for (const angle of [aim.low, aim.high]) {
-          if (angle === null || angle < -0.4 || angle > 1.5) continue;
-          const trial = tryShot(level, prefix, angle, power, t.x, t.y);
-          if (!trial) continue;
-          if (!round || trial.won > round.won || trial.pigs > round.pigs || (trial.pigs === round.pigs && trial.score > round.score)) round = trial;
-          if (trial.won && round === trial) break;
-        }
+        for (const angle of [aim.low, aim.high]) if (angle !== null && angle > -0.4 && angle < 1.5) candidates.push({ angle, power, x: t.x, y: t.y });
       }
+    }
+    // Plain sweep as a fallback; abilities fire relative to the nearest pig.
+    const nearest = targets[0];
+    if (nearest) for (const power of POWERS) for (const deg of SWEEP_DEG) candidates.push({ angle: (deg * Math.PI) / 180, power, x: nearest.x, y: nearest.y });
+    const rank = (t: Trial): number => (t.won ? 1e9 : 0) + t.pigs * 1e6 + t.score;
+    let round: Trial | null = null;
+    for (const c of candidates) {
+      const trial = tryShot(level, prefix, c.angle, c.power, c.x, c.y);
+      if (trial && (!round || rank(trial) > rank(round))) round = trial;
+      if (round?.won) break;
     }
     if (!round) break;
 
@@ -124,7 +128,7 @@ function solve(level: LevelDef): { won: boolean; score: number; birdsUsed: numbe
   }
   const final = replay(level, prefix);
   while (final.pigsAlive === 0 && phaseOf(final) !== 'won') step(final);
-  return { won: phaseOf(final) === 'won', score: final.score, birdsUsed: final.birdsUsed, pigsLeft: final.pigsAlive };
+  return { won: phaseOf(final) === 'won', score: final.score, birdsUsed: final.birdsUsed, pigsLeft: final.pigsAlive, left: final.pigs.filter((p) => p.alive).map((p) => `${p.variant}@${p.x.toFixed(1)},${p.y.toFixed(1)} hp${Math.round(p.hp)}/${p.armor.toFixed(0)}`).join(' ') };
 }
 
 const [from, to] = [Number(process.argv[2] ?? 0), Number(process.argv[3] ?? LEVELS.length - 1)];
@@ -136,7 +140,7 @@ for (let i = from; i <= to && i < LEVELS.length; i++) {
   const result = solve(level);
   const ok = unstable.length === 0 && result.won;
   if (!ok) failures++;
-  const stars = result.won ? `score ${result.score} (2* ${level.stars.two}, 3* ${level.stars.three})` : `pigs left ${result.pigsLeft}`;
+  const stars = result.won ? `score ${result.score} (2* ${level.stars.two}, 3* ${level.stars.three})` : `pigs left ${result.pigsLeft} [${result.left}]`;
   console.log(
     `${ok ? 'PASS' : 'FAIL'} ${level.id.padEnd(5)} ${level.name.padEnd(20)} stable=${unstable.length === 0 ? 'yes' : unstable.join('; ')} solved=${result.won} birds=${result.birdsUsed}/${level.birds.length} ${stars} ${((Date.now() - start) / 1000).toFixed(0)}s`,
   );

@@ -272,8 +272,8 @@ export const PIGS: Record<PigVariant, PigConfig> = {
   small: { name: 'Piglet', radius: 0.4, density: 1.2, hp: 22, armor: 0, armorFactor: 1, minEnergy: 2, score: 5000 },
   medium: { name: 'Pig', radius: 0.55, density: 1.2, hp: 45, armor: 0, armorFactor: 1, minEnergy: 3, score: 5000 },
   large: { name: 'Big Pig', radius: 0.75, density: 1.2, hp: 100, armor: 0, armorFactor: 1, minEnergy: 5, score: 5000 },
-  helmet: { name: 'Helmet Pig', radius: 0.55, density: 1.3, hp: 45, armor: 90, armorFactor: 0.7, minEnergy: 4, score: 6000 },
-  armored: { name: 'Armored Pig', radius: 0.62, density: 1.5, hp: 60, armor: 200, armorFactor: 0.5, minEnergy: 12, score: 7500 },
+  helmet: { name: 'Helmet Pig', radius: 0.55, density: 1.3, hp: 45, armor: 60, armorFactor: 0.7, minEnergy: 4, score: 6000 },
+  armored: { name: 'Armored Pig', radius: 0.62, density: 1.5, hp: 60, armor: 140, armorFactor: 0.5, minEnergy: 8, score: 7500 },
   king: { name: 'King Pig', radius: 0.9, density: 1.3, hp: 260, armor: 0, armorFactor: 1, minEnergy: 8, score: 10000 },
 };
 
