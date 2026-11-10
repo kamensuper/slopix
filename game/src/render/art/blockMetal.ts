@@ -319,11 +319,11 @@ function wear(ctx: CanvasRenderingContext2D, geo: BlockGeo, t: MetalTones, rng: 
 
 /** Dents: a shadowed upper-left wall and a lit lower-right wall, with a dark crease. */
 function dents(ctx: CanvasRenderingContext2D, geo: BlockGeo, stage: DamageStage, t: MetalTones, rng: Rng): void {
-  const all = 6;
-  const visible = stage === 1 ? 2 : stage === 2 ? 4 : all;
+  const all = 4;
+  const visible = stage === 1 ? 1 : stage === 2 ? 2 : all;
   for (let i = 0; i < all; i++) {
-    const [x, y] = randomInside(geo, rng, Math.min(geo.inradius * 0.4, 8));
-    const rx = clamp(geo.inradius * rng.range(0.4, 0.65), 4, 20);
+    const [x, y] = randomInside(geo, rng, Math.min(geo.inradius * 0.45, 9));
+    const rx = clamp(geo.inradius * rng.range(0.32, 0.5), 3.5, 14);
     const ry = rx * rng.range(0.6, 0.9);
     const a = rng.range(-0.5, 0.5) + (geo.h > geo.w ? Math.PI / 2 : 0);
     if (i >= visible) continue;
@@ -341,17 +341,23 @@ function dents(ctx: CanvasRenderingContext2D, geo: BlockGeo, stage: DamageStage,
     ctx.beginPath();
     ctx.arc(0, 0, rx, 0, TAU);
     ctx.fill();
-    const k = rx * 0.32;
+    const k = rx * 0.24;
     ctx.beginPath();
     ctx.arc(0, 0, rx, 0, TAU);
     ctx.arc(k, k, rx, 0, TAU);
-    ctx.fillStyle = rgba(t.deep, 0.6);
+    ctx.fillStyle = rgba(t.deep, 0.5);
     ctx.fill('evenodd');
+    // The lit far wall only on the lower right, not a full ring.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-rx * 0.1, -rx * 0.1, rx * 1.2, rx * 1.2);
+    ctx.clip();
     ctx.beginPath();
     ctx.arc(0, 0, rx * 0.92, 0, TAU);
     ctx.arc(-k * 0.6, -k * 0.6, rx * 0.92, 0, TAU);
-    ctx.fillStyle = rgba(t.spec, 0.55);
+    ctx.fillStyle = rgba(t.spec, 0.45);
     ctx.fill('evenodd');
+    ctx.restore();
     ctx.restore();
   }
 }
