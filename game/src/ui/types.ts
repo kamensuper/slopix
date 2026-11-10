@@ -3,7 +3,7 @@
  * The application owns game state and scenes; the UI owns everything inside the #ui element.
  */
 import type { SfxName, SfxOptions } from '../audio/types';
-import type { CampaignMeta, GameSettings, LevelResult, ProgressReader } from '../core/types';
+import type { CampaignMeta, GameSettings, LevelResult, ProgressReader, StarThresholds } from '../core/types';
 
 export type MenuScreen = 'title' | 'chapters' | 'levels' | 'settings' | 'howto' | 'credits';
 
@@ -47,6 +47,8 @@ export interface HudInfo {
   levelName: string;
   /** Best score so far for this level (0 if never completed). */
   best: number;
+  /** Optional: when given, the HUD score plaque shows a progress meter towards two and three stars. */
+  starThresholds?: StarThresholds;
 }
 
 export interface IUIManager {

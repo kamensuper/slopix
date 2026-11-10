@@ -472,3 +472,167 @@ export function addScuffs(path: CanvasPath, geo: BlockGeo, rng: Rng): void {
     blobPath(path, x, y, r * rng.range(1, 1.7), r, 7, 0.4, rng);
   }
 }
+
+// ---------------------------------------------------------------- colour, gradients, carving
+
+function hexChannels(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.slice(0, 6);
+  const n = parseInt(full, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Mixes two #rrggbb colours (t = 0 gives `a`). */
+export function mixHex(a: string, b: string, t: number): string {
+  const ca = hexChannels(a);
+  const cb = hexChannels(b);
+  const out = ca.map((v, i) => Math.round(v + ((cb[i] as number) - v) * t));
+  return `#${out.map((v) => clamp(v, 0, 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** #rrggbb + alpha -> rgba(). */
+export function rgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexChannels(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Linear gradient across a w x h box that runs from the lit top-left to the shaded bottom-right
+ * but follows the short axis of long thin pieces (a plank is shaded across its thickness).
+ */
+export function boxGradient(ctx: CanvasRenderingContext2D, w: number, h: number, stops: readonly (readonly [number, string])[]): CanvasGradient {
+  const hw = w / 2;
+  const hh = h / 2;
+  const len = Math.hypot(hh, hw) || 1;
+  const dx = hh / len;
+  const dy = hw / len;
+  const reach = hw * dx + hh * dy;
+  const g = ctx.createLinearGradient(-dx * reach, -dy * reach, dx * reach, dy * reach);
+  for (const [at, color] of stops) g.addColorStop(at, color);
+  return g;
+}
+
+/** Adds a closed polygon. */
+export function addPoly(path: CanvasPath, pts: Pts): void {
+  path.moveTo(pts[0] as number, pts[1] as number);
+  for (let i = 2; i < pts.length; i += 2) path.lineTo(pts[i] as number, pts[i + 1] as number);
+  path.closePath();
+}
+
+/** A polygon geometry with the same yardsticks as `geo` (for bevels on hewn silhouettes). */
+export function polyGeo(geo: BlockGeo, pts: Pts): BlockGeo {
+  return { ...geo, shape: geo.shape === 'circle' ? 'rect' : geo.shape, pts, radius: 0 };
+}
+
+/**
+ * Hewn stone silhouette: every corner is knocked off with one or two small facets. The result is
+ * convex and lies inside the physics shape.
+ */
+export function hewnPolygon(geo: BlockGeo, rng: Rng): Pts {
+  if (geo.shape === 'circle') {
+    // Lumpy boulder: a convex polygon with slightly irregular spokes.
+    const n = clamp(Math.round(geo.radius / 7), 8, 13);
+    const out: Pts = [];
+    const turn = rng.next() * TAU;
+    for (let i = 0; i < n; i++) {
+      const a = turn + ((i + rng.range(-0.22, 0.22)) / n) * TAU;
+      const r = geo.radius * rng.range(0.93, 1);
+      out.push(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    return out;
+  }
+  const pts = geo.pts;
+  const n = pts.length / 2;
+  const out: Pts = [];
+  for (let i = 0; i < n; i++) {
+    const prev = edgeFrame(pts, (i + n - 1) % n);
+    const next = edgeFrame(pts, i);
+    const limit = Math.min(prev.len, next.len) * 0.28;
+    const cut = Math.min(limit, rng.range(0.35, 1) * clamp(geo.inradius * 0.55, 3, 15));
+    const cutB = Math.min(limit, cut * rng.range(0.6, 1.4));
+    const vx = pts[i * 2] as number;
+    const vy = pts[i * 2 + 1] as number;
+    out.push(vx - prev.tx * cut, vy - prev.ty * cut);
+    if (rng.next() < 0.55) {
+      // A second facet: the corner breaks off in two planes.
+      const bx = (prev.nx + next.nx) * 0.5;
+      const by = (prev.ny + next.ny) * 0.5;
+      out.push(vx - prev.tx * cut * 0.25 + bx * cut * 0.42, vy - prev.ty * cut * 0.25 + by * cut * 0.42);
+    }
+    out.push(vx + next.tx * cutB, vy + next.ty * cutB);
+  }
+  return out;
+}
+
+/**
+ * Bites the chips that are live at `stage` out of an already painted block: a pale rim of freshly
+ * broken material, the notch erased to transparency and its new edge inked.
+ */
+export function carveChips(
+  ctx: CanvasRenderingContext2D,
+  outline: Path2D,
+  chips: readonly Chip[],
+  stage: number,
+  rim: string,
+  rimScale: number,
+  ink: string,
+  lineWidth: number,
+): void {
+  const live = chips.filter((c) => c.born <= stage);
+  if (live.length === 0) return;
+  ctx.save();
+  ctx.clip(outline);
+  ctx.beginPath();
+  for (const c of live) addChip(ctx, c, rimScale);
+  ctx.fillStyle = rim;
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  for (const c of live) addChip(ctx, c, 1);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.clip(outline);
+  ctx.beginPath();
+  for (const c of live) {
+    const p = c.pts;
+    ctx.moveTo(p[2] as number, p[3] as number);
+    for (let i = 4; i < p.length - 2; i += 2) ctx.lineTo(p[i] as number, p[i + 1] as number);
+  }
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = ink;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Paints the visible part of every crack: a lit lower lip under a dark tapered groove. */
+export function paintCracks(ctx: CanvasRenderingContext2D, cracks: readonly Crack[], stage: number, dark: string, lip: string, lipOffset = 1.2): void {
+  const grooves = new Path2D();
+  const lips = new Path2D();
+  for (const c of cracks) {
+    const n = visibleNodes(c, stage);
+    if (n < 2) continue;
+    const w = crackWidth(c, stage);
+    addTapered(grooves, c.pts, n, w);
+    addTapered(lips, c.pts.map((v, i) => v + (i % 2 === 0 ? lipOffset * 0.6 : lipOffset)), n, w * 0.9);
+  }
+  ctx.fillStyle = lip;
+  ctx.fill(lips);
+  ctx.fillStyle = dark;
+  ctx.fill(grooves);
+}
+
+/** Small four-point sparkle (glass and metal glints). */
+export function sparkle(path: CanvasPath, x: number, y: number, r: number, thin = 0.18): void {
+  const t = r * thin;
+  path.moveTo(x, y - r);
+  path.quadraticCurveTo(x + t, y - t, x + r, y);
+  path.quadraticCurveTo(x + t, y + t, x, y + r);
+  path.quadraticCurveTo(x - t, y + t, x - r, y);
+  path.quadraticCurveTo(x - t, y - t, x, y - r);
+  path.closePath();
+}
