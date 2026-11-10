@@ -64,6 +64,7 @@ interface EmitOptions {
   color?: string;
   additive?: boolean;
   fadeFrom?: number;
+  fadeIn?: number;
   align?: boolean;
   /** Leave a trail of dust puffs in this colour. */
   trail?: string;
@@ -141,6 +142,7 @@ export class Feedback {
       alpha: o.alpha,
       additive: o.additive,
       fadeFrom: o.fadeFrom,
+      fadeIn: o.fadeIn,
       align: o.align,
       trail: o.trail ? renderer.particleSprite('dust', pick(4), o.trail) : undefined,
       trailSize: o.trailSize,
@@ -230,7 +232,7 @@ export class Feedback {
         life: rnd(life * 0.5, life),
         gravity: 0.65,
         drag: 1.4,
-        additive: true,
+        // Normal blending: additive sparks vanish against snow and bright sand.
         align: true,
         spin: 0,
       });
@@ -310,7 +312,7 @@ export class Feedback {
         for (let i = 0; i < shards; i++) {
           const [px, py] = at();
           const [svx, svy] = launch(speed * 1.2);
-          this.emit('shard', px, py, { vx: svx, vy: svy, size: rnd(0.12, 0.38) * (i % 3 === 0 ? 0.5 : 1), life: rnd(0.7, 1.3), bounce: 0.38, spin: 14 });
+          this.emit('shard', px, py, { vx: svx, vy: svy, size: rnd(0.18, 0.44) * (i % 3 === 0 ? 0.5 : 1), life: rnd(0.7, 1.3), bounce: 0.38, spin: 14 });
         }
         break;
       }
@@ -661,7 +663,7 @@ export class Feedback {
         life: rnd(0.24, 0.4),
         gravity: -0.1,
         additive: true,
-        alpha: 0.95,
+        alpha: 0.85,
         spin: 1.5,
         fadeFrom: 0.2,
       });
@@ -674,7 +676,7 @@ export class Feedback {
     for (let i = 0; i < smoke; i++) {
       const angle = rnd(0, Math.PI * 2);
       const size = rnd(0.8, 1.35) * scale * Math.max(1, radius / 2.2);
-      this.emit('smoke', x + Math.cos(angle) * rnd(0, 0.8), y + Math.sin(angle) * rnd(0, 0.8), {
+      this.emit('smoke', x + Math.cos(angle) * rnd(0, 0.8), y + radius * 0.15 + Math.sin(angle) * rnd(0, 0.8), {
         vx: Math.cos(angle) * rnd(0.8, 2.8),
         vy: Math.sin(angle) * rnd(0.5, 2) + rnd(1.2, 2.6),
         size,
@@ -683,6 +685,7 @@ export class Feedback {
         gravity: -0.08,
         drag: 1.6,
         alpha: 0.72,
+        fadeIn: 0.28,
         spin: 1.2,
         fadeFrom: 0.3,
       });

@@ -75,6 +75,8 @@ export class UIManager implements IUIManager {
     for (const layer of [this.menu, this.hud, this.overlay, this.dialog]) layer.hidden = true;
     this.root.classList.add('ui-root');
     this.applyMotion();
+    this.layout();
+    window.addEventListener('resize', () => this.layout());
     document.addEventListener('keydown', this.onKey);
     if (typeof matchMedia === 'function') matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => this.applyMotion());
   }
@@ -85,6 +87,16 @@ export class UIManager implements IUIManager {
 
   private get reduced(): boolean {
     return this.host.getSettings().reducedMotion || prefersReducedMotion();
+  }
+
+  /** Scales the whole UI up on big screens; --vw / --vh stay in the zoomed coordinate space. */
+  private layout(): void {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const zoom = w >= 1500 && h >= 800 ? Math.round(Math.min(2, w / 1280, h / 720) * 20) / 20 : 1;
+    this.root.style.zoom = zoom === 1 ? '' : String(zoom);
+    this.root.style.setProperty('--vw', `${w / zoom / 100}px`);
+    this.root.style.setProperty('--vh', `${h / zoom / 100}px`);
   }
 
   private applyMotion(): void {

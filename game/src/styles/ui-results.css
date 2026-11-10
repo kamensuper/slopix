@@ -44,11 +44,11 @@
 .result-stars .star {
   position: relative;
   display: block;
-  width: clamp(64px, 17vw, 88px);
+  width: clamp(64px, calc(var(--vw, 1vw) * 17), 88px);
   aspect-ratio: 1;
 }
 .result-stars .star-1 {
-  width: clamp(82px, 22vw, 112px);
+  width: clamp(82px, calc(var(--vw, 1vw) * 22), 112px);
   margin-bottom: 12px;
 }
 .result-stars .star-0 {
@@ -87,7 +87,7 @@
   animation: star-land 0.62s cubic-bezier(0.25, 1.4, 0.4, 1) both;
 }
 .result-score {
-  font: 400 clamp(38px, 9vw, 54px) / 1 var(--font-display);
+  font: 400 clamp(38px, calc(var(--vw, 1vw) * 9), 54px) / 1 var(--font-display);
   color: #fff;
   text-shadow: var(--text-outline), 0 5px 0 var(--ink);
   font-variant-numeric: tabular-nums;
@@ -184,7 +184,7 @@
   font: 600 16px / 1.35 var(--font-body);
 }
 .panel-lose .result-score {
-  font-size: clamp(30px, 7vw, 40px);
+  font-size: clamp(30px, calc(var(--vw, 1vw) * 7), 40px);
 }
 
 /* Effects */

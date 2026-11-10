@@ -35,6 +35,8 @@ export interface ParticleOptions {
   bounce?: number;
   /** Additive blending for glows and fire. */
   additive?: boolean;
+  /** Fraction of the lifetime over which the particle fades in (default 0: born fully visible). */
+  fadeIn?: number;
   /** Point the sprite's +x axis along the velocity (sparks, streaks). */
   align?: boolean;
   /** Puffs dropped behind the particle while it flies fast (debris trails). */
@@ -61,6 +63,7 @@ interface Particle {
   drag: number;
   alpha: number;
   fadeFrom: number;
+  fadeIn: number;
   bounce: number;
   additive: boolean;
   align: boolean;
@@ -107,6 +110,7 @@ function blankParticle(): Particle {
     drag: 0,
     alpha: 1,
     fadeFrom: 0.55,
+    fadeIn: 0,
     bounce: 0,
     additive: false,
     align: false,
@@ -165,6 +169,7 @@ export class ParticleSystem {
     p.drag = o.drag ?? 0;
     p.alpha = o.alpha ?? 1;
     p.fadeFrom = o.fadeFrom ?? 0.55;
+    p.fadeIn = o.fadeIn ?? 0;
     p.bounce = o.bounce ?? 0;
     p.additive = o.additive === true;
     p.align = o.align === true;
@@ -280,7 +285,7 @@ export class ParticleSystem {
       const size = p.size + (p.sizeEnd - p.size) * t;
       // Off-screen particles are simulated but not drawn.
       if (!camera.sees(p.x, p.y, size)) continue;
-      const fade = t <= p.fadeFrom ? 1 : 1 - (t - p.fadeFrom) / (1 - p.fadeFrom);
+      const fade = (t <= p.fadeFrom ? 1 : 1 - (t - p.fadeFrom) / (1 - p.fadeFrom)) * (p.fadeIn > 0 && t < p.fadeIn ? t / p.fadeIn : 1);
       const alpha = p.alpha * fade;
       if (alpha <= 0.01) continue;
       if (p.additive !== additive) {

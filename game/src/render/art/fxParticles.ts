@@ -365,15 +365,25 @@ function spark(ctx: CanvasRenderingContext2D, v: number): void {
   const tail = [-30, -24, -30, -18][v] as number;
   const head = [26, 24, 28, 20][v] as number;
   const w = [4, 3.2, 5, 4.5][v] as number;
+  // Saturated orange body so a spark still reads over snow or bright sand without additive blending.
   const glow = ctx.createLinearGradient(tail, 0, head, 0);
-  glow.addColorStop(0, 'rgba(255, 120, 20, 0)');
-  glow.addColorStop(0.7, 'rgba(255, 170, 40, 0.55)');
-  glow.addColorStop(1, 'rgba(255, 210, 90, 0.8)');
+  glow.addColorStop(0, 'rgba(230, 70, 10, 0)');
+  glow.addColorStop(0.55, 'rgba(240, 100, 16, 0.75)');
+  glow.addColorStop(1, 'rgba(255, 150, 30, 0.95)');
   ctx.fillStyle = glow;
   ctx.beginPath();
   ctx.moveTo(tail, 0);
   ctx.quadraticCurveTo(head * 0.4, -w * 2.2, head + w, 0);
   ctx.quadraticCurveTo(head * 0.4, w * 2.2, tail, 0);
+  ctx.fill();
+  const mid = ctx.createLinearGradient(tail * 0.3, 0, head, 0);
+  mid.addColorStop(0, 'rgba(255, 200, 60, 0)');
+  mid.addColorStop(1, 'rgba(255, 214, 90, 1)');
+  ctx.fillStyle = mid;
+  ctx.beginPath();
+  ctx.moveTo(tail * 0.3, 0);
+  ctx.quadraticCurveTo(head * 0.45, -w * 1.3, head + w * 0.5, 0);
+  ctx.quadraticCurveTo(head * 0.45, w * 1.3, tail * 0.3, 0);
   ctx.fill();
   const core = ctx.createLinearGradient(tail * 0.6, 0, head, 0);
   core.addColorStop(0, 'rgba(255, 240, 180, 0)');
