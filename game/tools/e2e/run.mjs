@@ -120,7 +120,7 @@ try {
   await mpage.evaluate(() => {
     window.__game.save.unlockAll = true;
     window.__game.save.setFlag('seenHowTo', true);
-    window.__game.actions.playLevel(10); // 2-1, Chuck
+    window.__game.actions.playLevel(2); // 1-3, the Blues fly first
   });
   await mpage.waitForTimeout(2600);
   const cdp = await mctx.newCDPSession(mpage);
@@ -134,7 +134,7 @@ try {
   await mpage.touchscreen.tap(400, 150);
   await mpage.waitForTimeout(120);
   const used = await mpage.evaluate(() => window.__game.playScene.sim.activeBird?.abilityUsed === true);
-  check('tap activates the ability (Chuck boost)', used);
+  check('tap activates the ability (Blues split)', used);
   await shot(mpage, 'mobile-boost');
   await mpage.waitForTimeout(3000);
   await shot(mpage, 'mobile-after');

@@ -1,6 +1,7 @@
 /**
  * Pooled particle system. Particles are purely cosmetic: they never touch the rigid-body world,
- * they only fall, drag, spin, optionally bounce on the ground plane and fade out.
+ * they only fall, drag, spin, optionally bounce and settle on the ground plane and fade out.
+ * Heavy debris can leave a trail of puffs; trails are the first thing dropped when the pool fills.
  */
 import { PHYSICS, RENDER } from '../core/config';
 import type { Camera } from './Camera';
@@ -34,6 +35,12 @@ export interface ParticleOptions {
   bounce?: number;
   /** Additive blending for glows and fire. */
   additive?: boolean;
+  /** Point the sprite's +x axis along the velocity (sparks, streaks). */
+  align?: boolean;
+  /** Puffs dropped behind the particle while it flies fast (debris trails). */
+  trail?: Sprite;
+  /** Diameter of the trail puffs in metres. */
+  trailSize?: number;
 }
 
 interface Particle {
@@ -56,6 +63,10 @@ interface Particle {
   fadeFrom: number;
   bounce: number;
   additive: boolean;
+  align: boolean;
+  trail: Sprite | null;
+  trailSize: number;
+  trailClock: number;
 }
 
 interface Ring {
@@ -71,6 +82,11 @@ interface Ring {
 }
 
 const RING_POOL = 16;
+/** Seconds between trail puffs, and the speed below which a particle stops leaving a trail. */
+const TRAIL_INTERVAL = 0.045;
+const TRAIL_MIN_SPEED = 3;
+/** Trails are only spawned while the pool is less full than this. */
+const TRAIL_MAX_LOAD = 0.7;
 
 function blankParticle(): Particle {
   return {
@@ -93,6 +109,10 @@ function blankParticle(): Particle {
     fadeFrom: 0.55,
     bounce: 0,
     additive: false,
+    align: false,
+    trail: null,
+    trailSize: 0.3,
+    trailClock: 0,
   };
 }
 
@@ -109,6 +129,15 @@ export class ParticleSystem {
     for (let i = 0; i < RING_POOL; i++) this.rings.push({ active: false, x: 0, y: 0, r0: 0, r1: 1, age: 0, life: 1, color: '#fff', width: 0.2 });
   }
 
+  get capacity(): number {
+    return this.pool.length;
+  }
+
+  /** Share of the pool in use, 0..1 (callers scale effects down as it fills). */
+  get load(): number {
+    return this.alive / this.pool.length;
+  }
+
   /** Takes a slot from the pool; when everything is in use the oldest slot is recycled. */
   spawn(o: ParticleOptions): void {
     const pool = this.pool;
@@ -118,6 +147,7 @@ export class ParticleSystem {
       p = pool[this.cursor] as Particle;
     }
     this.cursor = (this.cursor + 1) % pool.length;
+    if (!p.active) this.alive++;
     p.active = true;
     p.sprite = o.sprite;
     p.designSize = o.designSize;
@@ -137,6 +167,10 @@ export class ParticleSystem {
     p.fadeFrom = o.fadeFrom ?? 0.55;
     p.bounce = o.bounce ?? 0;
     p.additive = o.additive === true;
+    p.align = o.align === true;
+    p.trail = o.trail ?? null;
+    p.trailSize = o.trailSize ?? o.size;
+    p.trailClock = 0;
   }
 
   /** Expanding shock-wave ring (radii in metres). */
@@ -155,7 +189,11 @@ export class ParticleSystem {
   }
 
   clear(): void {
-    for (const p of this.pool) p.active = false;
+    for (const p of this.pool) {
+      p.active = false;
+      p.sprite = null;
+      p.trail = null;
+    }
     for (const r of this.rings) r.active = false;
     this.alive = 0;
   }
@@ -163,12 +201,14 @@ export class ParticleSystem {
   update(dt: number): void {
     const g = PHYSICS.gravity;
     let alive = 0;
+    const trails = this.load < TRAIL_MAX_LOAD;
     for (const p of this.pool) {
       if (!p.active) continue;
       p.age += dt;
       if (p.age >= p.life || p.y < -2) {
         p.active = false;
         p.sprite = null;
+        p.trail = null;
         continue;
       }
       alive++;
@@ -187,11 +227,20 @@ export class ParticleSystem {
         p.vx *= 0.65;
         p.vrot *= 0.5;
         if (p.vy < 0.6) {
+          // Settled: lie still on the ground until faded out.
           p.vy = 0;
           p.bounce = 0;
           p.gravity = 0;
           p.vx = 0;
           p.vrot = 0;
+          p.trail = null;
+        }
+      }
+      if (p.trail && trails) {
+        p.trailClock += dt;
+        if (p.trailClock >= TRAIL_INTERVAL) {
+          p.trailClock = 0;
+          if (p.vx * p.vx + p.vy * p.vy > TRAIL_MIN_SPEED * TRAIL_MIN_SPEED) this.spawnTrail(p);
         }
       }
     }
@@ -201,6 +250,26 @@ export class ParticleSystem {
       if (r.age >= r.life) r.active = false;
     }
     this.alive = alive;
+  }
+
+  private spawnTrail(p: Particle): void {
+    this.spawn({
+      sprite: p.trail as Sprite,
+      designSize: p.designSize,
+      x: p.x,
+      y: p.y,
+      vx: p.vx * 0.08,
+      vy: p.vy * 0.08 + 0.3,
+      size: p.trailSize,
+      sizeEnd: p.trailSize * 2.2,
+      life: 0.42,
+      rot: p.rot,
+      vrot: 0.8,
+      gravity: -0.02,
+      drag: 2.5,
+      alpha: 0.42,
+      fadeFrom: 0.1,
+    });
   }
 
   draw(renderer: WorldRenderer, ctx: CanvasRenderingContext2D, camera: Camera, dpr: number): void {
@@ -218,7 +287,8 @@ export class ParticleSystem {
         additive = p.additive;
         ctx.globalCompositeOperation = additive ? 'lighter' : 'source-over';
       }
-      renderer.drawSpriteSized(p.sprite, p.x, p.y, p.rot, size, p.designSize, alpha);
+      const rot = p.align && (p.vx !== 0 || p.vy !== 0) ? Math.atan2(p.vy, p.vx) : p.rot;
+      renderer.drawSpriteSized(p.sprite, p.x, p.y, rot, size, p.designSize, alpha);
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

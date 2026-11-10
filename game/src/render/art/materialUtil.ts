@@ -418,14 +418,14 @@ export interface Chip {
 
 /** Notches bitten out of the edges at stages 2 and 3 (drawn inside the silhouette, so the physics shape still matches). */
 export function edgeChips(geo: BlockGeo, rng: Rng): Chip[] {
-  const count = clamp(Math.round(geo.perimeter / 110) + 2, 3, 7);
-  const depth = clamp(geo.inradius * 0.45, 6.5, 14);
+  const count = clamp(Math.round(geo.perimeter / 170) + 1, 2, 5);
+  const depth = clamp(geo.inradius * 0.26, 3.5, 9);
   const offset = rng.next();
   const chips: Chip[] = [];
   for (let i = 0; i < count; i++) {
     const f = perimeterPoint(geo, offset + (i + rng.range(0.15, 0.85)) / count);
     const d = depth * rng.range(0.75, 1.15);
-    const a = d * rng.range(1, 1.8);
+    const a = d * rng.range(0.9, 1.4);
     const deep = d * rng.range(0.6, 1);
     chips.push({
       pts: [
@@ -521,7 +521,9 @@ export function addPoly(path: CanvasPath, pts: Pts): void {
 
 /** A polygon geometry with the same yardsticks as `geo` (for bevels on hewn silhouettes). */
 export function polyGeo(geo: BlockGeo, pts: Pts): BlockGeo {
-  return { ...geo, shape: geo.shape === 'circle' ? 'rect' : geo.shape, pts, radius: 0 };
+  let perimeter = 0;
+  for (let i = 0; i < pts.length / 2; i++) perimeter += edgeFrame(pts, i).len;
+  return { ...geo, shape: geo.shape === 'circle' ? 'rect' : geo.shape, pts, radius: 0, perimeter };
 }
 
 /**
