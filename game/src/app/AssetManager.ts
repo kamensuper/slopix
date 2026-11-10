@@ -8,7 +8,7 @@ import type { WorldRenderer } from '../render/WorldRenderer';
 
 const FONTS = ['400 32px "Lilita One"', '500 16px "Fredoka Variable"', '700 16px "Fredoka Variable"'];
 const FONT_TIMEOUT_MS = 4000;
-const PARTICLE_KINDS: ParticleKind[] = ['splinter', 'woodchip', 'shard', 'rock', 'dust', 'smoke', 'spark', 'star', 'feather', 'fire'];
+const PARTICLE_KINDS: ParticleKind[] = ['splinter', 'woodchip', 'shard', 'rock', 'dust', 'smoke', 'spark', 'star', 'feather', 'fire', 'metal', 'glint', 'flash'];
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#58c0f5" />
+    <meta name="theme-color" content="#49b4f0" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="description" content="Flock Fury - a slingshot physics game. Fling birds, topple towers, pop pigs." />
@@ -15,7 +15,7 @@
       body {
         margin: 0;
         height: 100%;
-        background: #58c0f5;
+        background: #49b4f0;
         overflow: hidden;
       }
       #boot {
@@ -26,30 +26,129 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 18px;
-        background: linear-gradient(#49b4f0, #bfeaff);
+        gap: 14px;
+        overflow: hidden;
+        background: radial-gradient(circle at 78% 18%, #fff7bf 0 5%, rgba(255, 247, 191, 0) 22%), linear-gradient(#3fa9ee, #a9e2ff 70%, #d9f4ff);
         color: #fff;
-        font: 700 22px/1.2 system-ui, sans-serif;
-        text-shadow: 0 2px 0 rgba(0, 60, 110, 0.35);
-        transition: opacity 0.45s ease;
+        font: 800 20px/1.2 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+        transition: opacity 0.5s ease;
       }
       #boot.done {
         opacity: 0;
         pointer-events: none;
       }
+      #boot::before,
+      #boot::after {
+        content: '';
+        position: absolute;
+        left: -10%;
+        right: -10%;
+        bottom: -14vh;
+        height: 34vh;
+        border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+        background: linear-gradient(#7fd04a, #3f9a3a);
+      }
+      #boot::after {
+        bottom: -22vh;
+        left: 25%;
+        right: -30%;
+        height: 36vh;
+        background: linear-gradient(#5bb83c, #2f7f35);
+      }
+      .boot-cloud {
+        position: absolute;
+        width: 150px;
+        height: 46px;
+        border-radius: 40px;
+        background: #fff;
+        opacity: 0.85;
+        box-shadow: 40px -22px 0 -4px #fff, 84px -6px 0 -8px #fff;
+        animation: boot-cloud 38s linear infinite;
+      }
+      .boot-cloud.c2 {
+        top: 24%;
+        animation-duration: 54s;
+        animation-delay: -20s;
+        transform: scale(0.7);
+      }
+      .boot-cloud.c1 {
+        top: 11%;
+      }
+      #boot-bird {
+        position: relative;
+        width: 92px;
+        height: 92px;
+        z-index: 1;
+        animation: boot-hop 0.8s cubic-bezier(0.3, 0, 0.3, 1) infinite;
+        filter: drop-shadow(0 8px 0 rgba(0, 60, 110, 0.25));
+      }
+      #boot-title {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        font: 900 clamp(34px, 9vw, 64px) / 1 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #ffd23f;
+        text-shadow: -3px -3px 0 #2b1a12, 3px -3px 0 #2b1a12, -3px 3px 0 #2b1a12, 3px 3px 0 #2b1a12, 0 -3px 0 #2b1a12, 0 3px 0 #2b1a12, -3px 0 0 #2b1a12, 3px 0 0 #2b1a12, 0 8px 0 #2b1a12, 0 12px 14px rgba(0, 0, 0, 0.3);
+      }
+      #boot-title span {
+        color: #ff5a3c;
+      }
+      #boot-text {
+        position: relative;
+        z-index: 1;
+        font-size: 16px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        text-shadow: 0 2px 0 rgba(43, 26, 18, 0.7);
+      }
       #boot-bar {
-        width: min(280px, 60vw);
-        height: 16px;
-        border-radius: 10px;
-        background: rgba(0, 60, 110, 0.25);
-        border: 3px solid #fff;
+        position: relative;
+        z-index: 1;
+        width: min(300px, 64vw);
+        height: 22px;
+        padding: 3px;
+        border-radius: 14px;
+        background: #4a2c17;
+        border: 3px solid #2b1a12;
+        box-shadow: 0 5px 0 rgba(43, 26, 18, 0.8);
         overflow: hidden;
       }
       #boot-fill {
         width: 0%;
         height: 100%;
-        background: linear-gradient(#ffe36b, #ffb629);
-        transition: width 0.2s ease;
+        min-width: 14px;
+        border-radius: 8px;
+        background: linear-gradient(#fff08a, #ffb629 55%, #f08a1f);
+        box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5);
+        transition: width 0.25s ease;
+      }
+      @keyframes boot-hop {
+        0%,
+        100% {
+          transform: translateY(0) scale(1.06, 0.94);
+        }
+        45% {
+          transform: translateY(-26px) scale(0.96, 1.05) rotate(-6deg);
+        }
+        75% {
+          transform: translateY(-4px) scale(1, 1);
+        }
+      }
+      @keyframes boot-cloud {
+        from {
+          transform: translateX(-200px);
+        }
+        to {
+          transform: translateX(110vw);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-bird,
+        .boot-cloud {
+          animation: none;
+        }
       }
     </style>
   </head>
@@ -59,6 +158,21 @@
       <div id="ui"></div>
     </div>
     <div id="boot" role="status" aria-live="polite">
+      <span class="boot-cloud c1"></span>
+      <span class="boot-cloud c2"></span>
+      <svg id="boot-bird" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M25 13q-2-9 5-9M33 11q1-9 7-8M38 14q5-6 10-3" fill="none" stroke="#2b1a12" stroke-width="3.2" stroke-linecap="round" />
+        <circle cx="32" cy="35" r="25" fill="#e23b2e" stroke="#2b1a12" stroke-width="3.4" />
+        <path d="M10 42a25 25 0 0 0 44 0c-6 9-38 9-44 0z" fill="#a81f22" opacity=".55" />
+        <ellipse cx="32" cy="49" rx="14" ry="9" fill="#f2d9b6" />
+        <circle cx="23" cy="32" r="7" fill="#fff" stroke="#2b1a12" stroke-width="2.4" />
+        <circle cx="41" cy="32" r="7" fill="#fff" stroke="#2b1a12" stroke-width="2.4" />
+        <circle cx="25" cy="33" r="3" fill="#2b1a12" />
+        <circle cx="39" cy="33" r="3" fill="#2b1a12" />
+        <path d="M17 21l12 5M47 21l-12 5" stroke="#2b1a12" stroke-width="4" stroke-linecap="round" />
+        <path d="M25 41l7-3 7 3-7 8z" fill="#f7b125" stroke="#2b1a12" stroke-width="2.6" stroke-linejoin="round" />
+      </svg>
+      <h1 id="boot-title">Flock <span>Fury</span></h1>
       <div id="boot-text">Loading</div>
       <div id="boot-bar"><div id="boot-fill"></div></div>
     </div>

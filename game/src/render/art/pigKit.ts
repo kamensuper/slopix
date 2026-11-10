@@ -49,6 +49,7 @@ export interface PigTones extends BodyTones, EyeTones {
   earInner: string;
   brow: string;
   crease: string;
+  muzzle: string;
   mouth: string;
   tongue: string;
   tooth: string;
@@ -93,6 +94,7 @@ const BASE: PigTones = {
   earInner: '#5aa52e',
   brow: '#3b6f1f',
   crease: '#4f8f2a',
+  muzzle: '#eaffc04d',
 };
 
 export const PIG_TONES: Record<PigVariant, PigTones> = {
@@ -251,22 +253,42 @@ export function traceStar(ctx: CanvasRenderingContext2D, x: number, y: number, o
   ctx.closePath();
 }
 
-/** Small round rivet with a highlight; `missing` leaves an empty hole. */
-export function paintRivet(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, t: MetalTones, missing: boolean): void {
+/**
+ * A row of round rivets with highlights, batched into a few paths. `rivets` is flattened
+ * (x, y, r) triples; rivets whose index bit is set in `missing` are empty holes.
+ */
+export function paintRivets(ctx: CanvasRenderingContext2D, rivets: readonly number[], t: MetalTones, missing = 0): void {
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, TAU);
-  if (missing) {
-    ctx.fillStyle = t.hole;
-    ctx.fill();
-    return;
+  let holes = false;
+  for (let i = 0, n = 0; i < rivets.length; i += 3, n++) {
+    if (missing & (1 << n)) {
+      holes = true;
+      continue;
+    }
+    ctx.moveTo(rivets[i] + rivets[i + 2], rivets[i + 1]);
+    ctx.arc(rivets[i], rivets[i + 1], rivets[i + 2], 0, TAU);
   }
   ctx.fillStyle = t.rivet;
   ctx.fill();
   ctx.lineWidth = 2.5;
   ctx.strokeStyle = t.ink;
   ctx.stroke();
-  ctx.fillStyle = t.rivetHi;
   ctx.beginPath();
-  ctx.arc(x - r * 0.32, y - r * 0.34, r * 0.38, 0, TAU);
+  for (let i = 0, n = 0; i < rivets.length; i += 3, n++) {
+    if (missing & (1 << n)) continue;
+    const r = rivets[i + 2];
+    ctx.moveTo(rivets[i] - r * 0.32 + r * 0.38, rivets[i + 1] - r * 0.34);
+    ctx.arc(rivets[i] - r * 0.32, rivets[i + 1] - r * 0.34, r * 0.38, 0, TAU);
+  }
+  ctx.fillStyle = t.rivetHi;
+  ctx.fill();
+  if (!holes) return;
+  ctx.beginPath();
+  for (let i = 0, n = 0; i < rivets.length; i += 3, n++) {
+    if (!(missing & (1 << n))) continue;
+    ctx.moveTo(rivets[i] + rivets[i + 2], rivets[i + 1]);
+    ctx.arc(rivets[i], rivets[i + 1], rivets[i + 2], 0, TAU);
+  }
+  ctx.fillStyle = t.hole;
   ctx.fill();
 }

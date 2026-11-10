@@ -129,7 +129,13 @@ export type ParticleKind =
   /** Feather; tinted with `color`. */
   | 'feather'
   /** Glowing ember / fire blob for explosions. */
-  | 'fire';
+  | 'fire'
+  /** Bent steel fragment, bolt or nut. */
+  | 'metal'
+  /** Four-point sparkle (glass and metal glints); meant for additive blending. */
+  | 'glint'
+  /** Soft radial impact flash with faint rays; meant for additive blending. */
+  | 'flash';
 
 /** Every particle kind offers this many visual variants (0 .. PARTICLE_VARIANTS - 1). */
 export const PARTICLE_VARIANTS = 4;
@@ -154,6 +160,10 @@ export interface EnvView {
   groundY: number;
   /** Level width in metres; the playfield spans world x in [0, worldWidth]. */
   worldWidth: number;
+  /** Accessibility: no wind sway or ambient particles (cloud drift stays). */
+  reducedMotion?: boolean;
+  /** Varies the backdrop composition per level (sun / waterfall placement, layer phase). Defaults to a hash of worldWidth. */
+  seed?: number;
 }
 /*
  * World -> screen for an EnvView:
@@ -175,6 +185,8 @@ export interface DecorInfo {
   /** Bounding box in metres. The painter draws inside x in [-w/2, w/2], y in [-h, 0] (origin = bottom centre), 100 units per metre. */
   w: number;
   h: number;
+  /** Light sources: an additive glow of radius r (metres) centred at (x, y) metres from the base (y up), painted by paintDecorGlow. */
+  glow?: { x: number; y: number; r: number };
 }
 
 // ---------------------------------------------------------------- module signatures (for reference)
