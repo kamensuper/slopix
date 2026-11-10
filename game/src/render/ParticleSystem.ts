@@ -86,7 +86,7 @@ interface Ring {
 
 const RING_POOL = 16;
 /** Seconds between trail puffs, and the speed below which a particle stops leaving a trail. */
-const TRAIL_INTERVAL = 0.045;
+const TRAIL_INTERVAL = 0.03;
 const TRAIL_MIN_SPEED = 3;
 /** Trails are only spawned while the pool is less full than this. */
 const TRAIL_MAX_LOAD = 0.7;
@@ -210,7 +210,8 @@ export class ParticleSystem {
     for (const p of this.pool) {
       if (!p.active) continue;
       p.age += dt;
-      if (p.age >= p.life || p.y < -2) {
+      // The ground plane hides anything below it, so particles that fall through it are done.
+      if (p.age >= p.life || p.y < -p.size * 0.5) {
         p.active = false;
         p.sprite = null;
         p.trail = null;
