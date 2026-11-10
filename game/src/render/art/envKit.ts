@@ -178,3 +178,58 @@ export function cloudLobes(w: number, h: number, rng: Rng): [number, number, num
 export function addLobes(path: Path2D, lobes: [number, number, number][], dx = 0, dy = 0, k = 1): void {
   for (const [x, y, r] of lobes) circle(path, x + dx, y + dy, r * k);
 }
+
+// ---------------------------------------------------------------- layer helpers
+
+export interface Fill3 {
+  path: Path2D;
+  color: string;
+  alpha?: number;
+  dx?: number;
+  dy?: number;
+}
+
+/**
+ * Cel-shaded silhouette from one ridge path: a sunlit rim along the crest, shade on slopes that
+ * face away from the top-left sun, and the base tone in between.
+ */
+export function celRidge(path: Path2D, light: string, base: string, shade: string, rim: number, shadeShift: number): Fill3[] {
+  return [
+    { path, color: light },
+    { path, color: shade, dy: rim },
+    { path, color: base, dx: -shadeShift, dy: rim * 1.15 },
+  ];
+}
+
+/** Three-tone canopy from overlapping circles (shade, base nudged up-left, light caps). */
+export function celCircles(circles: [number, number, number][], shadeC: string, baseC: string, lightC: string, lightK = 0.55): Fill3[] {
+  const shade = new Path2D();
+  const base = new Path2D();
+  const light = new Path2D();
+  for (const [x, y, r] of circles) {
+    circle(shade, x, y, r);
+    circle(base, x - r * 0.1, y - r * 0.14, r * 0.9);
+    circle(light, x - r * 0.3, y - r * 0.36, r * lightK);
+  }
+  return [
+    { path: shade, color: shadeC },
+    { path: base, color: baseC },
+    { path: light, color: lightC },
+  ];
+}
+
+/** Tapered curved grass blade rooted at (x, 0) in a y-down space. */
+export function blade(path: Path2D, x: number, h: number, w: number, lean: number): void {
+  path.moveTo(x - w, 2);
+  path.quadraticCurveTo(x - w * 0.3 + lean * 0.3, -h * 0.55, x + lean, -h);
+  path.quadraticCurveTo(x + w * 0.4 + lean * 0.3, -h * 0.5, x + w, 2);
+  path.closePath();
+}
+
+/** Small tuft of blades. */
+export function tuft(path: Path2D, x: number, h: number, rng: Rng, blades = 5): void {
+  for (let i = 0; i < blades; i++) {
+    const t = blades === 1 ? 0 : i / (blades - 1) - 0.5;
+    blade(path, x + t * h * 0.5, h * rng.range(0.55, 1) * (1 - Math.abs(t) * 0.5), h * 0.07, t * h * 0.7 + rng.range(-0.1, 0.1) * h);
+  }
+}
