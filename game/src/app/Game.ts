@@ -81,7 +81,8 @@ export class Game {
   private readonly resize = (): void => {
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
-    const dpr = Math.min(RENDER.maxDpr, window.devicePixelRatio || 1);
+    // Cap the backing store: fill cost grows with pixel count, and big high-DPI screens lag otherwise.
+    const dpr = Math.min(RENDER.maxDpr, window.devicePixelRatio || 1, Math.sqrt(RENDER.maxPixels / (width * height)));
     this.canvas.width = Math.round(width * dpr);
     this.canvas.height = Math.round(height * dpr);
     this.view = { width, height, dpr };

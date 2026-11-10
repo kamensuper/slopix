@@ -356,6 +356,8 @@ export const CAMERA = {
 export const RENDER = {
   /** Upper bound for devicePixelRatio (keeps fill-rate sane on 3x phones). */
   maxDpr: 2,
+  /** Upper bound for canvas backing-store pixels (about 1.5x a 1080p screen). */
+  maxPixels: 3_000_000,
   /** Resolution of cached sprites in device px per metre. */
   spritePxPerMeter: 96,
   maxParticles: 700,

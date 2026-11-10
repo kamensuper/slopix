@@ -53,6 +53,8 @@ export class WorldRenderer {
   private ctx!: CanvasRenderingContext2D;
   private cam!: Camera;
   private dpr = 1;
+  private skyCanvas: HTMLCanvasElement | null = null;
+  private skyKey = '';
   private readonly env: EnvView = { width: 1, height: 1, camX: 0, camY: 0, zoom: 30, time: 0, groundY: 0, worldWidth: 44 };
 
   /** Call first every frame. */
@@ -88,7 +90,24 @@ export class WorldRenderer {
 
   drawSky(theme: ThemeId): void {
     this.screenSpace();
-    paintSky(this.ctx, theme, this.env);
+    // A full-screen gradient fill is the most expensive pass in software-rasterised browsers,
+    // so paint it once per theme and size and blit the cached copy.
+    const w = Math.ceil(this.env.width * this.dpr);
+    const h = Math.ceil(this.env.height * this.dpr);
+    const key = `${theme}|${w}|${h}`;
+    if (this.skyKey !== key) {
+      const canvas = this.skyCanvas ?? document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const c = canvas.getContext('2d', { alpha: false })!;
+      c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      paintSky(c, theme, this.env);
+      this.skyCanvas = canvas;
+      this.skyKey = key;
+    }
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.drawImage(this.skyCanvas!, 0, 0);
+    this.screenSpace();
   }
 
   drawGround(theme: ThemeId): void {
