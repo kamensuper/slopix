@@ -35,11 +35,14 @@ export interface ParallaxLayer {
   px: number;
   /** Fraction of the ground line's vertical motion the layer follows. */
   pv: number;
-  /** How strongly the layer scales with camera zoom (exponent). */
-  zoomK: number;
+  /** Vertical extent of the artwork in layer units (top < 0 above the baseline); below `bottom` the layer continues as a flat fill. */
+  top: number;
+  bottom: number;
   /** Baseline offset in layer units (negative = higher on screen). */
   lift?: number;
   fills: LayerFill[];
+  /** Mist pooling towards the foot: colour, strength at `bottom`, and where it starts (layer units). */
+  haze?: [color: string, alpha: number, from: number];
 }
 
 export interface CloudDef {
@@ -111,7 +114,16 @@ export interface SceneDef {
   ambient: AmbientKind;
 }
 
+interface Strip {
+  canvas: HTMLCanvasElement;
+  key: string;
+  /** Flat colour continuing below the strip. */
+  under: string;
+}
+
 const BACK_MARGIN_V = 0.18;
+/** Room above the ground line in the cached ground tile (design units): lip, blades, flowers. */
+const GROUND_TOP = 40;
 const MAX_PARTICLES = 72;
 // Per particle: x, y, vx, vy, size, phase, kind/tint, spin
 const STRIDE = 8;
@@ -134,6 +146,9 @@ export class EnvRenderer {
   private lastCamY = 0;
   private gust = 0;
   private seedCounter = 1;
+  private readonly strips = new Map<ParallaxLayer, Strip>();
+  private readonly clouds = new Map<CloudDef, Strip>();
+  private ground: Strip | null = null;
 
   constructor(private readonly scenes: (theme: ThemeId) => SceneDef) {}
 
@@ -161,26 +176,64 @@ export class EnvRenderer {
     // 2. Clouds.
     this.drawClouds(ctx, scene, view, dpr, horizon - lift * 0.14);
 
-    // 3. Vector parallax layers, far to near.
+    // 3. Baked parallax strips, far to near, at integer device pixels (no resampling).
     const unit = H / LAYER_UNITS;
-    const zRef = H / 13;
+    const Hd = Math.round(H * dpr);
+    const Wd = Math.round(W * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const layer of scene.layers) {
-      const s = unit * Math.min(1.45, Math.max(0.72, Math.pow(view.zoom / zRef, layer.zoomK)));
-      const base = horizon + lift * layer.pv + (layer.lift ?? 0) * s;
-      const tileW = layer.tile * s;
-      const offset = -view.camX * view.zoom * layer.px - ((seed * 7919) % layer.tile) * s;
-      let x = mod(offset, tileW) - tileW;
-      for (; x < W; x += tileW) {
-        if (x + tileW < 0) continue;
-        for (const f of layer.fills) {
-          ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * (x + (f.dx ?? 0) * s), dpr * (base + (f.dy ?? 0) * s));
-          ctx.globalAlpha = f.alpha ?? 1;
-          ctx.fillStyle = f.color;
-          ctx.fill(f.path);
-        }
+      const strip = this.layerStrip(layer, H, dpr);
+      const base = horizon + lift * layer.pv + (layer.lift ?? 0) * unit;
+      const y = Math.round((base + layer.top * unit) * dpr);
+      if (y >= Hd) continue;
+      const cw = strip.canvas.width;
+      const offset = (-view.camX * view.zoom * layer.px - ((seed * 7919) % layer.tile) * unit) * dpr;
+      let x = Math.round(mod(offset, cw)) - cw;
+      for (; x < Wd; x += cw) if (x + cw > 0) ctx.drawImage(strip.canvas, x, y);
+      const below = y + strip.canvas.height;
+      if (below < Hd) {
+        ctx.fillStyle = strip.under;
+        ctx.fillRect(0, below, Wd, Hd - below);
       }
     }
-    ctx.globalAlpha = 1;
+  }
+
+  /** Paints a parallax layer once into a horizontally tileable strip at device resolution. */
+  private layerStrip(layer: ParallaxLayer, H: number, dpr: number): Strip {
+    const key = `${Math.round(H * dpr)}`;
+    let strip = this.strips.get(layer);
+    if (strip && strip.key === key) return strip;
+    const unit = H / LAYER_UNITS;
+    const canvas = strip?.canvas ?? document.createElement('canvas');
+    // The canvas width is an exact whole number of pixels per tile so copies butt seamlessly.
+    canvas.width = Math.max(1, Math.round(layer.tile * unit * dpr));
+    canvas.height = Math.max(1, Math.ceil((layer.bottom - layer.top) * unit * dpr));
+    const c = canvas.getContext('2d')!;
+    c.setTransform(canvas.width / layer.tile, 0, 0, unit * dpr, 0, -layer.top * unit * dpr);
+    for (const f of layer.fills) {
+      c.save();
+      c.translate(f.dx ?? 0, f.dy ?? 0);
+      c.globalAlpha = f.alpha ?? 1;
+      c.fillStyle = f.color;
+      c.fill(f.path);
+      c.restore();
+    }
+    if (layer.haze) {
+      // Mist pooling towards the foot of the layer (tints only the painted pixels).
+      const [color, alpha, from] = layer.haze;
+      const g = c.createLinearGradient(0, from, 0, layer.bottom);
+      g.addColorStop(0, rgba(color, 0));
+      g.addColorStop(1, rgba(color, alpha));
+      c.globalCompositeOperation = 'source-atop';
+      c.fillStyle = g;
+      c.fillRect(-10, from, layer.tile + 20, layer.bottom - from);
+      c.globalCompositeOperation = 'source-over';
+    }
+    // Below the strip the layer continues as a flat fill of its bottom colour.
+    const px = c.getImageData(Math.floor(canvas.width / 2), canvas.height - 1, 1, 1).data;
+    strip = { canvas, key, under: `rgb(${px[0]},${px[1]},${px[2]})` };
+    this.strips.set(layer, strip);
+    return strip;
   }
 
   private bakeBackdrop(scene: SceneDef, view: EnvView, dpr: number, seed: number, key: string): void {
@@ -207,23 +260,46 @@ export class EnvRenderer {
   private drawClouds(ctx: CanvasRenderingContext2D, scene: SceneDef, view: EnvView, dpr: number, horizon: number): void {
     const { style, items } = scene.clouds;
     const unit = view.height / LAYER_UNITS;
-    ctx.globalAlpha = style.alpha;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const c of items) {
+      const sprite = this.cloudSprite(c, style, unit, dpr);
       const s = unit * c.scale;
       const half = (c.w / 2) * s;
       const range = view.width + half * 2 + 40;
       const x = mod(c.x * range + view.time * c.speed * s - view.camX * view.zoom * c.depth, range) - half - 20;
       const y = horizon - c.alt * unit;
-      const path = cloudPaths(c);
-      ctx.setTransform(dpr * s, 0, 0, dpr * s * (c.squash ?? 1), dpr * x, dpr * y);
-      ctx.fillStyle = style.shade;
-      ctx.fill(path.shade);
-      ctx.fillStyle = style.base;
-      ctx.fill(path.base);
-      ctx.fillStyle = style.light;
-      ctx.fill(path.light);
+      ctx.drawImage(sprite.canvas, Math.round((x - half) * dpr) - 2, Math.round(y * dpr) - sprite.canvas.height + 2);
     }
-    ctx.globalAlpha = 1;
+  }
+
+  private cloudSprite(c: CloudDef, style: CloudStyle, unit: number, dpr: number): Strip {
+    const key = `${unit * dpr}`;
+    let sprite = this.clouds.get(c);
+    if (sprite && sprite.key === key) return sprite;
+    const s = unit * c.scale * dpr;
+    const sy = s * (c.squash ?? 1);
+    const top = Math.min(...c.lobes.map(([, y, r]) => y - r)) - 6;
+    const canvas = sprite?.canvas ?? document.createElement('canvas');
+    canvas.width = Math.ceil((c.w + 12) * s) + 4;
+    canvas.height = Math.ceil(-top * sy) + 4;
+    const g = canvas.getContext('2d')!;
+    g.setTransform(s, 0, 0, sy, (c.w / 2) * s + 2, canvas.height - 2);
+    const path = cloudPaths(c);
+    g.fillStyle = style.shade;
+    g.fill(path.shade);
+    g.fillStyle = style.base;
+    g.fill(path.base);
+    g.fillStyle = style.light;
+    g.fill(path.light);
+    // Uniform translucency for the whole cloud (no darker overlaps between the passes).
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'destination-in';
+    g.fillStyle = `rgba(0,0,0,${style.alpha})`;
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.globalCompositeOperation = 'source-over';
+    sprite = { canvas, key, under: '' };
+    this.clouds.set(c, sprite);
+    return sprite;
   }
 
   // ------------------------------------------------------------------ ground strip
@@ -233,23 +309,27 @@ export class EnvRenderer {
     if (groundY >= H + 40) return;
     const g = this.scenes(theme).ground;
     const k = view.zoom / 100;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = g.soil;
-    const deepY = groundY + g.deepAt * k;
-    ctx.fillRect(0, Math.max(0, groundY), W, Math.max(0, Math.min(H, deepY) - groundY));
-    if (deepY < H) {
-      ctx.fillStyle = g.deep;
-      ctx.fillRect(0, Math.max(0, deepY), W, H - Math.max(0, deepY));
-    }
-    // World-anchored tiles: tile i starts at world x = i * tile / 100.
+    // Static ground is baked into one world-anchored tile per zoom level and blitted at
+    // integer device pixels; it is only re-painted while the zoom is changing.
+    const tile = this.groundTile(theme, g, view, dpr);
     const tileM = g.tile / 100;
     const left = view.camX - W / 2 / view.zoom;
-    const first = Math.floor(left / tileM) - 1;
-    const last = Math.ceil((view.camX + W / 2 / view.zoom) / tileM) + 1;
+    const first = Math.floor(left / tileM);
+    const last = Math.floor((view.camX + W / 2 / view.zoom) / tileM);
+    const Wd = Math.round(W * dpr);
+    const Hd = Math.round(H * dpr);
+    const y = Math.round((groundY - GROUND_TOP * k) * dpr);
+    let x = Math.round(((first * tileM - view.camX) * view.zoom + W / 2) * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let i = first; i <= last && x < Wd; i++, x += tile.canvas.width) ctx.drawImage(tile.canvas, x, y);
+    if (y + tile.canvas.height < Hd) {
+      ctx.fillStyle = g.deep;
+      ctx.fillRect(0, y + tile.canvas.height, Wd, Hd - y - tile.canvas.height);
+    }
+    // Wind-swept tufts stay vector so they can sway.
     const sway = !view.reducedMotion && view.zoom > 12;
     for (let i = first; i <= last; i++) {
       const sx = (i * tileM - view.camX) * view.zoom + W / 2;
-      this.fillTile(ctx, g.fills, dpr, k, sx, groundY, 0);
       for (const group of g.sway) {
         let skew = 0;
         if (sway) {
@@ -261,10 +341,41 @@ export class EnvRenderer {
         }
         this.fillTile(ctx, group.fills, dpr, k, sx, groundY, skew);
       }
-      if (g.over) this.fillTile(ctx, g.over, dpr, k, sx, groundY, 0);
     }
     ctx.globalAlpha = 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  private groundTile(theme: ThemeId, g: GroundDef, view: EnvView, dpr: number): Strip {
+    const k = view.zoom / 100;
+    // Deepest ground ever visible: the camera keeps the ground line above the bottom band (+ shake).
+    const depthPx = view.height * CAMERA.groundBand + 40;
+    const key = `${theme}|${view.zoom}|${dpr}|${depthPx}`;
+    let tile = this.ground;
+    if (tile && tile.key === key) return tile;
+    const canvas = tile?.canvas ?? document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((g.tile / 100) * view.zoom * dpr));
+    canvas.height = Math.max(1, Math.ceil((GROUND_TOP * k + depthPx) * dpr));
+    const c = canvas.getContext('2d')!;
+    c.setTransform(canvas.width / g.tile, 0, 0, k * dpr, 0, GROUND_TOP * k * dpr);
+    const depth = depthPx / k;
+    c.fillStyle = g.soil;
+    c.fillRect(-10, 0, g.tile + 20, Math.min(depth, g.deepAt));
+    if (depth > g.deepAt) {
+      c.fillStyle = g.deep;
+      c.fillRect(-10, g.deepAt, g.tile + 20, depth - g.deepAt);
+    }
+    for (const f of g.over ? [...g.fills, ...g.over] : g.fills) {
+      c.save();
+      c.translate(f.dx ?? 0, f.dy ?? 0);
+      c.globalAlpha = f.alpha ?? 1;
+      c.fillStyle = f.color;
+      c.fill(f.path);
+      c.restore();
+    }
+    tile = { canvas, key, under: g.deep };
+    this.ground = tile;
+    return tile;
   }
 
   private fillTile(ctx: CanvasRenderingContext2D, fills: LayerFill[], dpr: number, k: number, sx: number, gy: number, skew: number): void {

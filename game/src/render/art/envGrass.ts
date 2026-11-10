@@ -154,7 +154,7 @@ function farHills(): ParallaxLayer {
     wrapped(u, r, tile, (x) => circle(sil, x, ridgeY(x) + r * 0.45, r));
   }
   return {
-    tile, px: 0.1, pv: 0.18, zoomK: 0.06,
+    tile, px: 0.1, pv: 0.18, top: -240, bottom: 140, haze: ['#e6f4ef', 0.35, -200],
     fills: celRidge(sil, '#cde7bb', '#aed59f', '#9cc896', 5, 24),
   };
 }
@@ -241,7 +241,7 @@ function forestHills(): ParallaxLayer {
   win.rect(cx - 14, cb - 20, 9, 9);
   win.rect(cx + 6, cb - 20, 9, 9);
   fills.push({ path: win, color: '#8a6a4f' });
-  return { tile, px: 0.22, pv: 0.36, zoomK: 0.14, fills };
+  return { tile, px: 0.22, pv: 0.36, top: -580, bottom: 180, haze: ['#e3f2ea', 0.3, -120], fills };
 }
 
 function meadows(): ParallaxLayer {
@@ -294,7 +294,7 @@ function meadows(): ParallaxLayer {
     }
     fills.push({ path: p, color });
   }
-  return { tile, px: 0.4, pv: 0.6, zoomK: 0.24, fills };
+  return { tile, px: 0.4, pv: 0.6, top: -360, bottom: 240, fills };
 }
 
 // ---------------------------------------------------------------- clouds

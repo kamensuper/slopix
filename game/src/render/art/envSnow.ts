@@ -128,7 +128,7 @@ function farForest(): ParallaxLayer {
     wrapped(u, h * 0.3, tile, (x) => snowPine(dark, snow, x, ridgeY(x) + 12 + rng.range(0, 30), h, h * 0.5, 3));
   }
   fills.push({ path: dark, color: '#8c96c6' }, { path: snow, color: '#e8eafa' });
-  return { tile, px: 0.11, pv: 0.2, zoomK: 0.07, fills };
+  return { tile, px: 0.11, pv: 0.2, top: -270, bottom: 160, haze: ['#e9e6f6', 0.35, -200], fills };
 }
 
 function lakeVillage(): ParallaxLayer {
@@ -202,7 +202,7 @@ function lakeVillage(): ParallaxLayer {
   iceSpires(ice, lakeL + 10, -22, 90, rng);
   iceSpires(ice, lakeR - 30, -22, 70, rng);
   fills.push({ path: ice, color: '#9dc9ec' }, { path: ice, color: '#d5efff', dx: -6, dy: 2 });
-  return { tile, px: 0.24, pv: 0.38, zoomK: 0.15, fills };
+  return { tile, px: 0.24, pv: 0.38, top: -330, bottom: 120, haze: ['#eceaf8', 0.25, -150], fills };
 }
 
 function drifts(): ParallaxLayer {
@@ -240,7 +240,7 @@ function drifts(): ParallaxLayer {
     wrapped(x, 50, tile, (xx) => iceSpires(ice, xx, ridgeY(xx) + 26, rng.range(70, 120), rng));
   }
   fills.push({ path: ice, color: '#7fb6e2' }, { path: ice, color: '#bfe4fb', dx: -7, dy: 3 }, { path: ice, color: '#ecf9ff', dx: -12, dy: 10, alpha: 0.7 });
-  return { tile, px: 0.42, pv: 0.6, zoomK: 0.24, fills };
+  return { tile, px: 0.42, pv: 0.6, top: -340, bottom: 200, fills };
 }
 
 // ---------------------------------------------------------------- clouds and ground

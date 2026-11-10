@@ -105,7 +105,7 @@ function formations(): ParallaxLayer {
   wrapped(tile * 0.62, 200, tile, (x) => arch(sil, x, ridgeY(x), 300, 210, 56));
   const fills: LayerFill[] = celRidge(sil, '#f7c49a', '#eaad86', '#d8977a', 6, 22);
   fills.push({ path: grooves, color: '#dc9d7c' });
-  return { tile, px: 0.12, pv: 0.22, zoomK: 0.08, fills };
+  return { tile, px: 0.12, pv: 0.22, top: -500, bottom: 120, haze: ['#ffe2bc', 0.4, -300], fills };
 }
 
 function ruins(): ParallaxLayer {
@@ -221,7 +221,7 @@ function ruins(): ParallaxLayer {
 
   fills.push({ path: stone, color: '#d8a173', dx: 5, dy: 4 }, { path: stone, color: '#f1c592' }, { path: stone, color: '#e2ad7b', dx: -5, dy: 3 });
   fills.push({ path: dark, color: '#bf8558' });
-  return { tile, px: 0.24, pv: 0.38, zoomK: 0.15, fills };
+  return { tile, px: 0.24, pv: 0.38, top: -520, bottom: 140, haze: ['#ffe4c0', 0.3, -150], fills };
 }
 
 function dunes(): ParallaxLayer {
@@ -261,7 +261,7 @@ function dunes(): ParallaxLayer {
     wrapped(x, 20, tile, (xx) => blob(shrubs, xx, ridgeY(xx) + rng.range(20, 60), rng.range(10, 18), rng.range(6, 10), rng));
   }
   fills.push({ path: cacti, color: '#6f8d4e', dx: 4 }, { path: cacti, color: '#8faa5f' }, { path: shrubs, color: '#b9915a' });
-  return { tile, px: 0.42, pv: 0.6, zoomK: 0.24, fills };
+  return { tile, px: 0.42, pv: 0.6, top: -240, bottom: 180, fills };
 }
 
 // ---------------------------------------------------------------- clouds and ground
