@@ -42,6 +42,8 @@ export type SfxName =
   | 'glass_break'
   | 'stone_hit'
   | 'stone_break'
+  | 'metal_hit'
+  | 'metal_break'
   /** Dull thump of something landing on the ground. */
   | 'ground_hit'
   // pigs

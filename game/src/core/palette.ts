@@ -18,6 +18,7 @@ export const MATERIAL_COLORS: Record<BlockMaterial, { base: string; dark: string
   wood: { base: '#d9a05b', dark: '#a8682f', light: '#f2c98a' },
   glass: { base: '#aee3f5', dark: '#6fb9d8', light: '#f1fcff' },
   stone: { base: '#9aa0a6', dark: '#6c727a', light: '#c9ced3' },
+  metal: { base: '#8d9bab', dark: '#55616f', light: '#dfe7ef' },
   tnt: { base: '#c0392b', dark: '#8c2318', light: '#f2e2b0' },
 };
 

@@ -230,7 +230,7 @@ export class Feedback {
   }
 
   private materialOf(surface: SurfaceKind): BlockMaterial | null {
-    return surface === 'wood' || surface === 'glass' || surface === 'stone' || surface === 'tnt' ? surface : null;
+    return surface === 'wood' || surface === 'glass' || surface === 'stone' || surface === 'metal' || surface === 'tnt' ? surface : null;
   }
 
   /** Material-specific debris flying off a block. */

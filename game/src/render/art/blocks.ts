@@ -1,7 +1,7 @@
 // TEMPORARY STUB - replaced by the real block artwork.
 import type { BlockSpec, DamageStage } from './types';
 
-const FILL = { wood: '#d9a05b', glass: 'rgba(170, 225, 245, 0.6)', stone: '#9aa0a6', tnt: '#c0392b' } as const;
+const FILL = { wood: '#d9a05b', glass: 'rgba(170, 225, 245, 0.6)', stone: '#9aa0a6', metal: '#8d9bab', tnt: '#c0392b' } as const;
 
 export function blockPath(ctx: CanvasRenderingContext2D, spec: BlockSpec): void {
   const hw = spec.w / 2;

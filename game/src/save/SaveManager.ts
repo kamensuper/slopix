@@ -14,7 +14,7 @@ export interface SaveData {
   flags: Record<string, boolean>;
 }
 
-export const DEFAULT_SETTINGS: GameSettings = { musicVolume: 0.6, sfxVolume: 0.8, muted: false };
+export const DEFAULT_SETTINGS: GameSettings = { musicVolume: 0.6, sfxVolume: 0.8, muted: false, reducedMotion: false };
 
 /** Minimal slice of the Storage API, so tests can pass an in-memory implementation. */
 export interface StorageLike {
@@ -87,6 +87,7 @@ export class SaveManager implements ProgressReader {
           musicVolume: clampNumber(parsed.settings.musicVolume, 0, 1, DEFAULT_SETTINGS.musicVolume),
           sfxVolume: clampNumber(parsed.settings.sfxVolume, 0, 1, DEFAULT_SETTINGS.sfxVolume),
           muted: parsed.settings.muted === true,
+          reducedMotion: parsed.settings.reducedMotion === true,
         };
       }
       if (parsed.flags && typeof parsed.flags === 'object') {
@@ -119,6 +120,7 @@ export class SaveManager implements ProgressReader {
       musicVolume: clampNumber(patch.musicVolume, 0, 1, s.musicVolume),
       sfxVolume: clampNumber(patch.sfxVolume, 0, 1, s.sfxVolume),
       muted: typeof patch.muted === 'boolean' ? patch.muted : s.muted,
+      reducedMotion: typeof patch.reducedMotion === 'boolean' ? patch.reducedMotion : s.reducedMotion,
     };
     this.persist();
     return this.getSettings();

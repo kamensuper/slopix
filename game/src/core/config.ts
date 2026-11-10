@@ -87,6 +87,7 @@ export interface PowerTable {
   wood: number;
   glass: number;
   stone: number;
+  metal: number;
   tnt: number;
   pig: number;
 }
@@ -114,7 +115,7 @@ export const BIRDS: Record<BirdType, BirdConfig> = {
     density: 2.2,
     friction: 0.5,
     restitution: 0.35,
-    power: { wood: 1, glass: 1, stone: 1, tnt: 1, pig: 1 },
+    power: { wood: 1, glass: 1, stone: 1, metal: 0.5, tnt: 1, pig: 1 },
     ability: 'none',
     blurb: 'Dependable all-rounder. No tricks, just a solid hit.',
     abilityHint: '',
@@ -126,7 +127,7 @@ export const BIRDS: Record<BirdType, BirdConfig> = {
     density: 2.0,
     friction: 0.45,
     restitution: 0.3,
-    power: { wood: 2.6, glass: 1.1, stone: 0.45, tnt: 1, pig: 1 },
+    power: { wood: 2.6, glass: 1.1, stone: 0.45, metal: 0.3, tnt: 1, pig: 1 },
     ability: 'boost',
     blurb: 'Tap in flight for a burst of speed. Slices through wood.',
     abilityHint: 'Tap to boost!',
@@ -138,7 +139,7 @@ export const BIRDS: Record<BirdType, BirdConfig> = {
     density: 2.6,
     friction: 0.6,
     restitution: 0.18,
-    power: { wood: 1.2, glass: 1, stone: 1.7, tnt: 1, pig: 1 },
+    power: { wood: 1.2, glass: 1, stone: 1.7, metal: 1.3, tnt: 1, pig: 1 },
     ability: 'explode',
     blurb: 'Tap to explode, or wait for the fuse after impact. Cracks stone.',
     abilityHint: 'Tap to explode!',
@@ -150,7 +151,7 @@ export const BIRDS: Record<BirdType, BirdConfig> = {
     density: 2.2,
     friction: 0.45,
     restitution: 0.35,
-    power: { wood: 0.6, glass: 4, stone: 0.4, tnt: 1, pig: 1 },
+    power: { wood: 0.6, glass: 4, stone: 0.4, metal: 0.25, tnt: 1, pig: 1 },
     ability: 'split',
     blurb: 'Tap in flight to split into three. Shatters glass.',
     abilityHint: 'Tap to split!',
@@ -162,7 +163,7 @@ export const BIRDS: Record<BirdType, BirdConfig> = {
     density: 1.7,
     friction: 0.5,
     restitution: 0.3,
-    power: { wood: 1, glass: 1, stone: 0.8, tnt: 1, pig: 1 },
+    power: { wood: 1, glass: 1, stone: 0.8, metal: 0.5, tnt: 1, pig: 1 },
     ability: 'egg',
     blurb: 'Tap to drop an explosive egg, then rocket upwards.',
     abilityHint: 'Tap to drop an egg!',
@@ -214,9 +215,9 @@ export const ABILITY = {
 } as const;
 
 export const EXPLOSIONS: Record<'bomb' | 'egg' | 'tnt', ExplosionConfig> = {
-  bomb: { radius: 4.6, energy: 430, impulse: 10, power: { wood: 1, glass: 1.5, stone: 1.7, tnt: 2, pig: 0.75 } },
-  egg: { radius: 3.2, energy: 300, impulse: 7, power: { wood: 1.2, glass: 1.5, stone: 0.8, tnt: 2, pig: 0.7 } },
-  tnt: { radius: 3.8, energy: 340, impulse: 9, power: { wood: 1.1, glass: 1.5, stone: 1.1, tnt: 2, pig: 0.7 } },
+  bomb: { radius: 4.6, energy: 430, impulse: 10, power: { wood: 1, glass: 1.5, stone: 1.7, metal: 1.2, tnt: 2, pig: 0.75 } },
+  egg: { radius: 3.2, energy: 300, impulse: 7, power: { wood: 1.2, glass: 1.5, stone: 0.8, metal: 0.6, tnt: 2, pig: 0.7 } },
+  tnt: { radius: 3.8, energy: 340, impulse: 9, power: { wood: 1.1, glass: 1.5, stone: 1.1, metal: 0.9, tnt: 2, pig: 0.7 } },
 };
 
 /** Delay before a TNT crate caught in another explosion goes off (chain reactions). */
@@ -249,6 +250,7 @@ export const MATERIALS: Record<BlockMaterial, MaterialConfig> = {
   wood: { name: 'Wood', density: 1.0, friction: 0.62, restitution: 0.12, hpBase: 55, minEnergy: 2.5, passThrough: 0.85, destroyScore: 500 },
   glass: { name: 'Glass', density: 0.7, friction: 0.42, restitution: 0.08, hpBase: 22, minEnergy: 1.2, passThrough: 0.92, destroyScore: 400 },
   stone: { name: 'Stone', density: 2.6, friction: 0.72, restitution: 0.05, hpBase: 260, minEnergy: 8, passThrough: 0.6, destroyScore: 800 },
+  metal: { name: 'Metal', density: 3.4, friction: 0.45, restitution: 0.06, hpBase: 420, minEnergy: 12, passThrough: 0.45, destroyScore: 1200 },
   tnt: { name: 'TNT', density: 0.9, friction: 0.6, restitution: 0.1, hpBase: 14, minEnergy: 3, passThrough: 0.9, destroyScore: 1000 },
 };
 

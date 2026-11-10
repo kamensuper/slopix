@@ -12,10 +12,10 @@ export type PigVariant = 'small' | 'medium' | 'large' | 'helmet' | 'armored' | '
 export const PIG_VARIANTS: readonly PigVariant[] = ['small', 'medium', 'large', 'helmet', 'armored', 'king'];
 
 /** The three primary construction materials. */
-export type MaterialId = 'wood' | 'glass' | 'stone';
+export type MaterialId = 'wood' | 'glass' | 'stone' | 'metal';
 /** Everything a block can be made of (TNT is a special explosive crate). */
 export type BlockMaterial = MaterialId | 'tnt';
-export const BLOCK_MATERIALS: readonly BlockMaterial[] = ['wood', 'glass', 'stone', 'tnt'];
+export const BLOCK_MATERIALS: readonly BlockMaterial[] = ['wood', 'glass', 'stone', 'metal', 'tnt'];
 
 /**
  * rect   - box of w x h (planks, beams, squares, slabs)
@@ -143,6 +143,8 @@ export interface GameSettings {
   /** 0..1 */
   sfxVolume: number;
   muted: boolean;
+  /** Tones down screen shake, slow motion, camera impulses and ambient motion. */
+  reducedMotion: boolean;
 }
 
 export interface LevelResult {
