@@ -1,8 +1,17 @@
-// TEMPORARY STUB - replaced by the real block artwork.
+/**
+ * Block artwork. Each material has its own painter (wood, stone, glass, metal, TNT); this module
+ * dispatches to them and owns the exact physics silhouette. Pieces are cached as sprites, so the
+ * painters can afford detail, but they stay inside the collision shape (outlines spill <= 3 units).
+ */
+import { paintGlass } from './blockGlass';
+import { paintMetal } from './blockMetal';
+import { paintStone } from './blockStone';
+import { paintTnt } from './blockTnt';
+import { paintWood } from './blockWood';
+import { blockGeo } from './materialUtil';
 import type { BlockSpec, DamageStage } from './types';
 
-const FILL = { wood: '#d9a05b', glass: 'rgba(170, 225, 245, 0.6)', stone: '#9aa0a6', metal: '#8d9bab', tnt: '#c0392b' } as const;
-
+/** Adds the exact collision silhouette of a block, centred on the origin. */
 export function blockPath(ctx: CanvasRenderingContext2D, spec: BlockSpec): void {
   const hw = spec.w / 2;
   const hh = spec.h / 2;
@@ -25,20 +34,23 @@ export function blockPath(ctx: CanvasRenderingContext2D, spec: BlockSpec): void 
   }
 }
 
-export function paintBlock(ctx: CanvasRenderingContext2D, spec: BlockSpec, stage: DamageStage, _seed: number): void {
-  ctx.save();
-  blockPath(ctx, spec);
-  ctx.fillStyle = FILL[spec.material];
-  ctx.fill();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = '#2b1a12';
-  ctx.stroke();
-  ctx.lineWidth = 3;
-  for (let i = 0; i < stage; i++) {
-    ctx.beginPath();
-    ctx.moveTo(-spec.w / 2 + (spec.w * (i + 1)) / 4, -spec.h / 2);
-    ctx.lineTo(-spec.w / 2 + (spec.w * (i + 1)) / 4 + 6, spec.h / 2);
-    ctx.stroke();
+export function paintBlock(ctx: CanvasRenderingContext2D, spec: BlockSpec, stage: DamageStage, seed: number): void {
+  const geo = blockGeo(spec);
+  switch (spec.material) {
+    case 'wood':
+      paintWood(ctx, geo, stage, seed);
+      break;
+    case 'stone':
+      paintStone(ctx, geo, stage, seed);
+      break;
+    case 'glass':
+      paintGlass(ctx, geo, stage, seed);
+      break;
+    case 'metal':
+      paintMetal(ctx, geo, stage, seed);
+      break;
+    case 'tnt':
+      paintTnt(ctx, geo, stage, seed);
+      break;
   }
-  ctx.restore();
 }

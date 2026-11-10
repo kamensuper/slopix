@@ -128,7 +128,7 @@ export class UIManager implements IUIManager {
   }
 
   private ribbon(text: string, tone = 'orange', id?: string): HTMLElement {
-    const r = el('h2', `ribbon ribbon-${tone}`, [el('span', 'ribbon-text', [text])]);
+    const r = el('h2', `ribbon ribbon-${tone}`, [el('span', 'rb-tail rb-l'), el('span', 'rb-tail rb-r'), el('span', 'ribbon-text', [text])]);
     if (id) r.id = id;
     return r;
   }
@@ -370,7 +370,9 @@ export class UIManager implements IUIManager {
         `logo-word logo-word-${i === 0 ? 'a' : 'b'}`,
         Array.from(word).map((ch) => {
           const k = n++;
-          const letter = el('span', 'lt', [el('span', 'lt-back', [ch]), el('span', 'lt-front', [ch])]);
+          const back = el('span', 'lt-back', [ch]);
+          back.dataset.c = ch;
+          const letter = el('span', 'lt', [back, el('span', 'lt-front', [ch])]);
           letter.style.setProperty('--i', String(k));
           return letter;
         }),
@@ -671,7 +673,7 @@ export class UIManager implements IUIManager {
     const buttons = el('div', 'result-buttons', [
       this.button('Levels', () => actions.exitToMenu(), 'red', { action: 'levels', sound: 'ui_back', icon: 'levels' }),
       this.button('Retry', () => actions.restart(), result.won ? 'orange' : 'green', { action: 'retry', icon: 'restart', primary: !result.won }),
-      this.button('Next', () => actions.nextLevel(), 'green', { action: 'next', icon: 'next', cls: 'btn-next', disabled: !result.won || !result.hasNext || !result.nextUnlocked, primary: result.won }),
+      result.won && this.button('Next', () => actions.nextLevel(), 'green', { action: 'next', icon: 'next', cls: 'btn-next', disabled: !result.hasNext || !result.nextUnlocked, primary: true }),
     ]);
 
     const head = result.won

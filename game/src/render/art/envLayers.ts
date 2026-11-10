@@ -83,14 +83,24 @@ export interface GroundDef {
   over?: LayerFill[];
 }
 
+export interface BackdropFrame {
+  /** Canvas extent in layer units: x in [0, w], y in [top, bottom] (horizon at y = 0). */
+  w: number;
+  top: number;
+  bottom: number;
+  /** Horizontal range that is on screen when the backdrop is centred. */
+  viewL: number;
+  viewR: number;
+}
+
 export type AmbientKind = 'pollen' | 'sand' | 'snow';
 
 export interface SceneDef {
   /**
    * Paints sky and far scenery into the opaque backdrop. The context is in layer units, origin
-   * at the left edge on the horizon, y down; the rectangle [0, w] x [top, bottom] must be covered.
+   * at the left edge on the horizon, y down; the whole frame rectangle must be covered.
    */
-  paintBackdrop(ctx: CanvasRenderingContext2D, w: number, top: number, bottom: number, seed: number): void;
+  paintBackdrop(ctx: CanvasRenderingContext2D, frame: BackdropFrame, seed: number): void;
   backdropPx: number;
   backdropPv: number;
   layers: ParallaxLayer[];
@@ -183,7 +193,11 @@ export class EnvRenderer {
     const horizon = this.horizon(view);
     c.setTransform(dpr * unit, 0, 0, dpr * unit, 0, dpr * (this.my + horizon));
     const wUnits = (W + this.mx * 2) / unit;
-    scene.paintBackdrop(c, wUnits, -(this.my + horizon) / unit, (H - horizon) / unit, seed);
+    scene.paintBackdrop(
+      c,
+      { w: wUnits, top: -(this.my + horizon) / unit, bottom: (H - horizon) / unit, viewL: this.mx / unit, viewR: (this.mx + W) / unit },
+      seed,
+    );
     this.backdrop = canvas;
     this.backKey = key;
   }
@@ -501,11 +515,16 @@ function cloudPaths(c: CloudDef): { shade: Path2D; base: Path2D; light: Path2D }
       light.moveTo(lx + r * 0.6, ly);
       light.arc(lx, ly, r * 0.6, 0, Math.PI * 2);
     }
-    // Flat-ish bellies.
-    const minX = Math.min(...c.lobes.map(([x, , r]) => x - r * 0.6));
-    const maxX = Math.max(...c.lobes.map(([x, , r]) => x + r * 0.6));
-    shade.rect(minX, -c.lobes[0]![2] * 0.9, maxX - minX, c.lobes[0]![2] * 0.9);
-    base.rect(minX + 6, -c.lobes[0]![2] * 1.1, maxX - minX - 10, c.lobes[0]![2] * 0.92);
+    // Soft flattened belly joining the lobes.
+    const minX = Math.min(...c.lobes.map(([x, , r]) => x - r * 0.5));
+    const maxX = Math.max(...c.lobes.map(([x, , r]) => x + r * 0.5));
+    const r0 = Math.min(...c.lobes.map(([, , r]) => r));
+    const cx = (minX + maxX) / 2;
+    const rx = (maxX - minX) / 2;
+    shade.moveTo(cx + rx, -r0 * 0.45);
+    shade.ellipse(cx, -r0 * 0.45, rx, r0 * 0.5, 0, 0, Math.PI * 2);
+    base.moveTo(cx + rx * 0.94 - 4, -r0 * 0.62);
+    base.ellipse(cx - 4, -r0 * 0.62, rx * 0.94, r0 * 0.46, 0, 0, Math.PI * 2);
     paths = { shade, base, light };
     cloudCache.set(c, paths);
   }
