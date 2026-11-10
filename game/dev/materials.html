@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Flock Fury - materials, slingshot and particles</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #6f8fa8;
+        font: 13px system-ui, sans-serif;
+        color: #fff;
+      }
+      nav {
+        position: fixed;
+        top: 6px;
+        right: 8px;
+        display: flex;
+        gap: 6px;
+      }
+      nav a {
+        color: #fff;
+        background: #2b1a12aa;
+        padding: 3px 8px;
+        border-radius: 6px;
+        text-decoration: none;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <a href="?view=game">gameplay scale</a>
+      <a href="?view=zoom&mat=wood">wood</a>
+      <a href="?view=zoom&mat=stone">stone</a>
+      <a href="?view=zoom&mat=glass">glass</a>
+      <a href="?view=zoom&mat=metal">metal</a>
+      <a href="?view=zoom&mat=tnt">tnt</a>
+      <a href="?view=sling">slingshot</a>
+      <a href="?view=particles">particles</a>
+    </nav>
+    <canvas id="c"></canvas>
+    <script type="module" src="./materials.ts"></script>
+  </body>
+</html>
