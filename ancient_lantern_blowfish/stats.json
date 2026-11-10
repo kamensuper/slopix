@@ -1,0 +1,339 @@
+{
+  "objects": [
+    {
+      "object": "ALB_Body_Ochre",
+      "material": "ALB_Ochre",
+      "vertices": 80,
+      "faces": 65,
+      "triangles": 126,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Body_Sand_Light",
+      "material": "ALB_Sand_Light",
+      "vertices": 64,
+      "faces": 49,
+      "triangles": 94,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Body_Sandstone",
+      "material": "ALB_Sandstone",
+      "vertices": 96,
+      "faces": 80,
+      "triangles": 128,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Face_Bronze",
+      "material": "ALB_Bronze",
+      "vertices": 60,
+      "faces": 64,
+      "triangles": 112,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Face_Eye_Black",
+      "material": "ALB_Eye_Black",
+      "vertices": 107,
+      "faces": 107,
+      "triangles": 202,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Face_Eye_White",
+      "material": "ALB_Eye_White",
+      "vertices": 226,
+      "faces": 234,
+      "triangles": 428,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Face_Ochre",
+      "material": "ALB_Ochre",
+      "vertices": 56,
+      "faces": 52,
+      "triangles": 104,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Face_Ochre_Dark",
+      "material": "ALB_Ochre_Dark",
+      "vertices": 128,
+      "faces": 110,
+      "triangles": 232,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Face_Teal_Deep",
+      "material": "ALB_Teal_Deep",
+      "vertices": 144,
+      "faces": 120,
+      "triangles": 240,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Face_Teal_Mid",
+      "material": "ALB_Teal_Mid",
+      "vertices": 98,
+      "faces": 98,
+      "triangles": 188,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Fins_Bronze",
+      "material": "ALB_Bronze",
+      "vertices": 412,
+      "faces": 416,
+      "triangles": 792,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Fins_Patina",
+      "material": "ALB_Patina",
+      "vertices": 48,
+      "faces": 32,
+      "triangles": 64,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Fins_Teal_Deep",
+      "material": "ALB_Teal_Deep",
+      "vertices": 168,
+      "faces": 176,
+      "triangles": 320,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Fins_Teal_Mid",
+      "material": "ALB_Teal_Mid",
+      "vertices": 84,
+      "faces": 88,
+      "triangles": 160,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Lantern_Bronze",
+      "material": "ALB_Bronze",
+      "vertices": 506,
+      "faces": 510,
+      "triangles": 908,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Lantern_Bronze_Dark",
+      "material": "ALB_Bronze_Dark",
+      "vertices": 252,
+      "faces": 288,
+      "triangles": 432,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Lantern_Crystal_Glow",
+      "material": "ALB_Crystal_Glow",
+      "vertices": 133,
+      "faces": 148,
+      "triangles": 230,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Lantern_Inlay_Glow",
+      "material": "ALB_Inlay_Glow",
+      "vertices": 184,
+      "faces": 124,
+      "triangles": 304,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Lantern_Patina",
+      "material": "ALB_Patina",
+      "vertices": 264,
+      "faces": 274,
+      "triangles": 492,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Lantern_Stone",
+      "material": "ALB_Stone",
+      "vertices": 408,
+      "faces": 422,
+      "triangles": 788,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Ornaments_Bronze",
+      "material": "ALB_Bronze",
+      "vertices": 452,
+      "faces": 486,
+      "triangles": 884,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Ornaments_Bronze_Dark",
+      "material": "ALB_Bronze_Dark",
+      "vertices": 198,
+      "faces": 188,
+      "triangles": 368,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Ornaments_Inlay_Glow",
+      "material": "ALB_Inlay_Glow",
+      "vertices": 152,
+      "faces": 112,
+      "triangles": 232,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Ornaments_Patina",
+      "material": "ALB_Patina",
+      "vertices": 32,
+      "faces": 24,
+      "triangles": 48,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Ornaments_Stone",
+      "material": "ALB_Stone",
+      "vertices": 80,
+      "faces": 82,
+      "triangles": 156,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Spikes_Ochre_Dark",
+      "material": "ALB_Ochre_Dark",
+      "vertices": 1968,
+      "faces": 2024,
+      "triangles": 3824,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Spikes_Sand_Light",
+      "material": "ALB_Sand_Light",
+      "vertices": 1633,
+      "faces": 1687,
+      "triangles": 3154,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Stalk_Bronze",
+      "material": "ALB_Bronze",
+      "vertices": 524,
+      "faces": 534,
+      "triangles": 1028,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Stalk_Inlay_Glow",
+      "material": "ALB_Inlay_Glow",
+      "vertices": 36,
+      "faces": 18,
+      "triangles": 36,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Stalk_Patina",
+      "material": "ALB_Patina",
+      "vertices": 112,
+      "faces": 114,
+      "triangles": 220,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Stalk_Sandstone",
+      "material": "ALB_Sandstone",
+      "vertices": 180,
+      "faces": 186,
+      "triangles": 348,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Stalk_Stone",
+      "material": "ALB_Stone",
+      "vertices": 180,
+      "faces": 186,
+      "triangles": 348,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Tail_Bronze",
+      "material": "ALB_Bronze",
+      "vertices": 110,
+      "faces": 102,
+      "triangles": 192,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Tail_Patina",
+      "material": "ALB_Patina",
+      "vertices": 32,
+      "faces": 24,
+      "triangles": 48,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Tail_Sandstone",
+      "material": "ALB_Sandstone",
+      "vertices": 32,
+      "faces": 26,
+      "triangles": 60,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Tail_Teal_Deep",
+      "material": "ALB_Teal_Deep",
+      "vertices": 66,
+      "faces": 68,
+      "triangles": 128,
+      "uv_layers": 1
+    },
+    {
+      "object": "ALB_Tail_Teal_Mid",
+      "material": "ALB_Teal_Mid",
+      "vertices": 66,
+      "faces": 68,
+      "triangles": 128,
+      "uv_layers": 1
+    }
+  ],
+  "object_count": 37,
+  "total_vertices": 9371,
+  "total_triangles": 17546,
+  "bounds_min": [
+    -1.992,
+    -2.795,
+    0.0
+  ],
+  "bounds_max": [
+    1.992,
+    2.137,
+    4.117
+  ],
+  "size_xyz_studs": [
+    3.983,
+    4.932,
+    4.117
+  ],
+  "materials": [
+    "ALB_Bronze",
+    "ALB_Bronze_Dark",
+    "ALB_Crystal_Glow",
+    "ALB_Eye_Black",
+    "ALB_Eye_White",
+    "ALB_Inlay_Glow",
+    "ALB_Ochre",
+    "ALB_Ochre_Dark",
+    "ALB_Patina",
+    "ALB_Sand_Light",
+    "ALB_Sandstone",
+    "ALB_Stone",
+    "ALB_Teal_Deep",
+    "ALB_Teal_Mid"
+  ],
+  "lantern_centre": [
+    0.0,
+    -2.15,
+    2.571
+  ]
+}
