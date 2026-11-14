@@ -251,7 +251,9 @@ void slopde_mouse(int x,int y,int current) {
     /* Window controls activate on release over the same control, so the
      * pressed state is visible and a press can be cancelled by moving off. */
     if(chrome_press_win>=0&&!(current&1)&&(oldbuttons&1)){
-        int id=chrome_press_win,part=chrome_press;chrome_press_win=-1;chrome_press=CHROME_NONE;invalidate_title(id);
+        int id=chrome_press_win,part=chrome_press;chrome_press_win=-1;chrome_press=CHROME_NONE;
+        if(id<0||id>=APPS)return;
+        invalidate_title(id);
         if(windows[id].open&&top_window_at(x,y)==id&&(int)part_of(id,x,y)==part){
             if(part==CHROME_MAXIMIZE)maximize(id);
             else {
@@ -266,6 +268,7 @@ void slopde_mouse(int x,int y,int current) {
         }
         return;
     }
+    if(chrome_press_win>=APPS)chrome_press_win=-1;
     if(chrome_press_win>=0&&(current&1)){
         int still=windows[chrome_press_win].open&&top_window_at(x,y)==chrome_press_win&&(int)part_of(chrome_press_win,x,y)==chrome_press;
         if(still!=(chrome_hot_win==chrome_press_win&&chrome_hot==chrome_press)){invalidate_title(chrome_press_win);}
