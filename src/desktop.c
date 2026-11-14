@@ -5,6 +5,8 @@
 #include "preferences.h"
 #include "ui/shell.h"
 #include "ui/chrome_geom.h"
+#include "ui/winid.h"
+#include "ui/anim.h"
 #include "brand.h"
 #include "display/display.h"
 #include "audio/audio.h"
@@ -65,7 +67,8 @@ static struct bounds cube_area(void) {
     return (struct bounds){b.x+(b.w-w)/2,b.y+54,w,h+76};
 }
 static void invalidate(int id){struct bounds b=windows[id].box;struct chrome_rect e=chrome_extent(b.x,b.y,b.w,b.h);damage(e.x,e.y,e.w,e.h);}
-static void invalidate_title(int id){if(id<0||id>=APPS)return;struct bounds b=windows[id].box;damage(b.x,b.y,b.w,CHROME_TITLE_H);}
+/* Callers pass validated ids only; see ui/winid.h. */
+static void invalidate_title(int id){struct bounds b=windows[id].box;damage(b.x,b.y,b.w,CHROME_TITLE_H);}
 static int top_window_at(int x,int y){for(int i=APPS-1;i>=0;i--){int id=order[i];if(windows[id].open&&window_hit(x,y,id))return id;}return -1;}
 static enum chrome_part part_of(int id,int x,int y){struct bounds b=windows[id].box;return chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[id].maximized);}
 static void event(int id,const char *s){logstr(id==TERM?"WINDOW: ":id==DEMO?"DEMO: ":id==DOOM?"DOOM: ":id==3?"FIND: ":id==4?"SETTINGS: ":"FILES: ");logstr(s);logstr("\n");}
@@ -95,7 +98,7 @@ static struct bounds fit(struct bounds b){
 }
 static struct bounds work_bounds(int mode){struct region a=ui_workarea();if(mode==2)a.w/=2;else if(mode==3){int half=a.w/2;a.x+=half;a.w-=half;}return(struct bounds){a.x,a.y,a.w,a.h};}
 static void tile(int id,int side){
- if(id<0||!windows[id].open)return;
+ if(!slopde_win_valid(id,APPS)||!windows[id].open)return;
  struct bounds b=work_bounds(side);const struct application_info*info=app_info((unsigned)id);int minimum=(int)info->min_w;
  if(b.w<minimum){logstr("TILE: insufficient width; normal geometry retained\n");return;}
  invalidate(id);windows[id].box=b;windows[id].maximized=side;term_cache_dirty=1;next_frame=0;invalidate(id);event(id,side==2?"tiled-left":"tiled-right");
@@ -111,7 +114,7 @@ static void backdrop(void){
     background_save();
 }
 static void maximize(int id) {
-    if(id<0||!windows[id].open)return;
+    if(!slopde_win_valid(id,APPS)||!windows[id].open)return;
     struct window *w=&windows[id];invalidate(id);
     if(!w->maximized){w->box=work_bounds(1);w->maximized=1;event(id,"maximized");}
     else {w->box=fit(w->saved);w->maximized=0;event(id,"restored");}
@@ -247,12 +250,16 @@ void slopde_mouse(int x,int y,int current) {
     int over=dock_hit(x,y);if(hover!=over){hover=over;dock_damage();}
     {int hw=top_window_at(x,y),hp=hw>=0?(int)part_of(hw,x,y):CHROME_NONE;
      if(hp<CHROME_CLOSE||hp>CHROME_MAXIMIZE){hw=-1;hp=CHROME_NONE;}
-     if(hw!=chrome_hot_win||hp!=chrome_hot){invalidate_title(chrome_hot_win);chrome_hot_win=hw;chrome_hot=hp;invalidate_title(hw);}}
+     if(hw!=chrome_hot_win||hp!=chrome_hot){if(slopde_win_valid(chrome_hot_win,APPS))invalidate_title(chrome_hot_win);chrome_hot_win=hw;chrome_hot=hp;if(slopde_win_valid(hw,APPS))invalidate_title(hw);}}
     /* Window controls activate on release over the same control, so the
      * pressed state is visible and a press can be cancelled by moving off. */
     if(chrome_press_win>=0&&!(current&1)&&(oldbuttons&1)){
-        int id=chrome_press_win,part=chrome_press;chrome_press_win=-1;chrome_press=CHROME_NONE;
-        if(id<0||id>=APPS)return;
+        /* The pressed slot holds -1 or an id stored by the hit-tested press
+         * path below. Take it through the single validation point so every
+         * later windows[id] access is dominated by the range check. */
+        int part=chrome_press;chrome_press=CHROME_NONE;
+        int id=slopde_slot_take(&chrome_press_win,APPS);
+        if(!slopde_win_valid(id,APPS))return;
         invalidate_title(id);
         if(windows[id].open&&top_window_at(x,y)==id&&(int)part_of(id,x,y)==part){
             if(part==CHROME_MAXIMIZE)maximize(id);
@@ -268,10 +275,11 @@ void slopde_mouse(int x,int y,int current) {
         }
         return;
     }
-    if(chrome_press_win>=APPS)chrome_press_win=-1;
     if(chrome_press_win>=0&&(current&1)){
-        int still=windows[chrome_press_win].open&&top_window_at(x,y)==chrome_press_win&&(int)part_of(chrome_press_win,x,y)==chrome_press;
-        if(still!=(chrome_hot_win==chrome_press_win&&chrome_hot==chrome_press)){invalidate_title(chrome_press_win);}
+        int pw=chrome_press_win;
+        if(!slopde_win_valid(pw,APPS)){chrome_press_win=-1;chrome_press=CHROME_NONE;return;}
+        int still=windows[pw].open&&top_window_at(x,y)==pw&&(int)part_of(pw,x,y)==chrome_press;
+        if(still!=(chrome_hot_win==pw&&chrome_hot==chrome_press)){invalidate_title(pw);}
         return;
     }
     int covered=0;for(int i=0;i<APPS;i++)if(windows[i].open&&window_hit(x,y,i))covered=1;
@@ -284,7 +292,7 @@ void slopde_mouse(int x,int y,int current) {
         if(y<32&&x>=(int)width-400&&x<(int)width-215){display_cycle();return;}
         int id=-1;
         for(int i=APPS-1;i>=0;i--)if(windows[order[i]].open&&window_hit(x,y,order[i])){id=order[i];break;}
-        if(id>=0&&id<APPS) {
+        if(slopde_win_valid(id,APPS)) {
             front(id);struct bounds b=windows[id].box;
             enum chrome_part part=chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[id].maximized);
             if(part==CHROME_CLOSE||part==CHROME_MINIMIZE||part==CHROME_MAXIMIZE){chrome_press_win=id;chrome_press=(int)part;drag=resizing=-1;invalidate_title(id);}
