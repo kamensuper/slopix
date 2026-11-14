@@ -64,7 +64,12 @@ build/slopde-anim-test: tests/slopde_anim_test.c src/ui/anim.h | build
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fwrapv $< -o $@
 slopde-anim-test: build/slopde-anim-test
 	./build/slopde-anim-test
-slopde-test: slopde-geom-test slopde-window-test slopde-anim-test
+build/slopde-transition-test: tests/slopde_transition_test.c src/desktop.c src/ui/anim.h src/ui/winid.h | build
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -Wno-misleading-indentation -ffunction-sections -fdata-sections $< -Wl,--gc-sections -o $@
+.PHONY: slopde-transition-test
+slopde-transition-test: build/slopde-transition-test
+	./build/slopde-transition-test
+slopde-test: slopde-geom-test slopde-window-test slopde-anim-test slopde-transition-test
 renderer-test: build/renderer-test build/graphics-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/renderer-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/graphics-test
