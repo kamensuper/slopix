@@ -186,6 +186,7 @@ static void execute(void) {
         output("slopfind settings slopfetch slopmon history date about audioinfo");
         output("Alt+Tab switch | Alt+F4 close | Super SlopFind");
         output("run FILE.ELF [MODE] | ps | kill PID | sysinfo | net");
+        output("snap PID | rewind PID [ID] | snaps | snapdrop ID  (time travel)");
     } else if(equal(name,"slopmon")){if(equal(args,"reset"))perf_reset();else if(equal(args,"trace"))perf_trace=1;else {output("Measured elapsed work since boot/reset; stages may be nested. Submitted-frame window: last 256 intervals.");perf_report(output);number_line("Uptime seconds: ",timer_us()/1000000,"");number_line("Available physical KiB: ",mr_pmm_stat(0)*4,"");number_line("Allocated physical KiB: ",mr_pmm_stat(1)*4,"");output("wait = HLT elapsed, including wake/host delays; work stages overlap, not CPU utilization.");struct audio_status a=audio_get_status();number_line("Audio underruns: ",a.underruns,"");number_line("Resolution width: ",width,"");number_line("Resolution height: ",height,"");number_line("Open desktop applications: ",desktop_open_count(),"");process_report(output);}}
     else if(equal(name,"clear")) clear();
     else if(equal(name,"history")){for(unsigned i=0;i<hcount;i++)output(history[(hfirst+i)%HISTORY]);}
