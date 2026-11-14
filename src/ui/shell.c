@@ -62,18 +62,36 @@ void ui_shell_step(uint64_t now,int x,int y){
  int next=ui_shell_panel_hit(x,y);if(next!=hover||before!=shown){hover=next;ui_shell_damage();}
  if(pending&&now>=save_at){if(audio_get_status().playing)status="Desktop save waits for playback";else ui_shell_save();}
 }
-static void panel_gradient(int x,int y,int w,int h,uint32_t a,uint32_t b){for(int r=0;r<h;r++)rect(x,y+r,w,1,blend(a,b,(unsigned)r*255/(h?h:1)));}
+/* SlopDE 3 panel: flat surface, one hairline toward content, accent used
+ * only for the launcher and the active-window indicator. Geometry (panel(),
+ * item(), icon()) is unchanged so every hit test stays identical. */
+static uint32_t accent(void){return prefs.accent?prefs.accent:0x4f8cc9;}
+static uint32_t panel_surface(void){return prefs.light?0xf2f4f7:0x1b2027;}
+static uint32_t panel_ink(void){return prefs.light?0x1f2833:0xe6eaef;}
 void ui_shell_background(void){
- for(unsigned i=0;i<APP_COUNT;i++){struct region b=icon(i);if((int)i==pin){rect(b.x,b.y,b.w,b.h,0x5e8290);rect(b.x+1,b.y+1,b.w-2,b.h-2,0x769aa4);}ui_icon(i,b.x+22,b.y+5,36);const char*label=app_name(i);char shortname[9];copystr(shortname,label,sizeof(shortname));roundbox(b.x,b.y+49,88,25,3,0x153e55,205);text(b.x+4,b.y+52,shortname,0xf3f1df);}
- struct region p=panel();if(!shown){rect(0,cfg.top?32:(int)height-3,(int)width,3,0x748b91);return;}
- panel_gradient(p.x,p.y,p.w,p.h,prefs.light?0xeaf5f6:0x466575,prefs.light?0xadc9d4:0x183748);rect(0,p.y,(int)width,1,0xf2ffff);rect(0,p.y+2,(int)width,1,prefs.light?0xd9eaed:0x6a8c9d);rect(0,p.y+p.h-1,(int)width,1,0x3c6375);
- roundbox(6,p.y+5,36,p.h-10,5,0x315b73,255);panel_gradient(8,p.y+7,32,p.h-14,0xffefaa,0xe0ae43);text(17,p.y+(p.h-20)/2,"S",0x283a43);
+ for(unsigned i=0;i<APP_COUNT;i++){struct region b=icon(i);if((int)i==pin)roundbox(b.x,b.y,b.w,b.h,8,accent(),70);ui_icon(i,b.x+22,b.y+5,36);const char*label=app_name(i);char shortname[9];copystr(shortname,label,sizeof(shortname));int tw=(int)length(shortname)*10+10;if(tw>b.w)tw=b.w;roundbox(b.x+(b.w-tw)/2,b.y+50,tw,23,8,0x111820,170);text(b.x+(b.w-tw)/2+5,b.y+52,shortname,0xf4f6f8);}
+ struct region p=panel();uint32_t surface=panel_surface(),line=prefs.light?0xd4d9e0:0x2e353f;
+ if(!shown){rect(0,cfg.top?32:(int)height-3,(int)width,3,blend(surface,accent(),90));return;}
+ rect(p.x,p.y,p.w,p.h,surface);rect(0,cfg.top?p.y+p.h-1:p.y,(int)width,1,line);
+ /* Launcher (opens Find, as before): accent tile with the S mark. */
+ roundbox(6,p.y+5,36,p.h-10,8,accent(),255);text(19,p.y+(p.h-20)/2,"S",0xffffff);
+ rect(47,p.y+10,1,p.h-20,line);
  const char*labels[]={"Term","3D","DOOM","Find","Setup","Files","Browse","Apps"};
- for(unsigned i=0;i<APP_COUNT;i++){struct region b=item(i);unsigned state=desktop_app_state(i);uint32_t c=prefs.light?(hover==(int)i?0xf4e5a9:state?0xbacbc8:0xd0d8cf):(hover==(int)i?0x48616c:state?0x3a515b:0x31434c);roundbox(b.x,b.y,b.w,b.h,3,blend(c,0x294e63,65),255);panel_gradient(b.x+1,b.y+1,b.w-2,b.h-2,blend(c,0xffffff,prefs.light?65:25),c);rect(b.x+2,b.y+2,b.w-4,1,blend(c,0xffffff,100));if(state)rect(b.x+2,b.y+b.h-3,b.w-4,2,state==2?0xe3bb5b:0x3c91af);int base=cfg.style==1?32:cfg.style==2?20:24;int s=prefs.magnify&&hover==(int)i?base+6:base;ui_icon(i,cfg.style==1?b.x+(b.w-s)/2:b.x+5,b.y+(b.h-s)/2,s);if(cfg.style!=1)text(b.x+38,b.y+(b.h-20)/2,labels[i],prefs.light?0x263c45:0xe3eae9);}
- ui_icon(9,(int)width-83,p.y+(p.h-18)/2,18);if(!prefs.volume)rect((int)width-84,p.y+p.h/2,20,2,0xb24d4d);text((int)width-60,p.y+(p.h-20)/2,clock_text,prefs.light?0x3d5660:0xe3eae9);
+ for(unsigned i=0;i<APP_COUNT;i++){struct region b=item(i);unsigned state=desktop_app_state(i);int hot=hover==(int)i;
+  if(hot||state==2)roundbox(b.x,b.y,b.w,b.h,7,blend(surface,prefs.light?0x1f2833:0xffffff,hot?(state==2?40:26):18),255);
+  if(state){int iw=state==2?(b.w>40?b.w/2:b.w-8):6;roundbox(b.x+(b.w-iw)/2,b.y+b.h-3,iw,3,1,state==2?accent():(prefs.light?0x8a94a1:0x7d8794),255);}
+  int base=cfg.style==1?32:cfg.style==2?20:24;int s=prefs.magnify&&hot?base+6:base;
+  int ix=cfg.style==1?b.x+(b.w-s)/2:b.x+7;ui_icon(i,ix,b.y+(b.h-s)/2-(state?1:0),s);
+  if(cfg.style!=1){int room=(b.w-40)/10;char t[8];copystr(t,labels[i],sizeof(t));if(room<(int)length(t))t[room<0?0:room]=0;if(t[0])text(b.x+38,b.y+(b.h-20)/2,t,state==2?panel_ink():blend(panel_ink(),surface,70));}}
+ /* Status area: volume toggle and clock (Settings), same hit regions. */
+ rect((int)width-92,p.y+10,1,p.h-20,line);
+ ui_icon(9,(int)width-83,p.y+(p.h-18)/2,18);if(!prefs.volume)rect((int)width-84,p.y+p.h/2,20,2,0xd9473f);text((int)width-60,p.y+(p.h-20)/2,clock_text,panel_ink());
 }
 static struct region menu_box(void){return(struct region){menu_x,menu_y,224,(APP_COUNT+1)*28+8};}
-void ui_shell_overlay(void){if(!menu)return;struct region b=menu_box();rect(b.x+4,b.y+4,b.w,b.h,0x314b55);rect(b.x,b.y,b.w,b.h,0xe6e5d7);for(unsigned i=0;i<APP_COUNT+1;i++){int y=b.y+4+(int)i*28;if((int)i==menu_hover)rect(b.x+3,y,b.w-6,28,0xe9ca76);if(i<APP_COUNT)ui_icon(i,b.x+9,y+4,20);text(b.x+(i<APP_COUNT?38:12),y+4,i<APP_COUNT?app_name(i):"Tidy shortcuts",0x2f414b);}}
+void ui_shell_overlay(void){if(!menu)return;struct region b=menu_box();uint32_t surface=prefs.light?0xfbfcfd:0x232931,line=prefs.light?0xcfd5dd:0x3a424d;
+ for(int k=4;k>=1;k--)roundbox(b.x+k,b.y+k,b.w,b.h,10,0x000000,(unsigned)(5-k)*14);
+ roundbox(b.x,b.y,b.w,b.h,10,line,255);roundbox(b.x+1,b.y+1,b.w-2,b.h-2,9,surface,255);
+ for(unsigned i=0;i<APP_COUNT+1;i++){int y=b.y+4+(int)i*28;if((int)i==menu_hover)roundbox(b.x+4,y,b.w-8,28,6,blend(surface,accent(),70),255);if(i==APP_COUNT)rect(b.x+10,y-1,b.w-20,1,line);if(i<APP_COUNT)ui_icon(i,b.x+10,y+4,20);text(b.x+(i<APP_COUNT?38:12),y+4,i<APP_COUNT?app_name(i):"Tidy shortcuts",prefs.light?0x1f2833:0xe6eaef);}}
 int ui_shell_escape(void){if(menu){struct region b=menu_box();menu=0;damage(b.x,b.y,b.w+5,b.h+5);return 1;}if(pin>=0){struct region b=icon((unsigned)pin);pin=-1;damage(b.x,b.y,b.w,b.h);return 1;}return 0;}
 int ui_shell_overlay_open(void){return menu||pin>=0;}
 static void menu_activate(int row){ui_shell_escape();if(row>=0&&(unsigned)row<APP_COUNT)desktop_open_app((unsigned)row);else if(row==(int)APP_COUNT){for(unsigned i=0;i<PINS;i++){cfg.x[i]=20+(i/3)*100;cfg.y[i]=70+(i%3)*96;}change();damage(0,32,(int)width,(int)height-32);}}
