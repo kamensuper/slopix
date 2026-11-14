@@ -8,6 +8,7 @@ void ui_chrome(unsigned id,int x,int y,int w,int h,int focus_emphasis,int maximi
 void ui_chrome_state(int hot,int pressed,struct region clip);
 void ui_shell_init(void);
 void ui_shell_step(uint64_t now,int x,int y);
+void ui_shell_set_focus(int id);
 void ui_shell_background(void);
 void ui_shell_overlay(void);
 int ui_shell_mouse(int x,int y,int buttons,int oldbuttons,int background);
@@ -15,6 +16,7 @@ int ui_shell_key(unsigned key);
 int ui_shell_escape(void);
 int ui_shell_overlay_open(void);
 int ui_shell_panel_hit(int x,int y);
+struct region ui_shell_item_rect(unsigned id);
 void ui_shell_damage(void);
 void ui_shell_layout_changed(void);
 struct region ui_workarea(void);

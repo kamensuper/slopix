@@ -16,6 +16,11 @@ static unsigned last_pin=PINS;
 static struct anim_track hover_anim[APP_COUNT];
 static int hover_value[APP_COUNT],hover_from[APP_COUNT],hover_to[APP_COUNT];
 static uint64_t hover_frame_at;
+static struct anim_track menu_anim;
+static uint64_t menu_frame_at;
+static uint32_t menu_value;
+static int active_id=-1;
+static struct region menu_box(void);
 static uint64_t last_click,hide_at,save_at,clock_at;
 static char clock_text[6]="--:--";
 static int pending;
@@ -32,8 +37,10 @@ static int inside(int x,int y,struct region r){return x>=r.x&&y>=r.y&&x<r.x+r.w&
 static int button_width(void){if(cfg.style==1)return 72;int w=((int)width-152)/APP_COUNT;return w>112?112:w;}
 static int item_start(void){return cfg.style==1?((int)width-APP_COUNT*72)/2:52;}
 static struct region item(unsigned i){struct region p=panel();return(struct region){item_start()+(int)i*button_width(),p.y+5,button_width()-3,p.h-10};}
+struct region ui_shell_item_rect(unsigned id){return id<APP_COUNT?item(id):(struct region){0,0,0,0};}
 void ui_shell_layout_changed(void){char n[21];logstr("PANEL_LAYOUT top=");decimal(cfg.top,n);logstr(n);logstr(" y=");decimal((unsigned)panel().y,n);logstr(n);logstr(" count=");decimal(APP_COUNT,n);logstr(n);logstr(" button=");decimal((unsigned)button_width(),n);logstr(n);logstr(" start=");decimal((unsigned)item_start(),n);logstr(n);logstr(" height=");decimal((unsigned)panel_height(),n);logstr(n);logstr(" style=");decimal(cfg.style,n);logstr(n);logstr("\n");for(unsigned i=0;i<APP_COUNT;i++){struct region b=icon(i);logstr("PIN_LAYOUT id=");decimal(i,n);logstr(n);logstr(" x=");decimal((unsigned)b.x,n);logstr(n);logstr(" y=");decimal((unsigned)b.y,n);logstr(n);logstr("\n");}}
 void ui_shell_damage(void){struct region p=panel();damage(p.x,p.y,p.w,p.h);}
+void ui_shell_set_focus(int id){if(active_id!=id){active_id=id;ui_shell_damage();}}
 static void change(void){pending=1;save_at=timer_us()+1500000;status="Desktop applied; save pending";}
 const char*ui_shell_status(void){return status;}
 unsigned ui_shell_options(void){return cfg.autohide|(cfg.top<<1)|(cfg.style<<2);}
@@ -82,6 +89,10 @@ void ui_shell_step(uint64_t now,int x,int y){
   }
   if(active)hover_frame_at=now+ANIM_FRAME_60;
  }
+ if(menu&&anim_running(&menu_anim)&&now>=menu_frame_at){
+  menu_value=anim_value(&menu_anim,now);struct region b=menu_box();damage(b.x,b.y,b.w+5,b.h+5);
+  anim_step(&menu_anim,now);menu_frame_at=now+ANIM_FRAME_60;
+ }
  if(pending&&now>=save_at){if(audio_get_status().playing)status="Desktop save waits for playback";else ui_shell_save();}
 }
 /* SlopDE 3 panel: flat surface, one hairline toward content, accent used
@@ -101,7 +112,7 @@ void ui_shell_background(void){
  const char*labels[]={"Term","3D","DOOM","Find","Setup","Files","Browse","Apps"};
  for(unsigned i=0;i<APP_COUNT;i++){struct region b=item(i);unsigned state=desktop_app_state(i);int hot=hover==(int)i;
   if(hover_value[i]||state==2){unsigned shade=state==2?18u:0u;shade+=(unsigned)hover_value[i]*(state==2?22u:26u)/255u;roundbox(b.x,b.y,b.w,b.h,7,blend(surface,prefs.light?0x1f2833:0xffffff,shade),255);}
-  if(state){int iw=state==2?(b.w>40?b.w/2:b.w-8):6;roundbox(b.x+(b.w-iw)/2,b.y+b.h-3,iw,3,1,state==2?accent():(prefs.light?0x8a94a1:0x7d8794),255);}
+  if(state){int active=state==1&&(int)i==active_id;int iw=active?(b.w>40?b.w/2:b.w-8):6;roundbox(b.x+(b.w-iw)/2,b.y+b.h-3,iw,3,1,active?accent():(prefs.light?0x8a94a1:0x7d8794),255);}
   int base=cfg.style==1?32:cfg.style==2?20:24;int s=prefs.magnify&&hot?base+6:base;
   int ix=cfg.style==1?b.x+(b.w-s)/2:b.x+7;ui_icon(i,ix,b.y+(b.h-s)/2-(state?1:0),s);
   if(cfg.style!=1){int room=(b.w-40)/10;char t[8];copystr(t,labels[i],sizeof(t));if(room<(int)length(t))t[room<0?0:room]=0;if(t[0])text(b.x+38,b.y+(b.h-20)/2,t,state==2?panel_ink():blend(panel_ink(),surface,70));}}
@@ -113,8 +124,10 @@ static struct region menu_box(void){return(struct region){menu_x,menu_y,224,(APP
 void ui_shell_overlay(void){if(!menu)return;struct region b=menu_box();uint32_t surface=prefs.light?0xfbfcfd:0x232931,line=prefs.light?0xcfd5dd:0x3a424d;
  for(int k=4;k>=1;k--)roundbox(b.x+k,b.y+k,b.w,b.h,10,0x000000,(unsigned)(5-k)*14);
  roundbox(b.x,b.y,b.w,b.h,10,line,255);roundbox(b.x+1,b.y+1,b.w-2,b.h-2,9,surface,255);
- for(unsigned i=0;i<APP_COUNT+1;i++){int y=b.y+4+(int)i*28;if((int)i==menu_hover)roundbox(b.x+4,y,b.w-8,28,6,blend(surface,accent(),70),255);if(i==APP_COUNT)rect(b.x+10,y-1,b.w-20,1,line);if(i<APP_COUNT)ui_icon(i,b.x+10,y+4,20);text(b.x+(i<APP_COUNT?38:12),y+4,i<APP_COUNT?app_name(i):"Tidy shortcuts",prefs.light?0x1f2833:0xe6eaef);}}
-int ui_shell_escape(void){if(menu){struct region b=menu_box();menu=0;damage(b.x,b.y,b.w+5,b.h+5);return 1;}if(pin>=0){struct region b=icon((unsigned)pin);pin=-1;damage(b.x,b.y,b.w,b.h);return 1;}return 0;}
+ for(unsigned i=0;i<APP_COUNT+1;i++){int y=b.y+4+(int)i*28;if((int)i==menu_hover)roundbox(b.x+4,y,b.w-8,28,6,blend(surface,accent(),70),255);if(i==APP_COUNT)rect(b.x+10,y-1,b.w-20,1,line);if(i<APP_COUNT)ui_icon(i,b.x+10,y+4,20);text(b.x+(i<APP_COUNT?38:12),y+4,i<APP_COUNT?app_name(i):"Tidy shortcuts",prefs.light?0x1f2833:0xe6eaef);}
+ if(anim_running(&menu_anim))roundbox(b.x,b.y,b.w,b.h,10,surface,(unsigned)anim_lerp(110,0,menu_value));
+}
+int ui_shell_escape(void){if(menu){struct region b=menu_box();menu=0;anim_cancel(&menu_anim);damage(b.x,b.y,b.w+5,b.h+5);return 1;}if(pin>=0){struct region b=icon((unsigned)pin);pin=-1;damage(b.x,b.y,b.w,b.h);return 1;}return 0;}
 int ui_shell_overlay_open(void){return menu||pin>=0;}
 static void menu_activate(int row){ui_shell_escape();if(row>=0&&(unsigned)row<APP_COUNT)desktop_open_app((unsigned)row);else if(row==(int)APP_COUNT){for(unsigned i=0;i<PINS;i++){cfg.x[i]=20+(i/3)*100;cfg.y[i]=70+(i%3)*96;}change();damage(0,32,(int)width,(int)height-32);}}
 int ui_shell_key(unsigned key){
@@ -128,7 +141,7 @@ int ui_shell_mouse(int x,int y,int buttons,int old,int background){
  if(drag_pin>=0){struct region before=icon((unsigned)drag_pin);if(buttons&1){struct region a=ui_workarea();int nx=clamp(x-grabx,8,a.w-96),ny=clamp(y-graby,a.y+8,a.y+a.h-88);if(nx!=(int)cfg.x[drag_pin]||ny!=(int)cfg.y[drag_pin]){cfg.x[drag_pin]=(unsigned)nx;cfg.y[drag_pin]=(unsigned)ny;moved=1;damage(before.x,before.y,before.w,before.h);struct region after=icon((unsigned)drag_pin);damage(after.x,after.y,after.w,after.h);}}else {if(moved){last_pin=PINS;change();logstr("PINBOARD: moved\n");ui_shell_layout_changed();}drag_pin=-1;}return 1;}
  struct region p=panel();if(shown&&inside(x,y,p)){if(press&&x<48){desktop_open_app(3);return 1;}if(press&&x>=(int)width-86&&x<(int)width-62){prefs.volume=prefs.volume?0:65;preferences_changed(0);ui_shell_damage();return 1;}if(press&&x>=(int)width-62){desktop_open_app(4);return 1;}return ui_shell_panel_hit(x,y)<0;}
  if(!background)return 0;
- if((buttons&2)&&!(old&2)){menu=1;menu_x=clamp(x,0,(int)width-229);menu_y=clamp(y,32,(int)height-(int)(APP_COUNT+1)*28-14);menu_hover=-1;logstr("CONTEXT_MENU: opened\n");struct region b=menu_box();damage(b.x,b.y,b.w+5,b.h+5);return 1;}
+ if((buttons&2)&&!(old&2)){menu=1;menu_x=clamp(x,0,(int)width-229);menu_y=clamp(y,32,(int)height-(int)(APP_COUNT+1)*28-14);menu_hover=-1;menu_value=0;menu_frame_at=0;anim_start(&menu_anim,timer_us(),100000,ANIM_EASE_OUT_CUBIC);logstr("CONTEXT_MENU: opened\n");struct region b=menu_box();damage(b.x,b.y,b.w+5,b.h+5);return 1;}
  if(press){for(unsigned i=0;i<APP_COUNT;i++)if(inside(x,y,icon(i))){if(pin>=0){struct region a=icon((unsigned)pin);damage(a.x,a.y,a.w,a.h);}pin=(int)i;struct region b=icon(i);damage(b.x,b.y,b.w,b.h);uint64_t now=timer_us();if(last_pin==i&&now-last_click<500000){last_pin=PINS;desktop_open_app(i);}else {last_pin=i;last_click=now;drag_pin=(int)i;grabx=x-b.x;graby=y-b.y;moved=0;}return 1;}ui_shell_escape();}
  return 0;
 }

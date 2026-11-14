@@ -27,6 +27,11 @@ static struct window windows[APPS];
 static struct anim_track focus_anim[APPS];
 static int focus_value[APPS],focus_from[APPS],focus_to[APPS],focus_target=-2;
 static uint64_t focus_frame_at;
+enum window_effect { FX_NONE, FX_OPEN, FX_CLOSE, FX_MINIMIZE };
+struct window_transition {struct anim_track track;struct anim_rect from,to,last;uint32_t value;int kind;};
+static struct window_transition window_fx[APPS];
+static uint64_t window_fx_frame_at;
+static uint32_t animation_period=ANIM_FRAME_60;
 static int right_anchor[APPS],bottom_anchor[APPS];
 static int order[APPS],focus=TERM,drag=-1,grabx,graby;
 static int chrome_hot_win=-1,chrome_hot=CHROME_NONE,chrome_press_win=-1,chrome_press=CHROME_NONE;
@@ -73,6 +78,34 @@ static struct bounds cube_area(void) {
 static void invalidate(int id){struct bounds b=windows[id].box;struct chrome_rect e=chrome_extent(b.x,b.y,b.w,b.h);damage(e.x,e.y,e.w,e.h);}
 /* Callers pass validated ids only; see ui/winid.h. */
 static void invalidate_title(int id){struct bounds b=windows[id].box;damage(b.x,b.y,b.w,CHROME_TITLE_H);}
+static struct anim_rect fx_extent(struct anim_rect r){
+ struct chrome_rect e=chrome_extent(r.x,r.y,r.w,r.h);return(struct anim_rect){e.x,e.y,e.w,e.h};
+}
+static void fx_damage(struct anim_rect r){struct anim_rect e=fx_extent(r);damage(e.x,e.y,e.w,e.h);}
+static struct anim_rect fx_now(struct window_transition *f,uint64_t now){return anim_rect_lerp(f->from,f->to,anim_value(&f->track,now));}
+static void fx_cancel(int id){
+ struct window_transition *f=&window_fx[id];if(anim_running(&f->track))fx_damage(f->last);
+ anim_cancel(&f->track);f->kind=FX_NONE;
+}
+static void fx_start(int id,int kind,uint64_t now){
+ struct window_transition *f=&window_fx[id];fx_cancel(id);
+ struct bounds b=windows[id].box;f->from=(struct anim_rect){b.x,b.y,b.w,b.h};f->to=f->from;
+ if(kind==FX_CLOSE)f->to=anim_rect_settle(f->from);
+ if(kind==FX_MINIMIZE){struct region r=ui_shell_item_rect((unsigned)id);f->to=(struct anim_rect){r.x,r.y,r.w,r.h};}
+ f->last=f->from;f->value=0;f->kind=kind;anim_start(&f->track,now,kind==FX_OPEN?180000:kind==FX_CLOSE?130000:190000,ANIM_EASE_OUT_CUBIC);
+ window_fx_frame_at=0;fx_damage(f->last);
+}
+static void fx_step(uint64_t now){
+ if(now<window_fx_frame_at)return;
+ int active=0;
+ for(int i=0;i<APPS;i++){
+  struct window_transition *f=&window_fx[i];if(!anim_running(&f->track))continue;
+  f->value=anim_value(&f->track,now);struct anim_rect next=fx_now(f,now);fx_damage(f->last);fx_damage(next);f->last=next;
+  if(anim_step(&f->track,now)==ANIM_DONE)f->kind=FX_NONE;
+  else active=1;
+ }
+ if(active)window_fx_frame_at=now+animation_period;
+}
 static void focus_step(uint64_t now){
  if(focus!=focus_target){
   for(int i=0;i<APPS;i++){
@@ -81,7 +114,7 @@ static void focus_step(uint64_t now){
    if(focus_from[i]!=focus_to[i]&&windows[i].open)anim_start(&focus_anim[i],now,120000,ANIM_SMOOTHSTEP);
    else {anim_cancel(&focus_anim[i]);focus_value[i]=focus_to[i];}
   }
-  focus_target=focus;focus_frame_at=0;
+  focus_target=focus;ui_shell_set_focus(focus);focus_frame_at=0;
  }
  if(now<focus_frame_at)return;
  int active=0;
@@ -147,7 +180,7 @@ static void maximize(int id) {
 }
 void slopde_init(void) {
     ui_shell_init();for(int i=0;i<APPS;i++){order[i]=i;focus_value[i]=i==focus?255:0;}
-    focus_target=focus;
+    focus_target=focus;ui_shell_set_focus(focus);
     windows[TERM]=(struct window){{60,155,720,460},{0,0,0,0},1,0,0};
     if(height<700)windows[TERM].box=(struct bounds){40,65,720,420};
 #ifdef RENDER_BENCH
@@ -168,6 +201,7 @@ void slopde_init(void) {
 }
 void slopde_resized(unsigned oldw,unsigned oldh){
     drag=-1;resizing=-1;hover=-1;
+    for(int i=0;i<APPS;i++)fx_cancel(i);
     for(int i=0;i<APPS;i++){
         struct window *w=&windows[i];
         if(right_anchor[i])w->saved.x+=(int)width-(int)oldw;
@@ -184,7 +218,17 @@ static int dock_hit(int x,int y){return ui_shell_panel_hit(x,y);}
 static void dock_animate(uint64_t now){ui_shell_step(now,mx,my);}
 static void dock(void){ui_shell_background();}
 static void draw_window(int id,struct region damaged) {
-    struct window *w=&windows[id];if(!w->open)return;
+    struct window *w=&windows[id];struct window_transition *f=&window_fx[id];
+    if(!w->open){
+        if(anim_running(&f->track)&&(f->kind==FX_CLOSE||f->kind==FX_MINIMIZE)){
+            struct anim_rect r=f->last;
+            unsigned alpha=(unsigned)anim_lerp(190,0,f->value);
+            graphics_clip(damaged);
+            roundbox(r.x,r.y,r.w,r.h,10,prefs.light?0xc7cdd5:0x3b4450,alpha);
+            if(r.w>2&&r.h>2)roundbox(r.x+1,r.y+1,r.w-2,r.h-2,9,prefs.light?0xf3f5f8:0x272d36,alpha);
+        }
+        return;
+    }
     struct bounds b=w->box;
     struct chrome_rect e=chrome_extent(b.x,b.y,b.w,b.h);
     if(e.x>=damaged.x+damaged.w||e.y>=damaged.y+damaged.h||e.x+e.w<=damaged.x||e.y+e.h<=damaged.y)return;
@@ -200,13 +244,23 @@ static void draw_window(int id,struct region damaged) {
         text(x+22,y+111,"Install required ELF on FAT32",0x92cbd9);
     }
     graphics_clip(damaged);
+    /* A restrained wash fades in the real, correctly sized client. Input
+     * geometry stays unchanged and dragging never follows an eased pointer. */
+    if(f->kind==FX_OPEN&&anim_running(&f->track)){
+        unsigned alpha=(unsigned)anim_lerp(110,0,f->value);
+        roundbox(b.x,b.y,b.w,b.h,chrome_radius(b.w,b.h,w->maximized),prefs.light?0xf2f4f7:0x1b2027,alpha);
+    }
 }
 static struct region overlap(struct region a,struct region b){int x=a.x>b.x?a.x:b.x,y=a.y>b.y?a.y:b.y;int right=min(a.x+a.w,b.x+b.w),bottom=min(a.y+a.h,b.y+b.h);return(struct region){x,y,right>x?right-x:0,bottom>y?bottom-y:0};}
 static void compose_layer(int layer,struct region r){
  if(r.w<=0||r.h<=0)return;
  if(layer<0){graphics_clip(r);background_restore_region(r);char n[21],stamp[48]="up ";decimal(timer_us()/1000000,n);copystr(stamp+3,n,45);copystr(stamp+length(stamp),"s",48-length(stamp));text((int)width-210,5,stamp,0x52536b);dock();return;}
  int id=order[layer];struct bounds b=windows[id].box;
- if(!windows[id].open){compose_layer(layer-1,r);return;}
+ if(!windows[id].open){
+  compose_layer(layer-1,r);
+  if(anim_running(&window_fx[id].track))draw_window(id,r);
+  return;
+ }
  struct region opaque=as_region(chrome_opaque(b.x,b.y,b.w,b.h,windows[id].maximized));
  struct region cut=overlap(r,opaque);
  if(cut.w&&cut.h){
@@ -223,6 +277,7 @@ void slopde_render(void) {
  for(unsigned i=0;i<damage_count();i++){graphics_clip(damage_get(i));ui_shell_overlay();}
  uint64_t composed=timer_us();perf_add(P_COMPOSE,composed-begin);present();cursor_present(mx,my);cursor_dirty=0;
  uint64_t done=timer_us();perf_add(P_UPLOAD,done-composed);
+ animation_period=anim_pace(animation_period,done-begin);
  if(cube_fresh){perf_frame(1,done);cube_presented(done,cube_render_us,composed-begin,done-composed);cube_fresh=0;}
  graphics_reset_clip();
 }
@@ -256,6 +311,7 @@ void slopde_step(uint64_t now) {
     int above=0;for(int j=0;j<APPS;j++){int id=order[j];if(id==DEMO){above=1;continue;}if(above&&windows[id].open&&contains(windows[id].box,area))visible=0;}
     if(visible&&!cube_active){cube_reset_stats(now);next_frame=0;}
     cube_active=visible;if(!visible)perf_pause(1);
+    fx_step(now);
     focus_step(now);
     if(damage_pending())slopde_render();
     else if(cursor_dirty){cursor_present(mx,my);cursor_dirty=0;}
@@ -290,6 +346,7 @@ void slopde_mouse(int x,int y,int current) {
             if(part==CHROME_MAXIMIZE)maximize(id);
             else {
                 int minimized=part==CHROME_MINIMIZE;if(!minimized&&!app_allow_close((unsigned)id)){invalidate(id);return;}
+                fx_start(id,minimized?FX_MINIMIZE:FX_CLOSE,timer_us());
                 if(minimized)app_minimize_process(id);else app_close_process(id);
                 windows[id].open=0;windows[id].minimized=minimized;drag=resizing=-1;event(id,minimized?"minimized":"closed");invalidate(id);dock_damage();
                 focus=-1;
@@ -393,6 +450,8 @@ void slopde_open_app(unsigned id){
          if(pid>0){user_app_pid[DEMO]=(unsigned)pid;user_demo_missing=0;logstr("DEMO_RING3_LAUNCHED\n");}
      }else {user_demo_missing=1;logstr("DEMO_RING3_MISSING: install DEMO.SLP\n");}
  }
+ int was_hidden=!windows[id].open;
+ if(was_hidden)fx_start((int)id,FX_OPEN,timer_us());
  windows[id].open=1;windows[id].minimized=0;app_restore_process((int)id);front((int)id);dock_damage();
  /* Only the process-owning Ring-3 ELF may implement the application. */
  app_opened(id);event((int)id,"opened-from-launcher");
@@ -415,10 +474,10 @@ static int cycle_active,cycle_index,cycle_order[APPS];
 void slopde_shortcut(unsigned action){
  if(action==4&&focus<0&&ui_shell_escape())return;
  if(action==6||action==7){tile(focus,action==6?2:3);return;}
- if(action==1){if(!cycle_active){for(int i=0;i<APPS;i++)cycle_order[i]=order[i];cycle_index=APPS-1;cycle_active=1;}for(int j=0;j<APPS;j++){cycle_index=(cycle_index+APPS-1)%APPS;if(windows[cycle_order[cycle_index]].open||windows[cycle_order[cycle_index]].minimized){int id=cycle_order[cycle_index];windows[id].open=1;windows[id].minimized=0;app_restore_process(id);front(id);dock_damage();break;}}}
+ if(action==1){if(!cycle_active){for(int i=0;i<APPS;i++)cycle_order[i]=order[i];cycle_index=APPS-1;cycle_active=1;}for(int j=0;j<APPS;j++){cycle_index=(cycle_index+APPS-1)%APPS;if(windows[cycle_order[cycle_index]].open||windows[cycle_order[cycle_index]].minimized){int id=cycle_order[cycle_index];if(!windows[id].open)fx_start(id,FX_OPEN,timer_us());windows[id].open=1;windows[id].minimized=0;app_restore_process(id);front(id);dock_damage();break;}}}
  else if(action==5)cycle_active=0;
  else if(action==3)slopde_open_app(3);
- else if((action==2||(action==4&&focus==3))&&focus>=0&&focus<APPS){int id=focus;if(!app_allow_close((unsigned)id)){invalidate(id);return;}app_close_process(id);drag=resizing=-1;windows[id].open=0;windows[id].minimized=0;invalidate(id);event(id,"closed");focus=-1;for(int i=APPS-1;i>=0;i--)if(windows[order[i]].open){front(order[i]);break;}dock_damage();}
+ else if((action==2||(action==4&&focus==3))&&focus>=0&&focus<APPS){int id=focus;if(!app_allow_close((unsigned)id)){invalidate(id);return;}fx_start(id,FX_CLOSE,timer_us());app_close_process(id);drag=resizing=-1;windows[id].open=0;windows[id].minimized=0;invalidate(id);event(id,"closed");focus=-1;for(int i=APPS-1;i>=0;i--)if(windows[order[i]].open){front(order[i]);break;}dock_damage();}
 }
 static void background_service(void){audio_step(timer_us());}
 void slopde_background_changed(void){graphics_resize(background_service);backdrop();term_cache_dirty=1;damage(0,0,(int)width,(int)height);}
