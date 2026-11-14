@@ -60,7 +60,7 @@ TERM.ELF: terminal.c gui_kit.h font.h slopix.h user.ld
 FIND.ELF: find.c gui_kit.h font.h slopix.h user.ld
 	$(CC) $(CFLAGS) -c find.c -o find.o
 	$(LD) -nostdlib -z max-page-size=0x1000 -T user.ld find.o -o $@
-SET.ELF: settings.c gui_kit.h font.h slopix.h user.ld
+SET.ELF: settings.c slopvg.h font.h slopix.h user.ld
 	$(CC) $(CFLAGS) -c settings.c -o settings.o
 	$(LD) -nostdlib -z max-page-size=0x1000 -T user.ld settings.o -o $@
 FILES.ELF: files.c gui_kit.h font.h slopix.h user.ld
