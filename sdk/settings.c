@@ -1,11 +1,10 @@
 /* Slopettings — the Slopix preferences app, rebuilt on SlopVG.
  * Ring-3 only: the kernel owns hardware and validates every preference write.
  * Rendering: antialiased rounded cards, pill toggles, slider and swatches via
- * slopvg.h; antialiased glyphs from the existing 8-bit alpha font atlas.
+ * slopvg.h; proportional antialiased Noto Sans text via slopfont.h.
  * Input: mouse clicks, Tab/Up/Down focus, Enter/Space activate, Left/Right adjust. */
 #include "slopix.h"
-#include "font.h"
-#include "slopvg.h"
+#include "slopfont.h"
 
 #define W 512
 #define H 320
@@ -31,14 +30,9 @@ static void resolve_theme(void) {
     else { theme t = {0x1b2229, 0x12171c, 0x242d35, 0x2b3641, 0x36424d, 0xe9eef2, 0x93a3af, 0x3a4652, 0xf4f7f9, acc, 0x10202a}; th = t; }
 }
 
-static void text(int x, int y, const char *s, uint32_t c) {
-    for (; *s && x + 10 <= W; s++, x += 10) {
-        unsigned k = (unsigned char)*s;
-        if (k < 32 || k > 126) k = '?';
-        svg_blit_mask(&surf, x, y, &font[k - 32][0][0], 10, 20, 10, c, 255);
-    }
-}
-static int text_w(const char *s) { int n = 0; while (s[n]) n++; return n * 10; }
+/* All text goes through SlopFont: Noto Sans 14 body, SemiBold 18 title, 12 caption. */
+static void text(int x, int y, const char *s, uint32_t c) { sf_draw(&surf, &sf_ui14, x, y + 2, s, c); }
+static int text_w(const char *s) { return sf_measure(&sf_ui14, s); }
 static void num(char *out, unsigned n) { char r[12]; int i = 0, j = 0; do { r[i++] = (char)('0' + n % 10); n /= 10; } while (n && i < 12); while (i) out[j++] = r[--i]; out[j] = 0; }
 
 static void toggle(int x, int y, int on) {
@@ -66,8 +60,8 @@ static void draw(void) {
     svg_fill_circle(&surf, 30, 26, 13, th.accent, 255);
     svg_stroke_circle(&surf, 30, 26, 7, 3, th.on_accent, 200);
     svg_line(&surf, 30, 15, 30, 19, 3, th.on_accent, 200);
-    text(52, 10, "Settings", th.text);
-    text(52 + text_w("Settings") + 12, 10, "/ Slopix", th.muted);
+    { int x = sf_draw(&surf, &sf_ui18b, 52, 13, "Settings", th.text);
+      sf_draw(&surf, &sf_ui14, x + 10, 17, "Slopix 1.0", th.muted); }
     svg_line(&surf, 16, 46, W - 17, 46, 1, th.border, 255);
 
     row(R_DARK, "Dark appearance");      toggle(W - 76, ROW_Y(R_DARK) + 4, !prefs.light);
@@ -94,7 +88,7 @@ static void draw(void) {
     }
 
     row(R_SAVE, "Keep these settings"); pill(W - 156, ROW_Y(R_SAVE) + 4, 124, "Save", 1);
-    text(18, H - 22, status, th.muted);
+    sf_draw_in(&surf, &sf_ui12, 18, H - 20, W - 36, 18, status, SF_LEFT, th.muted);
     sx_gui_present(pixels, W * H);
     dirty = 0;
 }
