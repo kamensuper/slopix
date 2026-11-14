@@ -54,7 +54,7 @@ BENCH.ELF: bench.o libc/crt0.o libc/libc.a libc/user.ld
 	$(LD) -nostdlib --gc-sections -z max-page-size=0x1000 -T libc/user.ld libc/crt0.o bench.o libc/libc.a -o $@
 
 # Native Ring-3 Genesis desktop applications (no kernel UI linkage).
-TERM.ELF: terminal.c gui_kit.h font.h slopix.h user.ld
+TERM.ELF: terminal.c gui_kit.h font.h slopui.h slopui_theme.h slopui_layout.h slopvg.h slopfont.h slopfont_types.h slopfont_data.h slopix.h user.ld
 	$(CC) $(CFLAGS) -c terminal.c -o terminal.o
 	$(LD) -nostdlib -z max-page-size=0x1000 -T user.ld terminal.o -o $@
 FIND.ELF: find.c gui_kit.h font.h slopix.h user.ld
