@@ -4,6 +4,7 @@
 #include "apps.h"
 #include "preferences.h"
 #include "ui/shell.h"
+#include "ui/chrome_geom.h"
 #include "brand.h"
 #include "display/display.h"
 #include "audio/audio.h"
@@ -22,6 +23,7 @@ struct window {struct bounds box,saved;int open,maximized,minimized;};
 static struct window windows[APPS];
 static int right_anchor[APPS],bottom_anchor[APPS];
 static int order[APPS],focus=TERM,drag=-1,grabx,graby;
+static int chrome_hot_win=-1,chrome_hot=CHROME_NONE,chrome_press_win=-1,chrome_press=CHROME_NONE;
 static int mx,my,buttons,hover=-1,cursor_dirty=1,term_cache_dirty=1,cube_active;
 static uint64_t next_frame,last_second,cube_render_us;
 static int cube_fresh;
@@ -55,14 +57,17 @@ static void dock_layout(void){ui_shell_layout_changed();}
 
 static struct region overlap(struct region a,struct region b);
 static int min(int a,int b){return a<b?a:b;}
-static int hit(int x,int y,struct bounds r){return x>=r.x&&y>=r.y&&x<r.x+r.w&&y<r.y+r.h;}
-static int window_hit(int x,int y,struct bounds b){return hit(x,y,b)&&(y>=b.y+29||x<b.x+(b.w<330?b.w:330));}
+static int window_hit(int x,int y,int id){struct bounds b=windows[id].box;return chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[id].maximized)!=CHROME_NONE;}
+static struct region as_region(struct chrome_rect r){return (struct region){r.x,r.y,r.w,r.h};}
 static int contains(struct bounds a,struct bounds b){return b.x>=a.x&&b.y>=a.y&&b.x+b.w<=a.x+a.w&&b.y+b.h<=a.y+a.h;}
 static struct bounds cube_area(void) {
     struct bounds b=windows[DEMO].box;int w=min(640,b.w-48),h=min(400,b.h-136);
     return (struct bounds){b.x+(b.w-w)/2,b.y+54,w,h+76};
 }
-static void invalidate(int id){struct bounds b=windows[id].box;damage(b.x-12,b.y-8,b.w+24,b.h+28);}
+static void invalidate(int id){struct bounds b=windows[id].box;struct chrome_rect e=chrome_extent(b.x,b.y,b.w,b.h);damage(e.x,e.y,e.w,e.h);}
+static void invalidate_title(int id){if(id<0||id>=APPS)return;struct bounds b=windows[id].box;damage(b.x,b.y,b.w,CHROME_TITLE_H);}
+static int top_window_at(int x,int y){for(int i=APPS-1;i>=0;i--){int id=order[i];if(windows[id].open&&window_hit(x,y,id))return id;}return -1;}
+static enum chrome_part part_of(int id,int x,int y){struct bounds b=windows[id].box;return chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[id].maximized);}
 static void event(int id,const char *s){logstr(id==TERM?"WINDOW: ":id==DEMO?"DEMO: ":id==DOOM?"DOOM: ":id==3?"FIND: ":id==4?"SETTINGS: ":"FILES: ");logstr(s);logstr("\n");}
 static void dock_damage(void){ui_shell_damage();}
 static void front(int id) {
@@ -98,7 +103,7 @@ static void tile(int id,int side){
 static void backdrop(void){
     for(int y=0;y<32;y++)for(unsigned x=0;x<width;x++)pixel((int)x,y,blend(readpixel((int)x,y),0xdce1d4,240));
     rgba_blit(slopix_logo,28,28,10,1);
-    text(48,5,"Slopix",0x24263c);text(151,5,"SlopDE 2 / 0.9",0x52536b);
+    text(48,5,"Slopix",0x24263c);text(151,5,"SlopDE 3",0x52536b);
     char n[21],label[48];decimal(width,n);copystr(label,n,sizeof(label));copystr(label+length(label),"x",sizeof(label)-length(label));
     decimal(height,n);copystr(label+length(label),n,sizeof(label)-length(label));copystr(label+length(label),display_available()?" F12":" fixed",sizeof(label)-length(label));
     text((int)width-400,5,label,0x52536b);
@@ -154,18 +159,20 @@ static void dock(void){ui_shell_background();}
 static void draw_window(int id,struct region damaged) {
     struct window *w=&windows[id];if(!w->open)return;
     struct bounds b=w->box;
-    if(b.x>damaged.x+damaged.w||b.y>damaged.y+damaged.h||b.x+b.w+12<damaged.x||b.y+b.h+20<damaged.y)return;
+    struct chrome_rect e=chrome_extent(b.x,b.y,b.w,b.h);
+    if(e.x>=damaged.x+damaged.w||e.y>=damaged.y+damaged.h||e.x+e.w<=damaged.x||e.y+e.h<=damaged.y)return;
     int x=b.x,y=b.y;
+    ui_chrome_state(id==chrome_hot_win?chrome_hot:CHROME_NONE,id==chrome_press_win?chrome_press:CHROME_NONE,damaged);
     ui_chrome((unsigned)id,x,y,b.w,b.h,id==focus,w->maximized);
-    struct region client=overlap(damaged,(struct region){x+14,y+43,b.w-28,b.h-45});
+    struct chrome_rect cr=chrome_client(x,y,b.w,b.h);
+    struct region client=overlap(damaged,as_region(cr));
     graphics_clip(client);
-    if(user_app_pid[id])gui_draw(user_app_pid[id],x+14,y+43,b.w-28,b.h-45);
+    if(user_app_pid[id])gui_draw(user_app_pid[id],cr.x,cr.y,cr.w,cr.h);
     else {
         text(x+22,y+83,"Ring-3 application unavailable",0xc0d9df);
         text(x+22,y+111,"Install required ELF on FAT32",0x92cbd9);
     }
     graphics_clip(damaged);
-    if(!w->maximized){rect(x+b.w-17,y+b.h-6,11,1,0x65718c);rect(x+b.w-12,y+b.h-10,6,1,0x65718c);}
 }
 static struct region overlap(struct region a,struct region b){int x=a.x>b.x?a.x:b.x,y=a.y>b.y?a.y:b.y;int right=min(a.x+a.w,b.x+b.w),bottom=min(a.y+a.h,b.y+b.h);return(struct region){x,y,right>x?right-x:0,bottom>y?bottom-y:0};}
 static void compose_layer(int layer,struct region r){
@@ -173,7 +180,7 @@ static void compose_layer(int layer,struct region r){
  if(layer<0){graphics_clip(r);background_restore_region(r);char n[21],stamp[48]="up ";decimal(timer_us()/1000000,n);copystr(stamp+3,n,45);copystr(stamp+length(stamp),"s",48-length(stamp));text((int)width-210,5,stamp,0x52536b);dock();return;}
  int id=order[layer];struct bounds b=windows[id].box;
  if(!windows[id].open){compose_layer(layer-1,r);return;}
- struct region opaque={b.x,b.y+32,b.w,b.h-34};
+ struct region opaque=as_region(chrome_opaque(b.x,b.y,b.w,b.h,windows[id].maximized));
  struct region cut=overlap(r,opaque);
  if(cut.w&&cut.h){
   compose_layer(layer-1,(struct region){r.x,r.y,r.w,cut.y-r.y});
@@ -238,36 +245,54 @@ void slopde_key(unsigned key) {
 void slopde_mouse(int x,int y,int current) {
     int oldbuttons=buttons;mx=x;my=y;buttons=current;cursor_dirty=1;
     int over=dock_hit(x,y);if(hover!=over){hover=over;dock_damage();}
-    int covered=0;for(int i=0;i<APPS;i++)if(windows[i].open&&window_hit(x,y,windows[i].box))covered=1;
-    struct region work=ui_workarea();int background=!covered&&over<0&&y>=work.y&&y<work.y+work.h;
-    if(background&&((current&3)&~oldbuttons)){if(focus>=0)invalidate(focus);focus=-1;term_cache_dirty=1;}
-    if(ui_shell_mouse(x,y,current,oldbuttons,background))return;
-    if((current&2)&&!(oldbuttons&2)){for(int i=APPS-1;i>=0;i--){int id=order[i];if(windows[id].open&&window_hit(x,y,windows[id].box)){front(id);struct bounds b=windows[id].box;apps_context((unsigned)id,x-b.x,y-b.y,b.w,b.h);invalidate(id);break;}}return;}
-
-    if((buttons&1)&&!(oldbuttons&1)) {
-        if(y<32&&x>=(int)width-400&&x<(int)width-215){display_cycle();return;}
-        int id=-1;
-        for(int i=APPS-1;i>=0;i--)if(windows[order[i]].open&&window_hit(x,y,windows[order[i]].box)){id=order[i];break;}
-        if(id>=0&&id<APPS) {
-            front(id);struct bounds b=windows[id].box;
-            if(hit(x,y,(struct bounds){b.x+13,b.y+12,20,20})||hit(x,y,(struct bounds){b.x+35,b.y+12,20,20})) {
-                int minimized=x>=b.x+35;if(!minimized&&!app_allow_close((unsigned)id)){invalidate(id);return;}
+    {int hw=top_window_at(x,y),hp=hw>=0?(int)part_of(hw,x,y):CHROME_NONE;
+     if(hp<CHROME_CLOSE||hp>CHROME_MAXIMIZE){hw=-1;hp=CHROME_NONE;}
+     if(hw!=chrome_hot_win||hp!=chrome_hot){invalidate_title(chrome_hot_win);chrome_hot_win=hw;chrome_hot=hp;invalidate_title(hw);}}
+    /* Window controls activate on release over the same control, so the
+     * pressed state is visible and a press can be cancelled by moving off. */
+    if(chrome_press_win>=0&&!(current&1)&&(oldbuttons&1)){
+        int id=chrome_press_win,part=chrome_press;chrome_press_win=-1;chrome_press=CHROME_NONE;invalidate_title(id);
+        if(windows[id].open&&top_window_at(x,y)==id&&(int)part_of(id,x,y)==part){
+            if(part==CHROME_MAXIMIZE)maximize(id);
+            else {
+                int minimized=part==CHROME_MINIMIZE;if(!minimized&&!app_allow_close((unsigned)id)){invalidate(id);return;}
                 if(minimized)app_minimize_process(id);else app_close_process(id);
                 windows[id].open=0;windows[id].minimized=minimized;drag=resizing=-1;event(id,minimized?"minimized":"closed");invalidate(id);dock_damage();
                 focus=-1;
                 for(int j=APPS-1;j>=0;j--)if(windows[order[j]].open){focus=order[j];break;}
-                
                 if(focus>=0)invalidate(focus);
-                term_cache_dirty=1;
-            }else if(hit(x,y,(struct bounds){b.x+57,b.y+12,20,20}))maximize(id);
-            else if(x>=b.x+b.w-20&&y>=b.y+b.h-20&&!windows[id].maximized){resizing=id;grabx=mx;graby=my;}
-            else if(id==DEMO&&y>=cube_area().y+cube_area().h-23&&x>=cube_area().x&&x<cube_area().x+440){slopde_key((unsigned)('1'+(x-cube_area().x)/110));}
-            else if(user_app_pid[id]&&y>=b.y+43){
-                int lx=x-(b.x+14),ly=y-(b.y+43);
-                if(lx>=0&&ly>=0)gui_client_mouse(user_app_pid[id],lx,ly,b.w-28,b.h-45,1);
+                term_cache_dirty=1;chrome_hot_win=-1;chrome_hot=CHROME_NONE;
             }
-            else if(id>=3&&id<6&&y>=b.y+43){invalidate(id);}
-            else if(y<b.y+43&&!windows[id].maximized){drag=id;grabx=x-b.x;graby=y-b.y;event(id,"drag-start");}
+        }
+        return;
+    }
+    if(chrome_press_win>=0&&(current&1)){
+        int still=windows[chrome_press_win].open&&top_window_at(x,y)==chrome_press_win&&(int)part_of(chrome_press_win,x,y)==chrome_press;
+        if(still!=(chrome_hot_win==chrome_press_win&&chrome_hot==chrome_press)){invalidate_title(chrome_press_win);}
+        return;
+    }
+    int covered=0;for(int i=0;i<APPS;i++)if(windows[i].open&&window_hit(x,y,i))covered=1;
+    struct region work=ui_workarea();int background=!covered&&over<0&&y>=work.y&&y<work.y+work.h;
+    if(background&&((current&3)&~oldbuttons)){if(focus>=0)invalidate(focus);focus=-1;term_cache_dirty=1;}
+    if(ui_shell_mouse(x,y,current,oldbuttons,background))return;
+    if((current&2)&&!(oldbuttons&2)){for(int i=APPS-1;i>=0;i--){int id=order[i];if(windows[id].open&&window_hit(x,y,id)){front(id);struct bounds b=windows[id].box;apps_context((unsigned)id,x-b.x,y-b.y,b.w,b.h);invalidate(id);break;}}return;}
+
+    if((buttons&1)&&!(oldbuttons&1)) {
+        if(y<32&&x>=(int)width-400&&x<(int)width-215){display_cycle();return;}
+        int id=-1;
+        for(int i=APPS-1;i>=0;i--)if(windows[order[i]].open&&window_hit(x,y,order[i])){id=order[i];break;}
+        if(id>=0&&id<APPS) {
+            front(id);struct bounds b=windows[id].box;
+            enum chrome_part part=chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[id].maximized);
+            if(part==CHROME_CLOSE||part==CHROME_MINIMIZE||part==CHROME_MAXIMIZE){chrome_press_win=id;chrome_press=(int)part;drag=resizing=-1;invalidate_title(id);}
+            else if(part==CHROME_GRIP_PART){resizing=id;grabx=mx;graby=my;}
+            else if(id==DEMO&&y>=cube_area().y+cube_area().h-23&&x>=cube_area().x&&x<cube_area().x+440){slopde_key((unsigned)('1'+(x-cube_area().x)/110));}
+            else if(user_app_pid[id]&&part==CHROME_CLIENT){
+                struct chrome_rect cr=chrome_client(b.x,b.y,b.w,b.h);int lx=x-cr.x,ly=y-cr.y;
+                if(lx>=0&&ly>=0)gui_client_mouse(user_app_pid[id],lx,ly,cr.w,cr.h,1);
+            }
+            else if(id>=3&&id<6&&part==CHROME_CLIENT){invalidate(id);}
+            else if(part==CHROME_TITLE&&!windows[id].maximized){drag=id;grabx=x-b.x;graby=y-b.y;event(id,"drag-start");}
         }else if(over>=0) {
             slopde_open_app((unsigned)over);
         }else {

@@ -3,6 +3,8 @@
 #include "../kernel.h"
 void ui_icon(unsigned id,int x,int y,int size);
 void ui_chrome(unsigned id,int x,int y,int w,int h,int focused,int maximized);
+/* SlopDE 3: per-draw hover/pressed control (enum chrome_part) and clip. */
+void ui_chrome_state(int hot,int pressed,struct region clip);
 void ui_shell_init(void);
 void ui_shell_step(uint64_t now,int x,int y);
 void ui_shell_background(void);

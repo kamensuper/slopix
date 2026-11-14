@@ -50,6 +50,11 @@ build/renderer-test: tests/renderer_test.c src/cube.c src/kernel.h src/sine.h sr
 	$(HOSTCC) -std=c11 -O1 -g -fsanitize=address,undefined $< -o $@
 build/graphics-test: tests/graphics_test.c src/graphics.c src/kernel.h src/font.h | build
 	$(HOSTCC) -std=c11 -O1 -g -fsanitize=address,undefined $< -o $@
+.PHONY: slopde-geom-test
+build/slopde-geom-test: tests/slopde_geom_test.c src/ui/chrome_geom.h | build
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fwrapv $< -o $@
+slopde-geom-test: build/slopde-geom-test
+	./build/slopde-geom-test
 renderer-test: build/renderer-test build/graphics-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/renderer-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/graphics-test
@@ -200,9 +205,9 @@ user-test: sdk
 	$(HOSTCC) -std=c11 -O1 -g -no-pie -fsanitize=address,undefined tests/user_vm_test.c src/user/vm.c src/user/elf.c -o build/user-vm-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/user-vm-test sdk/HELLO.ELF
 
-build/ui_shell.o: src/ui/shell.c src/ui/shell.h src/apps.h src/preferences.h
+build/ui_shell.o: src/ui/shell.c src/ui/shell.h src/apps.h src/preferences.h src/ui/chrome_geom.h
 	$(CC) $(CFLAGS) -c $< -o $@
-build/ui_chrome.o: src/ui/chrome.c src/ui/shell.h src/apps.h src/preferences.h
+build/ui_chrome.o: src/ui/chrome.c src/ui/shell.h src/apps.h src/preferences.h src/ui/chrome_geom.h
 	$(CC) $(CFLAGS) -c $< -o $@
 build/desktop.o build/apps.o: src/ui/shell.h
 
