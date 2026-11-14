@@ -85,3 +85,15 @@ doom_sound.o: doom_sound.c slopix.h $(DHEADERS)
 	$(CC) $(DOOM_USER_FLAGS) -c $< -o $@
 DOOM.ELF: doom.o doom_libc.o doom_system.o doom_sound.o $(DOOM_OBJS) user.ld
 	$(LD) -nostdlib --gc-sections -z max-page-size=0x1000 -T user.ld doom.o doom_libc.o doom_system.o doom_sound.o $(DOOM_OBJS) -o $@
+
+# Host-side validation of the SlopUI toolkit (not part of `all`).
+# SAN can be cleared on hosts without sanitizer runtimes: make check SAN=
+SAN ?= -fsanitize=address,undefined -fno-sanitize-recover=undefined
+GUI_APPS = TERM.ELF FIND.ELF SET.ELF FILES.ELF
+slopui-test: tests/slopui_test.c slopui.h slopui_theme.h slopui_layout.h slopvg.h slopfont.h slopfont_data.h slopix.h
+	cc -std=c11 -O1 -g -Wall -Wextra -Werror $(SAN) tests/slopui_test.c -o tests/slopui_test
+	./tests/slopui_test
+check: $(GUI_APPS) slopui-test
+	@for f in $(GUI_APPS); do if [ -n "$$(nm -u $$f)" ]; then echo "$$f has undefined symbols"; nm -u $$f; exit 1; fi; done
+	@echo "sdk check: GUI apps link cleanly, SlopUI tests pass"
+.PHONY: slopui-test check
