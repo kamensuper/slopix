@@ -17,5 +17,6 @@ int main(void){
  fx_start(id,FX_OPEN,250000);CHECK(window_fx[id].kind==FX_OPEN&&window_fx[id].last.w==400);
  fx_step(440001);CHECK(window_fx[id].kind==FX_NONE&&!anim_running(&window_fx[id].track));
  fx_start(id,FX_CLOSE,500000);fx_cancel(id);CHECK(window_fx[id].kind==FX_NONE&&!anim_running(&window_fx[id].track));
- if(failures)return 1;puts("slopde-transition-test: ok");return 0;
+ if(failures)return 1;
+ puts("slopde-transition-test: ok");return 0;
 }

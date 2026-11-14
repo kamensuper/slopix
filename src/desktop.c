@@ -240,8 +240,8 @@ static void draw_window(int id,struct region damaged) {
     graphics_clip(client);
     if(user_app_pid[id])gui_draw(user_app_pid[id],cr.x,cr.y,cr.w,cr.h);
     else {
-        text(x+22,y+83,"Ring-3 application unavailable",0xc0d9df);
-        text(x+22,y+111,"Install required ELF on FAT32",0x92cbd9);
+        text(x+22,y+83,"Ring-3 application unavailable",prefs.light?0x40515c:0xc0d9df);
+        text(x+22,y+111,"Install required ELF on FAT32",prefs.light?0x416979:0x92cbd9);
     }
     graphics_clip(damaged);
     /* A restrained wash fades in the real, correctly sized client. Input

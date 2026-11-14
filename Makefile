@@ -65,7 +65,7 @@ build/slopde-anim-test: tests/slopde_anim_test.c src/ui/anim.h | build
 slopde-anim-test: build/slopde-anim-test
 	./build/slopde-anim-test
 build/slopde-transition-test: tests/slopde_transition_test.c src/desktop.c src/ui/anim.h src/ui/winid.h | build
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -Wno-misleading-indentation -ffunction-sections -fdata-sections $< -Wl,--gc-sections -o $@
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections $< -Wl,--gc-sections -o $@
 .PHONY: slopde-transition-test
 slopde-transition-test: build/slopde-transition-test
 	./build/slopde-transition-test
@@ -513,3 +513,8 @@ cp08-membench: | build
 
 genesis-cp08-guest-test: all
 	python3 tests/genesis_cp08_guest_test.py
+
+# Disposable no-disk first-boot and desktop interaction smoke test.
+.PHONY: slopde-transition-guest-test
+slopde-transition-guest-test: all
+	python3 tests/slopde_transition_guest_test.py
