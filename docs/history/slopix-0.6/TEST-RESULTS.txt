@@ -1,0 +1,68 @@
+Slopix 0.6 test results — actual execution
+==========================================
+ISO SHA256: 8a0113ad12b1feeb652a055f734d8b294295806e960539aa125c02de812ba436
+
+BUILD: PASS — GCC/Assembly + Rust 1.85.1 no_std, Multiboot2 check,
+static ELF with no undefined symbols or host loader/libc. GRUB 2.12-1ubuntu7.3
+and matching source retained. Dockerfile is supplied but Docker was not tested.
+
+HOST TESTS (not inside Slopix): PASS
+- Inherited Rust tests and C/Rust ABI, software renderer, graphics clipping,
+  pitch/guards/alpha, runtime copies, DOOM arena/formatting/WAD streams,
+  icons/telemetry. ASan/UBSan; LeakSanitizer disabled for container compatibility.
+- Real FAT32 module: empty/1/511/512/513/65536 bytes, bounded read capacity,
+  overwrite/truncate/delete, 100 allocation/reclamation cycles, remount,
+  8.3 validation, file/root/disk exhaustion with old contents preserved.
+- Malformed BPB/geometry/size/root, FAT mismatch, cyclic/cross-linked/short/free
+  chains, dirty volume, lost clusters, unsupported LFN/subdirectory policy.
+- Failure injection at all 16 writes and 8 flushes of replacement, and every
+  delete write; writes disabled afterward. Inconsistent media is rejected or
+  existing/new complete data can be read after remount. No atomicity claim.
+- MBR FAT32 partition read/write, no out-of-device block accesses.
+- Independent mkfs.fat/mtools multi-cluster root and 64 KiB file interoperability;
+  independent fsck.fat accepts resulting mutations. Formatter refuses overwrite.
+
+ACTUAL QEMU REGRESSION SUITE: PASS
+- Cold boot, desktop/keyboard/mouse setup and every existing Terminal command.
+- Empty/unknown/repeated/long input, editing/history, 256-line scrollback rollover,
+  mixed case, dual modifiers/Caps and rapid typing while animated.
+- Guest page allocator exhaustion/canaries/free/invalid/double free; 37,914 free
+  pages restored. Additional storage static buffers remain kernel-reserved.
+- HPET and hpet=off PIT fallback boots and advancing timer.
+- Window focus, overlap, dragging, close/hide/reopen, maximize/restore, edges.
+- Dock magnification/neighbors/click targets/restoration/occlusion.
+- Four models animate with changing pixels and updating measured FPS counters.
+- Freedoom enters an actual level, moves/fires, releases keys across focus loss,
+  survives memory tests and lifecycle operations, runs with Terminal/3D Demo,
+  sustains 20-second gameplay and quits back to usable desktop.
+
+ACTUAL QEMU STORAGE TESTS: PASS
+- Real ATA commands, FAT32 mount, ls/cat/write/append/rm/sync/diskinfo.
+- Four independent cold QEMU processes verify creation, multi-cluster append,
+  overwrite and deletion persistence. The first VM was abruptly killed after
+  acknowledged sync, with no RAM snapshot reuse.
+- Simultaneous Terminal/torus/Freedoom, disk writes, readback and input.
+- Host mtools reads guest-written bytes; a host-added file is read in Slopix.
+- Independent host fsck accepts the stopped guest's image.
+- Dirty media is read-only, mismatched FATs rejected; attempts leave bytes unchanged.
+- Malformed image and no disk leave a usable desktop/Terminal without formatting.
+- Real ATA read/write also works with PIT fallback timing.
+
+PERFORMANCE: see PERFORMANCE.md, including the failed run.
+Initial attached-disk 60-second animation FAILED the existing interval floor
+(one 27.5 FPS interval). It was NOT counted as a pass or fixed by lowering the
+threshold. Follow-up sequential results:
+0.5-baseline: FAIL
+0.6: PASS
+Storage input-to-completion: 39.76–42.20 ms including QMP key delay.
+No guaranteed sustained 60 FPS or frontend/hardware performance claim.
+
+PRESERVATION: PASS — all 382 archived 0.5 files match the preserved directory.
+The previous 0.5 firmware-stall observation is historical, not claimed fixed;
+no such pre-kernel stall was observed in the 0.6 regression runs here.
+
+LIMITATIONS: root 8.3 files, 64 KiB operations, fixed root capacity (124 free
+slots initially); no journal, no automatic repair; synchronous I/O can pause
+composition. Data files persist, not desktop state/Terminal history/DOOM saves.
+No filesystem code is exposed to DOOM's private stdio adapter. No broad physical
+hardware, AHCI/NVMe/USB, GPT, ring 3, audio, network, or installer support.

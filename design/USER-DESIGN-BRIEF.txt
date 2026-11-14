@@ -1,0 +1,477 @@
+# SlopDE 2.0 — Complete Desktop Design Brief
+## Slopix 0.9: Let There Be Light
+
+### Mission
+
+Design a beautiful, distinctive, functional desktop environment for **Slopix**, an AI-first, independently developed, Unix-like operating system with its own kernel.
+
+The desktop environment is called **SlopDE**.
+
+SlopDE 2.0 should combine the strongest visual and usability ideas from four existing environments:
+
+- **Haiku / BeOS — 40%:** Visual identity, compact window decorations, distinctive tabs, responsiveness, and simplicity.
+- **ROX Desktop — 25%:** File-centric desktop interaction, pinboard, drag-and-drop, and practical launcher behavior.
+- **KDE Plasma — 20%:** Extensive customization, configurable panels, themes, and flexible window behavior.
+- **Classic Mac OS X — 15%:** Visual polish, elegant spacing, cohesive icons, subtle depth, and smooth interactions.
+
+These percentages are creative guidance, not literal requirements.
+
+**Do not simply copy one existing desktop. Create a recognizable SlopDE design language.**
+
+The finished environment should feel like a thoughtfully designed operating system from an alternative history of desktop computing.
+
+---
+
+## 1. Overall visual direction
+
+SlopDE should be:
+
+- Colorful without looking childish.
+- Clean without becoming excessively minimalist.
+- Compact without feeling cramped.
+- Modern while retaining classic desktop character.
+- Highly customizable without overwhelming new users.
+- Distinctive rather than generic.
+
+Avoid making it resemble a stock GNOME, Windows 11, or macOS clone.
+
+Do not rely on oversized rounded rectangles, enormous padding, excessive transparency, or generic AI-generated dashboard aesthetics.
+
+Use restrained shadows, crisp edges, carefully selected accent colors, and consistent spacing.
+
+The desktop should feel like a real operating system, not a web application pretending to be one.
+
+---
+
+## 2. Windows — Haiku-inspired
+
+Windows should use compact, distinctive title tabs.
+
+### Default appearance
+
+- Small, clearly visible title tabs positioned along the upper edge.
+- A warm yellow or amber active-window tab.
+- Muted gray or cool-colored inactive tabs.
+- Compact borders.
+- Clear close, minimize, and maximize controls.
+- Subtle depth and shadows.
+- Consistent typography.
+- Visible focus indication.
+
+The title tab should function as a drag handle.
+
+### Behavior
+
+Support:
+
+- Window dragging and resizing.
+- Minimize, maximize, and restore.
+- Keyboard window switching.
+- Window snapping.
+- Configurable focus behavior.
+- Movable title tabs.
+- Optional window tab stacking, if supported by the window architecture.
+
+The default should feel like Haiku without reproducing its interface exactly.
+
+### Customization
+
+Allow users to modify:
+
+- Tab position.
+- Tab colors.
+- Border thickness.
+- Corner style.
+- Window control placement.
+- Active and inactive decoration styles.
+- Shadow strength.
+
+Do not make every visual detail a separate hardcoded compositor rule.
+
+---
+
+## 3. Desktop — ROX-inspired pinboard
+
+The desktop should be an actual interactive workspace.
+
+### Desktop icons
+
+Support:
+
+- Application shortcuts.
+- File shortcuts.
+- Folder shortcuts.
+- Draggable icon placement.
+- Icon alignment and optional grid snapping.
+- Custom labels.
+- Context menus.
+- Persistent icon positions.
+
+Icons should have readable labels and consistent visual styling.
+
+### File interactions
+
+Where supported by the filesystem and application interfaces:
+
+- Open files from the desktop.
+- Drag files onto applications.
+- Move or copy files through explicit actions.
+- Create shortcuts.
+- Browse directories using FileSlop.
+
+Avoid decorative desktop icons that do nothing.
+
+### Desktop context menu
+
+Right-clicking the desktop should offer useful actions such as:
+
+- Open FileSlop.
+- Launch Terminal.
+- Change wallpaper.
+- Change icon layout.
+- Open Slopettings.
+- Refresh desktop.
+
+---
+
+## 4. Panel and launcher
+
+Combine the compact efficiency of Haiku's Deskbar, ROX's practical launching, and KDE's configurable panels.
+
+### Default panel
+
+Use a compact panel that doesn't dominate the screen.
+
+Include:
+
+- Slopix launcher.
+- Running application indicators.
+- Window switching.
+- Clock.
+- System information.
+- Audio controls.
+- Quick access to SlopFind.
+- Quick access to Slopettings.
+
+The default layout should have a distinct Slopix identity rather than reproducing the macOS Dock.
+
+### Customization
+
+Support configurable:
+
+- Panel location.
+- Panel size.
+- Auto-hide.
+- Icon size.
+- Background appearance.
+- Launcher placement.
+- Widget ordering.
+- Running-app display behavior.
+
+Provide a few carefully designed presets instead of forcing users to configure everything manually.
+
+Suggested presets:
+
+**Classic SlopDE:** Haiku-inspired panel and compact windows.
+
+**SlopDE Dock:** OS X-inspired bottom Dock with compact application indicators.
+
+**SlopDE Minimal:** Small panel, fewer decorations, more usable screen space.
+
+**SlopDE Custom:** Fully configurable layout.
+
+---
+
+## 5. Classic OS X influence
+
+Use OS X primarily for polish, not for copying its entire desktop.
+
+### Visual elements
+
+- Cohesive icon artwork.
+- Carefully balanced window spacing.
+- Restrained gradients.
+- Soft but subtle shadows.
+- Pleasant desktop wallpapers.
+- Clear visual separation between layers.
+- Smooth, nonintrusive transitions.
+
+The desktop should feel carefully crafted.
+
+Avoid turning every panel into translucent glass.
+
+### Interactions
+
+Consider:
+
+- Gentle panel magnification.
+- Smooth window minimize and restore.
+- Clear hover feedback.
+- Consistent keyboard shortcuts.
+- Predictable window focus.
+- Optional animated transitions.
+
+All animations should be optional and must not compromise responsiveness.
+
+---
+
+## 6. Icons
+
+Create a coherent original icon family for Slopix.
+
+### Art direction
+
+Combine:
+
+- Haiku's colorful clarity.
+- Classic OS X's recognizable object shapes.
+- ROX's functional simplicity.
+- Modern vector-style scalability.
+
+Icons should be visually consistent across the desktop, applications, panel, and FileSlop.
+
+Avoid Microsoft emoji, generic placeholder symbols, and unrelated icon packs mixed together.
+
+### Core icons
+
+Design icons for:
+
+- Slopix system launcher
+- Terminal
+- DOOM
+- 3D Demo
+- SlopFind
+- Slopettings
+- FileSlop
+- SlopMon
+- Files and folders
+- Disk drives
+- Audio
+- Networking
+- Trash
+
+Icons should remain recognizable at 16, 24, 32, 48, and 64 pixels.
+
+Prefer a vector or scalable asset pipeline where practical.
+
+---
+
+## 7. Color and typography
+
+### Default palette
+
+Use a distinctive palette based around:
+
+- Warm amber/yellow for active window tabs.
+- Cool blue for system accents.
+- Soft neutral gray for panels.
+- Off-white for light surfaces.
+- Dark charcoal for dark surfaces.
+
+Use a restrained amount of saturation.
+
+### Typography
+
+Use readable system fonts with:
+
+- Compact title bars.
+- Clear menu text.
+- Consistent application labels.
+- Proper contrast.
+- Reliable text clipping.
+- Legible rendering at native pixel sizes.
+
+Avoid tiny unreadable labels and oversized headings.
+
+### Themes
+
+Provide at least:
+
+- SlopDE Classic
+- SlopDE Dark
+- SlopDE Light
+- SlopDE Custom
+
+Theme settings should apply consistently across supported applications.
+
+---
+
+## 8. Slopettings — KDE-inspired customization
+
+Slopettings should be the central place for desktop configuration.
+
+Organize settings into understandable categories:
+
+### Appearance
+Themes, colors, icons, fonts, window decorations, wallpaper.
+
+### Desktop
+Pinboard behavior, icon placement, grid alignment, context menus.
+
+### Panels
+Position, size, auto-hide, widgets, launcher preferences.
+
+### Windows
+Focus behavior, snapping, resizing, shortcuts, animations.
+
+### Display
+Resolution and supported display options.
+
+### Audio
+Volume and available audio-device settings.
+
+### System
+Storage information, system details, performance statistics.
+
+Use existing FAT32-backed settings persistence.
+
+Settings should survive a cold reboot when successfully saved.
+
+A failed save must not be reported as successful.
+
+---
+
+## 9. FileSlop
+
+Design FileSlop as a practical graphical file manager.
+
+Its appearance should draw inspiration from Haiku Tracker and ROX-Filer.
+
+### Interface
+
+- Compact toolbar.
+- Clear location display.
+- File and folder icons.
+- List and icon views.
+- File sizes and metadata where available.
+- Keyboard navigation.
+- Context menus.
+- Consistent window decorations.
+
+### Interaction
+
+Support file operations available through Slopix's actual filesystem APIs.
+
+Do not visually promise unsupported filesystem features.
+
+FileSlop should feel like part of SlopDE, not a separate application with unrelated styling.
+
+---
+
+## 10. Responsiveness and technical constraints
+
+SlopDE runs on a custom operating system with a software framebuffer compositor.
+
+The design must respect that environment.
+
+Avoid effects that require GPU acceleration unless they have an efficient software fallback.
+
+Prioritize:
+
+- Native-pixel rendering.
+- Dirty-region composition.
+- Efficient clipping.
+- Minimal redundant drawing.
+- Predictable input handling.
+- Low memory overhead.
+- Correct behavior across resolution changes.
+- Stable audio and application scheduling.
+
+Do not introduce expensive full-screen blur effects, unnecessary redraws, or animations that interfere with DOOM.
+
+The design should work at resolutions from 800×600 through 1920×1080.
+
+At smaller resolutions, prioritize usable workspace and accessible controls over decorative elements.
+
+---
+
+## 11. Modularity
+
+SlopDE is one desktop environment for Slopix, not the operating system itself.
+
+The design should anticipate future alternative desktops such as GooInterface.
+
+Separate, where practical:
+
+- Window decoration policy.
+- Desktop layout.
+- Panel behavior.
+- Application launching.
+- Theme configuration.
+- File associations.
+- Input routing.
+
+Avoid hardcoding SlopDE-specific visual assumptions into unrelated kernel interfaces.
+
+A future desktop environment should be able to use the same application and system interfaces without recreating the entire kernel integration.
+
+---
+
+## 12. Deliverables
+
+First produce a complete design proposal, not code.
+
+Include:
+
+1. Overall visual identity and design principles.
+2. A detailed default desktop layout.
+3. Window decoration specifications.
+4. Panel and launcher specifications.
+5. Desktop pinboard behavior.
+6. Icon design guidelines.
+7. Color palette with exact values.
+8. Typography and spacing rules.
+9. Light and dark theme designs.
+10. Slopettings customization structure.
+11. FileSlop interface design.
+12. Keyboard and mouse interaction specifications.
+13. Small-resolution layout behavior.
+14. Implementation feasibility notes.
+15. Clear separation between 0.9 essentials and future features.
+
+Include visual mockups or concept images if image-generation tools are available.
+
+Use the mockups to establish a cohesive design before implementing it.
+
+Do not substitute attractive mockups for actual working features.
+
+---
+
+## 13. Development process
+
+After the design is approved:
+
+1. Inspect the current SlopDE source.
+2. Identify reusable compositor and window-management components.
+3. Establish theme and decoration abstractions.
+4. Implement the default visual style.
+5. Integrate the desktop pinboard and panel.
+6. Connect Slopettings customization.
+7. Integrate FileSlop and existing applications.
+8. Test interaction, clipping, persistence, and performance.
+9. Compare the implemented desktop against the approved design.
+10. Fix visual inconsistencies and functional regressions.
+
+Do not rewrite working kernel subsystems merely to change the desktop's appearance.
+
+Preserve the existing Slopix performance improvements.
+
+---
+
+## Final design goal
+
+**SlopDE should look like something that could have existed if BeOS, ROX Desktop, KDE Plasma, and classic Mac OS X had influenced one another's development.**
+
+It should be recognizable, practical, colorful, responsive, and deeply customizable.
+
+Haiku supplies the character.
+
+ROX supplies the desktop workflow.
+
+KDE supplies the freedom.
+
+Classic OS X supplies the polish.
+
+**Slopix supplies the identity.**
+
+Do not make a generic desktop with a yellow title bar. Create a cohesive desktop environment with its own visual language and behavior.

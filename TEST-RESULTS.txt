@@ -1,0 +1,78 @@
+Slopix 0.7.0 — actual audio release results
+
+ISO SHA256: 46d022012ad6349effb514afb7976e9a7e549ccf466a47e4b34a4a3f67dfff2b
+Environment: QEMU 8.2.2 / TCG / qemu64 / PC / 256 MiB / std VGA / 1280x800.
+BIOS GRUB 2.12 (Ubuntu 2.12-1ubuntu7.3). GCC 13, Rust 1.85.1.
+Audio: emulated ISA SB16, 0x220 / IRQ5 / DMA1 -> QEMU WAV backend.
+No physical speakers, native hardware or host PulseAudio/SDL session tested.
+
+HOST TESTS: memory Rust tests and C ABI, renderer and framebuffer guards,
+runtime, DOOM allocator/formatter/WAD compatibility, SlopAudio under ASan/UBSan.
+Audio: PCM formats, exact rate conversion pattern, saturated multivoice mix,
+128 KiB voice boundary, duration capacity, volume/silence, malformed/truncated
+WAV corpus, invalid voices/rates, stop, simulated underrun and stalled IRQ.
+
+QEMU RELEASE TESTS:
+PASS icon_test: 0.08 s
+PASS telemetry: 0.02 s
+PASS smoke: 4.33 s
+PASS terminal_test: 33.03 s
+PASS memory_guest_test: 6.70 s
+PASS input_regression_test: 6.08 s
+PASS clock_test: 9.48 s
+PASS window_test: 9.89 s
+PASS cube_test: 27.09 s
+PASS reboot_test: 2.98 s
+PASS models_dock_test: 19.78 s
+PASS doom_test: 55.51 s
+PASS audio_guest_test: 35.26 s
+PASS doom_audio_test: 35.62 s
+
+Captured tone/chime: 8.101 s at 44100 Hz / 2 channels (QEMU host conversion).
+Guest output is 22050 Hz unsigned 8-bit mono; capture is 44100 Hz signed 16-bit stereo.
+FFT verified actual 440 Hz tone and C4 chime; volume-zero sustained silence checked.
+Concurrent Terminal typed-command roundtrip: 303.01 ms (includes simulated typing delays).
+Gameplay capture: 4.279 s; 177160 nonzero frames above threshold.
+Menu muted, then gameplay unmuted; shots consume ammunition and produce captured sound.
+All supplied 69 DMX effect lumps fit the capacity (asset check; not every effect/map played).
+Audio control test and gameplay test reported zero underruns and zero device faults.
+PIT fallback playback captured nonzero data; no-card boot and Terminal also passed.
+
+MEASURED PERFORMANCE:
+idle: 15.00 s wall, 4.67% of one host core (QEMU process CPU).
+animated_quiet: 20.04 s wall, 36.41% of one host core (QEMU process CPU).
+  Host-observed cube: 59.986 FPS; guest samples 59.8..60.1 FPS.
+  Mean renderer work: 3.004 ms; compose 1.818 ms; upload 0.539 ms.
+animated_audio: 60.05 s wall, 39.36% of one host core (QEMU process CPU).
+  Host-observed cube: 59.965 FPS; guest samples 58.8..60.2 FPS.
+  Mean renderer work: 3.070 ms; compose 1.881 ms; upload 0.555 ms.
+
+Simultaneous-app gameplay regression: 30.006 host-observed game FPS (35 Hz engine cap; separate from cube).
+No fixed FPS guarantee; headless counters do not measure display refresh or perceived latency.
+Process CPU includes emulation, graphics and WAV backend work; not guest-only CPU utilization.
+
+EARLY FAILURE EVIDENCE:
+An initial performance pass paired a stale pre-phase FPS sample with a fresh
+host timestamp, biasing the average slightly high. Its raw results are retained.
+The final run uses only pairs of newly arrived samples for host-observed FPS.
+An early regression invocation stopped at GRUB with empty kernel serial output.
+That validation batch overlapped an ISO rebuild and is not a clean final-image test.
+Its log, register dump and screenshot are retained in build/early-attempt/.
+An earlier smoke check also rejected the newly changed version string; expected
+version assertions were updated to 0.7.0, without relaxing behavior or timeouts.
+A mute assertion initially assumed zero-valued samples after host conversion.
+Investigation found constant DC bias in the converted capture; native U8 mute
+physical DMA readback independently verified every byte equals 128. The final check requires
+constant silence in converted output and native-rate capture within one LSB.
+The final regression run uses the fixed ISO SHA above; no rebuild during it.
+This does not prove firmware/boot intermittency is permanently fixed.
+
+KNOWN LIMITS:
+SB16 QEMU target only; no native HDA/AC97/USB driver, music synthesis, stereo
+panning, high-quality resampler or filesystem streaming. Digital SFX and WAV are real.
+Up to 186ms audio buffering; channels report source consumption ahead of DAC.
+Nonpreemptive main-thread stalls can underrun; counters stop playback honestly.
+FAT32/ATA unchanged and deferred to Genesis; intermittent ATA append failure unresolved.
+Experimental disk disconnected by default. Storage tests not rerun for this audio release.
+No ring 3, process isolation, persistent game saves or networking.
+0.5/0.6 ISOs and 0.6 storage image/source preserved; see build/preserved-releases.txt.

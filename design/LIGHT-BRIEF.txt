@@ -1,0 +1,839 @@
+# SLOPIX 0.9 — LET THERE BE LIGHT
+## Unified SlopDE 2.0 Redesign, Kernel Modernization, Essential QoL & Genesis Preparation
+
+### ROLE AND AUTHORIZATION
+
+You are continuing development of **Slopix 0.9**, an independent, AI-first, human-directed operating system written primarily in C, assembly, and freestanding Rust.
+
+This is a complete implementation authorization.
+
+Do not respond with only a roadmap, design proposal, or theoretical explanation. Inspect the source, implement the requested improvements, compile, test, integrate, and package the result.
+
+Do not stop for design approval between milestones.
+
+The project director has established the intended design direction and priorities. Make sensible implementation decisions while respecting those requirements.
+
+**This task combines two previously separate objectives:**
+
+1. Transform SlopDE into a polished Windows Vista Aero + Haiku-inspired desktop environment.
+2. Remove the most serious architectural and usability limitations preventing Slopix from becoming a practical operating system.
+
+Both objectives are important. Do not sacrifice one entirely for the other.
+
+The latest source tree is authoritative. The supplied limitations document describes an earlier 0.9 build, not necessarily the newest source.
+
+Preserve all working Ring-3, audio, compositor, FileSlop, storage, and desktop improvements.
+
+---
+
+# M0 — Baseline, Preservation and Architecture Audit
+
+Before modifying code:
+
+- Identify the newest Slopix 0.9 source tree.
+- Inspect the actual kernel, desktop, memory, storage, input, audio, and userspace interfaces.
+- Preserve the last known-good ISO, source, persistent disk image, and Ring-3 checkpoint.
+- Verify the existing build process.
+- Review the previous regression results.
+- Compare the older limitations document with the current implementation.
+- Identify architectural dependencies between the requested changes.
+
+Classify each limitation as fixed, partially fixed, unresolved, or not applicable.
+
+Do not repeat work already completed.
+
+Do not overwrite historical releases.
+
+Keep the implementation modular and maintainable.
+
+---
+
+# M1 — Complete SlopDE 2.0 Visual Redesign
+
+**Priority: CRITICAL**
+
+## 1. Design philosophy
+
+The current SlopDE is functional but visually too reminiscent of Windows 98 and early lightweight desktop environments.
+
+The intended direction is:
+
+**Windows Vista Aero + Haiku OS.**
+
+Use approximately:
+
+- 55% Windows Vista Aero: visual depth, polish, gradients, rich colors, refined surfaces.
+- 45% Haiku OS: distinctive window tabs, compact efficiency, desktop personality.
+
+These percentages are artistic guidance, not mathematical requirements.
+
+Retain KDE-inspired customization and ROX-inspired file-centric desktop interactions.
+
+Classic Mac OS X may influence icon quality, spacing, and subtle animation, but should no longer dominate the visual direction.
+
+**SlopDE must look like Slopix, not a direct clone of Windows Vista, Haiku, or macOS.**
+
+## 2. Window decorations
+
+Replace the excessively flat window appearance with polished decorations.
+
+Implement:
+
+- Refined Haiku-inspired title tabs.
+- Subtle gradients and highlights.
+- Attractive active/inactive window differentiation.
+- Soft, efficient shadows.
+- Consistent window borders.
+- Readable title text.
+- Clearly recognizable window controls.
+- Correct decoration hitboxes.
+- Smooth dragging and resizing.
+- Reliable focus behavior.
+
+Use a distinctive active-tab color scheme, with customizable accent colors.
+
+Avoid excessive borders, blocky title bars, and generic Windows 98-style controls.
+
+Preserve correct window behavior across resolution changes.
+
+## 3. Panel and launcher
+
+Redesign the application panel to look polished and cohesive.
+
+Retain existing Classic, Dock, and Minimal presets.
+
+Improve:
+
+- Task-button appearance.
+- Launcher design.
+- Icon spacing.
+- Running-application indicators.
+- Clock and audio controls.
+- Panel backgrounds.
+- Selection highlights.
+- Hover feedback.
+- Auto-hide behavior.
+- Panel positioning.
+- Theme consistency.
+
+Optional transparency should be efficient and must not significantly reduce performance.
+
+Do not introduce full-screen blur effects.
+
+## 4. Desktop and wallpaper
+
+Create a distinctive Slopix wallpaper with Vista-inspired visual richness.
+
+Use:
+
+- Blue, teal, cyan, and complementary accents.
+- Smooth gradients.
+- Subtle light effects.
+- Elegant shapes.
+- Balanced contrast.
+- A recognizable Slopix identity.
+
+Avoid generic beige backgrounds and empty flat-color desktops as the only default.
+
+Preserve custom wallpaper support.
+
+Maintain ROX-inspired desktop shortcuts, draggable icons, context menus, and persistent positions.
+
+## 5. UI scaling
+
+Introduce configurable interface scaling where feasible.
+
+Suggested presets:
+
+- 100%
+- 125%
+- 150%
+- 200%
+
+Scale typography, controls, icons, hitboxes, menus, and window decorations consistently.
+
+Do not merely stretch the final framebuffer.
+
+Preserve native-pixel resolution handling.
+
+At 1920×1080, the desktop should no longer appear excessively tiny.
+
+## 6. Themes
+
+Provide cohesive theme presets:
+
+- SlopDE Aero — polished Vista-inspired default.
+- SlopDE Classic — Haiku-inspired compact layout.
+- SlopDE Dark — dark surfaces with readable contrast.
+- SlopDE Minimal — reduced visual effects and overhead.
+- SlopDE Custom — user-configurable appearance.
+
+Ensure theme settings persist across cold boots.
+
+---
+
+# M2 — Authentic HVIF Icons and Asset Pipeline
+
+**Priority: HIGH**
+
+The current icons look too blocky and inconsistent.
+
+Investigate authentic Haiku HVIF icon resources.
+
+Prefer official Haiku icon assets or other clearly licensed sources.
+
+Requirements:
+
+- Verify redistribution licenses.
+- Record attribution where required.
+- Do not assume random internet icons are freely reusable.
+- Prefer original Slopix artwork when licensing is unclear.
+- Preserve visual consistency.
+
+Implement a build-time HVIF conversion pipeline if practical.
+
+Convert to high-quality raster assets at multiple sizes.
+
+Suggested sizes:
+
+16, 24, 32, 48, 64, and 96 pixels.
+
+Preserve transparency, sharp edges, and proportions.
+
+Avoid nearest-neighbor enlargement of tiny icons.
+
+Use the resulting icon system consistently across:
+
+- Desktop pinboard.
+- Application panel.
+- FileSlop.
+- Slopettings.
+- Terminal.
+- SlopFind.
+- DOOM.
+- System utilities.
+
+Do not claim native HVIF rendering unless it is actually implemented.
+
+Keep asset loading efficient.
+
+---
+
+# M3 — Remove the FAT32 Limitations
+
+**Priority: CRITICAL**
+
+The earlier Slopix 0.9 filesystem implementation was limited to:
+
+- Root-directory operations.
+- FAT32 8.3 filenames.
+- Files no larger than 64 KiB.
+
+These restrictions must be addressed.
+
+## Large-file support
+
+Implement offset-based, bounded-buffer FAT32 reading and writing.
+
+Support:
+
+- Multi-cluster files.
+- Fragmented cluster chains.
+- File extension.
+- Partial-sector writes.
+- Partial-cluster writes.
+- Correct file-size metadata.
+- Cluster allocation and release.
+- Safe EOF handling.
+- Overflow checks.
+- Disk-full errors.
+- Corrupted FAT-chain detection.
+
+Do not simply replace a 64 KiB static buffer with a larger static buffer.
+
+The filesystem must support files larger than available contiguous kernel memory.
+
+Target multi-megabyte files and substantially larger files where the disk and implementation permit.
+
+Respect FAT32's actual maximum file-size limits.
+
+## Directory support
+
+Implement:
+
+- Nested directory navigation.
+- Directory creation.
+- Directory deletion.
+- Parent-directory navigation.
+- Path parsing.
+- Directory entry management.
+- Correct `.` and `..` behavior.
+
+## Long filenames
+
+Implement VFAT long filename support if feasible.
+
+Preserve 8.3 compatibility.
+
+Validate long filename records, checksums, and malformed sequences.
+
+## File operations
+
+Support:
+
+- Create.
+- Read.
+- Write.
+- Append.
+- Copy.
+- Move.
+- Rename.
+- Delete.
+
+Expose consistent APIs to FileSlop, Terminal, and userspace.
+
+## Storage safety
+
+Investigate the historical intermittent ATA-offline failure.
+
+Preserve existing dirty-volume and write-failure protections.
+
+Test all destructive filesystem operations against disposable copies of the persistent disk.
+
+Do not claim crash-atomic writes or journaling unless implemented and verified.
+
+**Acceptance:** Files larger than 64 KiB and nested directories work correctly, including across cold boots, without corrupting existing data.
+
+---
+
+# M4 — Implement a General-Purpose Kernel Heap
+
+**Priority: CRITICAL**
+
+Introduce a reliable general-purpose kernel allocator built on the existing PMM/VMM infrastructure.
+
+Requirements:
+
+- Dynamic allocation.
+- Dynamic freeing.
+- Alignment guarantees.
+- Allocation failure reporting.
+- Overflow protection.
+- Double-free detection.
+- Invalid-free handling.
+- Ownership rules.
+- Allocation statistics.
+- Safe locking.
+- Fragmentation handling.
+- Repeated allocation/deallocation stability.
+
+Do not introduce unsafe allocation into interrupt contexts.
+
+Avoid recursive allocation and lock reentrancy.
+
+Preserve the existing Rust page allocator.
+
+Test allocator exhaustion and cleanup while DOOM and audio are active.
+
+The heap must not become another source of long audio-service stalls.
+
+**Acceptance:** Repeated dynamic allocations and frees remain stable, and memory exhaustion fails safely.
+
+---
+
+# M5 — Fix Application Lifecycle and Legacy Ring-0 Apps
+
+**Priority: CRITICAL**
+
+The current legacy applications are still kernel-integrated.
+
+Closing DOOM's window currently appears to hide the game rather than end its session.
+
+Reopening it resumes the previous state.
+
+Fix this.
+
+## Application lifecycle
+
+Define clear behavior for:
+
+- Launch.
+- Focus.
+- Minimize.
+- Hide.
+- Close.
+- Quit.
+- Restart.
+- Force Quit where safely possible.
+
+Closing an application should not silently leave its simulation running indefinitely.
+
+## DOOM
+
+Required behavior:
+
+- Closing DOOM ends its current game session by default.
+- Reopening DOOM starts a fresh session.
+- Audio stops when the session ends.
+- Simulation stops after closing.
+- Session-owned resources are cleaned up or safely reset.
+- No stale pointers remain.
+- Repeated open/close cycles do not leak memory.
+- No duplicate active sessions unless explicitly supported.
+
+Do not attempt unsafe kernel-code unloading.
+
+If a clean teardown is impossible without major refactoring, implement a safe reset path and document the distinction.
+
+Apply consistent lifecycle rules to the 3D Demo and other kernel-integrated applications.
+
+## Ring-3 applications
+
+Strengthen:
+
+- Process exit.
+- Fault recovery.
+- Address-space cleanup.
+- Handle cleanup.
+- Process resource reclamation.
+- Focus recovery.
+- Scheduler state cleanup.
+
+**Acceptance:** Reopening DOOM starts a new session, and repeated lifecycle tests remain stable.
+
+---
+
+# M6 — Expand Ring-3 Userspace
+
+**Priority: HIGH**
+
+The previous implementation supported protected Ring-3 programs but had substantial limits.
+
+Improve the system so userspace can support real applications.
+
+## Process management
+
+Review:
+
+- Eight-process limit.
+- Per-process page limits.
+- Stack allocation.
+- Address-space ownership.
+- Scheduling fairness.
+- Fault handling.
+- Resource cleanup.
+
+Replace unnecessary static limits where safe.
+
+Do not increase limits blindly.
+
+## Syscalls
+
+Implement or improve essential interfaces for:
+
+- Console input/output.
+- File operations.
+- Memory management.
+- Time.
+- Process exit.
+- Process creation where feasible.
+- Basic IPC.
+
+Document the ABI.
+
+Validate every userspace pointer and buffer.
+
+## Userspace GUI API
+
+Establish a minimal safe GUI interface.
+
+Target:
+
+- Create a window.
+- Destroy a window.
+- Submit drawing surfaces.
+- Receive keyboard and mouse events.
+- Request redraws.
+- Close cleanly.
+
+Userspace must not receive unrestricted access to kernel memory or the physical framebuffer.
+
+## Userspace audio
+
+Where feasible, introduce a controlled audio-submission API.
+
+Preserve DMA safety and scheduling.
+
+## Application migration
+
+Migrate one simple existing application into Ring 3 if practical.
+
+Do not force DOOM into Ring 3 before the necessary APIs and isolation are ready.
+
+## SDK
+
+Provide working ELF64 examples demonstrating the implemented interfaces.
+
+**Acceptance:** At least one useful Ring-3 application runs, interacts with the system, and terminates cleanly.
+
+---
+
+# M7 — FileSlop, Clipboard and Terminal Overhaul
+
+**Priority: HIGH**
+
+FileSlop must become a genuinely useful graphical file manager.
+
+## FileSlop
+
+Implement:
+
+- Directory navigation.
+- Folder creation.
+- Rename.
+- Copy.
+- Move.
+- Delete with confirmation.
+- File properties.
+- File-size display.
+- Better scrolling.
+- Keyboard navigation.
+- Context menus.
+- Error reporting.
+- Large-file viewing.
+
+Improve text editing:
+
+- Cursor movement.
+- Text insertion.
+- Deletion.
+- Scrolling.
+- Saving.
+- Unsaved-change warnings.
+
+Remove the previous 1023-byte editor limitation where feasible.
+
+Avoid loading entire large files into memory unnecessarily.
+
+## Clipboard
+
+Expand clipboard capacity through dynamic storage.
+
+Support copying and pasting text between compatible applications.
+
+Report allocation failures and size limits.
+
+## Terminal
+
+Implement or improve practical commands:
+
+`cd`, `pwd`, `mkdir`, `rmdir`, `cp`, `mv`, `rm`, `touch`, `cat`, `head`, `tail`, `wc`, `find`, `df`, `du`, `ps`, `kill`, `meminfo`, and `diskinfo`.
+
+Use real system interfaces.
+
+Do not create fake commands that only display placeholder output.
+
+Preserve the kernel Terminal's privileged diagnostic capabilities while preparing a normal Ring-3 shell.
+
+**Acceptance:** Users can navigate folders, manage files, edit text, and perform ordinary filesystem tasks.
+
+---
+
+# M8 — Fix Input, Audio and Essential Desktop QoL
+
+**Priority: CRITICAL FOR USER EXPERIENCE**
+
+## Keyboard
+
+Investigate the reported S-key problem.
+
+Holding S currently triggers a host-style accented-character popup containing variants such as ś and ş.
+
+Determine whether the problem originates from:
+
+- Host input methods.
+- QEMU SDL keyboard capture.
+- Key-repeat configuration.
+- Guest keyboard handling.
+- Input focus.
+
+Do not assume the kernel is responsible.
+
+Test held keys, modifier release, keyboard shortcuts, focus changes, and repeated input.
+
+## Audio
+
+Investigate why the graphical QEMU session appears silent.
+
+Zero reported underruns are insufficient evidence of audible playback.
+
+Trace:
+
+- SB16 initialization.
+- PCM generation.
+- DMA playback.
+- IRQ servicing.
+- QEMU audio backend.
+- SDL frontend configuration.
+- PulseAudio/PipeWire routing.
+- Host output devices.
+- Mute and volume state.
+
+Confirm whether nonzero audio reaches an actual playback device.
+
+If physical listening is unavailable, provide a reproducible local test.
+
+Preserve the four-block DMA and audio-service improvements.
+
+## Essential QoL
+
+Audit and implement the most important missing features:
+
+- Safe shutdown and reboot.
+- Window close/minimize consistency.
+- Unsaved-work warnings.
+- Display-mode recovery.
+- Clear error dialogs.
+- Keyboard-only navigation.
+- Clipboard reliability.
+- Persistent configuration.
+- Crash recovery.
+- Hung-application handling.
+- Resource-leak prevention.
+- Readable high-resolution UI.
+- Consistent focus and input routing.
+
+Classify findings by severity and prioritize genuine failures over decorative extras.
+
+---
+
+# M9 — Networking Foundations for Genesis
+
+**Priority: HIGH — PARTIAL COMPLETION ACCEPTABLE**
+
+Genesis 1.0 should eventually support basic web browsing and IRC.
+
+Implement as much real networking functionality as can be safely tested.
+
+Suggested progression:
+
+1. PCI network-device discovery.
+2. QEMU virtual Ethernet driver.
+3. Ethernet frame handling.
+4. ARP.
+5. IPv4.
+6. ICMP.
+7. UDP.
+8. DHCP.
+9. DNS.
+10. TCP.
+11. HTTP.
+12. Basic IRC client.
+
+Use a modular architecture.
+
+Validate all untrusted packet input.
+
+Avoid unsafe buffer handling and unbounded allocations.
+
+Use isolated QEMU networking during early testing.
+
+If TCP or higher-level protocols cannot be completed safely, deliver a tested lower-level networking foundation rather than a fake implementation.
+
+For HTTPS and secure IRC, prefer an audited TLS implementation.
+
+Do not invent cryptography.
+
+**Acceptance:** Aim for real packet exchange through Slopix's own networking stack. Document exactly which protocols function.
+
+---
+
+# M10 — Performance and Integration Testing
+
+**Priority: CRITICAL**
+
+Run full regression tests after integration.
+
+## Kernel
+
+Verify:
+
+- Boot.
+- PMM/VMM.
+- Kernel heap.
+- Ring-3 isolation.
+- Syscalls.
+- Process scheduling.
+- Fault recovery.
+- Process cleanup.
+- Allocation exhaustion.
+
+## Filesystem
+
+Verify:
+
+- Large files.
+- Nested directories.
+- Long filenames where implemented.
+- Copy/move/rename/delete.
+- Disk-full behavior.
+- Corrupt metadata.
+- Failed writes.
+- Cold-boot persistence.
+
+## Desktop
+
+Verify:
+
+- Window decorations.
+- Panel presets.
+- Pinboard.
+- Themes.
+- UI scaling.
+- FileSlop.
+- Terminal.
+- Settings.
+- Clipboard.
+- Application lifecycle.
+
+## Audio and graphics
+
+Verify:
+
+- DOOM gameplay.
+- DOOM sound effects.
+- Simultaneous apps.
+- Frame pacing.
+- Audio underruns.
+- SDL graphical refresh.
+- Actual framebuffer presentation.
+- Resolution switching.
+
+Use the same workloads for baseline comparisons.
+
+Report average FPS, worst frame gaps, 1% lows, and audio failures.
+
+Do not claim smoothness solely from average FPS.
+
+## Visual inspection
+
+Capture screenshots at:
+
+- 800×600.
+- 1280×800.
+- 1920×1080.
+
+Inspect visual quality, alignment, clipping, readability, and theme consistency.
+
+Compare the actual interface with the Vista + Haiku design direction.
+
+Do not let attractive concept art substitute for working UI.
+
+---
+
+# M11 — Release Packaging and Genesis Readiness
+
+Produce the updated Slopix 0.9 release package.
+
+Include:
+
+- Bootable ISO.
+- Full source.
+- Persistent FAT32 disk image.
+- Launcher.
+- Build scripts.
+- SDK.
+- Tests.
+- Performance results.
+- Design documentation.
+- Icon assets and license information.
+- Screenshots.
+- Updated limitations.
+- SHA256 checksums.
+- Genesis readiness report.
+
+Preserve older release artifacts.
+
+Document any unresolved issues clearly.
+
+Separate:
+
+- Fully implemented and tested.
+- Partially implemented.
+- Known limitations.
+- Required for Genesis.
+- Deferred features.
+
+Do not claim that a subsystem is complete when it only has a prototype.
+
+---
+
+# PRIORITY ORDER
+
+When trade-offs are necessary:
+
+1. Prevent kernel crashes and filesystem corruption.
+2. Fix FAT32 large-file and directory limitations.
+3. Implement a reliable kernel heap.
+4. Fix application lifecycle.
+5. Improve Ring-3 usefulness.
+6. Complete essential FileSlop and Terminal operations.
+7. Fix serious input and audio problems.
+8. Deliver the Vista + Haiku SlopDE visual overhaul.
+9. Implement networking foundations.
+10. Finish regression testing and packaging.
+
+**Important:** This ordering does not mean the GUI can be skipped.
+
+The SlopDE redesign is an explicit release objective, not an optional stretch goal.
+
+Work on independent tasks in parallel where practical, but preserve coherent interfaces and test the integrated system.
+
+---
+
+# FINAL INSTRUCTIONS
+
+Do not underestimate the project's ambitions merely because it is AI-generated.
+
+Substantial changes are authorized.
+
+However, do not confuse rapid code generation with verified correctness.
+
+- Inspect actual source before modifying interfaces.
+- Make meaningful implementations rather than placeholders.
+- Preserve existing working code.
+- Avoid unnecessary rewrites.
+- Do not silently weaken tests.
+- Do not overwrite persistent user data.
+- Do not invent successful test results.
+- Do not stop after writing documentation.
+- Do not require approval after every milestone.
+- Do not sacrifice kernel safety for visual effects.
+- Do not sacrifice the GUI overhaul for backend work.
+- Do not claim unsupported networking or hardware capabilities.
+
+When a difficult feature cannot be completed safely, implement the strongest tested partial foundation, explain the remaining blockers, and continue with other objectives.
+
+## DEFINING SUCCESS
+
+By the end of this task, Slopix should demonstrate:
+
+1. A genuinely polished Vista + Haiku desktop.
+2. High-quality icons and coherent themes.
+3. Reliable dynamic kernel memory allocation.
+4. FAT32 support beyond 64 KiB.
+5. Functional directory navigation.
+6. Correct DOOM close/reopen behavior.
+7. More capable Ring-3 applications.
+8. A practical FileSlop and Terminal.
+9. Reliable keyboard, audio, and window behavior.
+10. Initial networking functionality where feasible.
+11. Preserved performance and regression stability.
+
+**Slopix 0.9 — Let There Be Light.**
+
+The objective is not merely to make the desktop prettier or the kernel more complicated.
+
+It is to make Slopix substantially more capable, usable, stable, and distinctive while laying the groundwork for Genesis 1.0.
+
+Implement it, test it, document it, and package it.

@@ -1,0 +1,16 @@
+--- a/i_sound.c
++++ b/i_sound.c
+@@ -71,9 +71,12 @@
+ 
+ // Compiled-in sound modules:
+ 
++#ifdef SLOPIX_SFX
++extern sound_module_t DG_sound_module;
++#endif
+ static sound_module_t *sound_modules[] = 
+ {
+-    #ifdef FEATURE_SOUND
++    #if defined(FEATURE_SOUND) || defined(SLOPIX_SFX)
+     &DG_sound_module,
+     #endif
+     NULL,

@@ -1,0 +1,12 @@
+Built-in image generation was used for the concept sheet; it is not a screenshot.
+Final asset: design/slopde2-concept.png
+The user's later clarification makes the brief implementation guidance rather
+than an approval gate. The existing kernel and Ring-3 checkpoint were retained.
+
+Final edit prompt (verbatim):
+Edit the SlopDE Classic/Dark concept sheet just generated. Preserve the paired desktop views, wallpapers, palette, compact panels, icons and overall composition. Critical corrections: in BOTH FileSlop tables REMOVE the entire Modified column and every timestamp and all invented numeric file sizes. Show just Name and Type columns: WELCOME.TXT - Text; LICENSE.TXT - Text; HELLO.ELF - Program. These are root files; show no directories, folders in the file listing, network status, CPU/FPS figures or fake filesystem metadata. Correct any FileSlop label spelling. Window decorations should have a genuine compact floating title TAB: the amber/gray tab occupies only part of the upper window edge, with the rest of that upper edge showing wallpaper above the window's actual content frame. Put close, minimize and maximize controls together INSIDE the tab at its left edge, followed by the icon and title. Do not place controls at the far right of a full-width title bar. The active tab amber #E8C65B, focus edge muted blue, inactive tabs gray. Add no large UI cards or glass effects. Preserve the bottom label 'Design concept - not a running build'. This is still illustrative design artwork, not an actual Slopix screenshot.
+
+The initial concept requested a paired Classic/Dark alternative-history native
+software desktop combining Haiku tabs, a ROX pinboard, KDE-like configuration,
+original icons and restrained classic OS X polish. The supplied design brief
+and the eight-page PDF record the exact design direction and technical limits.

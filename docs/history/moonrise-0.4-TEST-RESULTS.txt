@@ -1,0 +1,19 @@
+Moonrise 0.4 final verification
+
+gcc --version: gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0
+ld --version: GNU ld (GNU Binutils for Ubuntu) 2.42
+rustc --version: rustc 1.85.1 (4eb161250 2025-03-15)
+qemu-system-x86_64 --version: QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)
+python3 --version: Python 3.12.14
+
+Final make test: PASS (build/full-test.log).
+Host: 2 Rust unit tests, independent C/Rust ABI test, renderer/graphics ASan+UBSan, icon pipeline, complete-record telemetry parser.
+Guest: cold boot, HPET and disabled-HPET fallback, all existing commands/shortcuts, empty/unknown/long/repeated commands, 255-byte limit, scrollback rollover, both Ctrl keys, Caps repeat, rapid typing, both window lifecycles/focus/drags and animated Terminal input.
+Guest allocator: 58546 free pages exhausted with canaries, allocation failure observed, all pages freed, invalid/double frees rejected; repeated and with both apps running.
+Sustained: 15s idle remains usable, 60s animation with periodic commands, host-frame cross-check 59.98 FPS; guest one-second samples 58.8–60.4.
+Static ELF: Multiboot2 recognized, no undefined symbols, no host interpreter or dynamic libc, no SIMD/x87 instructions found in the linked kernel.
+Original 0.3 sources/build files/ISO match their delivered ZIP; build/preserved-0.3.txt records the byte comparison.
+
+PIT fallback has interrupt-coalescing limits; primary HPET is QEMU-PC-specific. No general heap, userspace, filesystem, networking, USB, SMP, guard pages or NX/W^X enforcement is added. Docker and other hardware/cross-host routes are documented but not tested.
+
+ISO SHA256: ae4f7b97b5a9146aed2869f6ce679e34877d19c2f8b711bc1595fa58fb0e2ffe

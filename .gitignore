@@ -1,0 +1,12 @@
+build/
+storage/*.img
+sdk/*.o
+sdk/*.ELF
+*.log
+__pycache__/
+.pytest_cache/
+build/
+*.o
+*.iso
+*.img
+*.bin

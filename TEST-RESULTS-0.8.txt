@@ -1,0 +1,51 @@
+Slopix 0.8 — final release checks
+
+ISO bytes: 40163328
+ISO SHA256: 45ef9dfd080ed20fe9417cf2b2842e820360076fe904977248ba85387b216d40
+QEMU 8.2.2 / TCG / qemu64 / PC / 256 MiB / std VGA / SB16 WAV backend.
+
+BUILD: C/assembly/Rust kernel linked; Multiboot2 validated; bootable ISO built.
+HOST: memory Rust/C ABI, renderer/framebuffer, resize stride/guards, runtime,
+DOOM compatibility, audio and shared-lump lease regressions passed.
+
+FINAL QEMU BATCH (same immutable ISO):
+PASS smoke.py: 3.863 seconds
+PASS display_test.py: 24.283 seconds
+PASS display_fallback_test.py: 4.401 seconds
+PASS window_test.py: 9.765 seconds
+PASS terminal_test.py: 31.771 seconds
+PASS cube_test.py: 27.111 seconds
+PASS audio_guest_test.py: 34.875 seconds
+PASS doom_audio_test.py: 35.724 seconds
+
+Display checks: all seven presets, custom 1360x768, F12/menu/Terminal controls,
+real screendump geometry, exact native-pixel title button and Dock icon match,
+normal-size preservation, anchors, shrink/expand round trips, maximize/restore,
+invalid-mode rejection, PMM exhaustion, simultaneous game/cube/audio/Terminal.
+Fallback: VMware virtual framebuffer retained its boot mode and usable Terminal.
+Audio: tone/chime frequency capture, U8 DMA silence, no-device boot, PIT fallback,
+menu and firing effects, ammo consumption; zero reported underruns/device faults.
+
+LIMITATIONS
+Use F12 or display WIDTH HEIGHT. Dragging the host QEMU window alone does not
+request a new guest mode. No host-window autoresize/guest-agent protocol is added.
+Runtime modes target QEMU PCI std VGA on PC bus 0; no native GPU-driver claim.
+Supported explicit modes are bounded by existing 1920x1080 graphics buffers.
+No persistent resolution settings, Settings app, FileSlop or FAT32 changes.
+No sustained performance guarantee at every mode; see PERFORMANCE-0.8.md.
+
+EXPLORATORY FAILURES AND FIXES
+A test mouse driver initially kept coordinates outside the shrunken guest; it
+now accounts for cursor clamping and tests real clicks after transitions.
+An early multi-app audio run reported one underrun. Mixer checkpoints were
+added between main-thread compositor/app tasks. Subsequent gameplay and final
+resize/audio runs passed the unchanged zero-underrun requirement. Early serial
+evidence is retained in build/early-0.8/audio-underrun-before-checkpoints.log.
+One exploratory WAV capture lacked a finalized header despite zero guest faults.
+A short diagnostic capture and subsequent complete gameplay captures passed.
+The guest driver now also checks the QEMU process exit code. This does not prove
+host backend/exit intermittency is permanently fixed.
+
+PRESERVATION
+0.75 remains separately preserved. FAT32/ATA source and the data image are
+byte-identical to 0.75; storage investigation remains deferred to Genesis.

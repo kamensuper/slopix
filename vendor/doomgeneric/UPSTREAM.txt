@@ -1,0 +1,4 @@
+https://github.com/ozkl/doomgeneric
+commit e257a09527062bfb986b6e5e0780839b6cbd5b71
+
+Slopix modifications: see DOOM-PORT.md

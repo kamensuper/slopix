@@ -1,0 +1,28 @@
+--- slopix-0.8/vendor/doomgeneric/d_main.c	2026-10-17 11:37:58.627030441 +0400
++++ slopix-0.85/vendor/doomgeneric/d_main.c	2026-10-17 22:24:30.992262277 +0400
+@@ -386,19 +386,23 @@
+     return (gamestate == GS_LEVEL) && !demoplayback && !advancedemo;
+ }
+ 
++#include "../../src/perf.h"
++extern uint64_t timer_us(void);
+ void doomgeneric_Tick()
+ {
+     // frame syncronous IO operations
+     I_StartFrame ();
+ 
+-    TryRunTics (); // will run at least one tic
++    uint64_t begin=timer_us();
++    TryRunTics (); // cooperative simulation
++    perf_record(P_GAME,timer_us()-begin);
+ 
+     S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
+ 
+     // Update display, next frame, with current state.
+     if (screenvisible)
+     {
+-        D_Display ();
++        begin=timer_us();D_Display ();perf_record(P_DRENDER,timer_us()-begin);
+     }
+ }
+ 

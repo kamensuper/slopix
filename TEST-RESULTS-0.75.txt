@@ -1,0 +1,59 @@
+Slopix 0.75 — built ISO validation
+
+ISO bytes: 40138752
+ISO SHA256: f2ce36d73944ea08bd0f2cfe2db3e7598e9590d6965792c935f52958d8d68ae9
+Environment: QEMU 8.2.2 / TCG / qemu64 / PC / 256 MiB / std VGA.
+Sound: SB16 0x220, IRQ5, DMA1, captured through QEMU WAV backend.
+
+IMPLEMENTED
+- DOOM effects lease cached WAD samples, avoiding a synchronous second copy.
+- Shared sound lumps remain pinned until the final borrowing voice ends.
+- DMA half size is 512 samples / 23.22 ms at 22050 Hz; two halves represent
+  about 46.44 ms instead of the previous 185.76 ms of buffered source audio.
+- WAV/tone APIs keep copy semantics. All lease cleanup runs on the main thread.
+
+HOST TESTS: PASS
+Audio parser/converter/scheduler under ASan/UBSan, borrowed lease lifecycle,
+channel replacement and failed device-start ownership; DOOM shared-lump adapter
+regression; DOOM allocator/formatter/WAD compatibility; Rust unit tests and C ABI;
+software renderer, framebuffer guards/dirty regions and runtime primitives.
+
+BUILD: PASS
+C/assembly/Rust kernel compiled and linked; no unresolved symbols.
+Multiboot2 validation passed. GRUB bootable ISO generated successfully.
+The original 0.7 directory and release archive are preserved.
+
+QEMU CHECKS
+PASS: Doom/Freedoom menu and gunfire sound capture, real ammo consumption,
+      simultaneous Terminal/cube/DOOM, close/reopen and quit, no game error.
+      Zero reported audio underruns or device faults.
+PASS: actual 440 Hz tone and C4 chime verified from captured audio.
+PASS: volume, stop/restart, malformed controls, Terminal and cube during sound.
+PASS: no-device boot and usable Terminal.
+PASS: PIT fallback playback with nonzero captured samples and usable Terminal.
+PASS: physical DMA mute readback exactly U8 128 across the whole 1024-byte ring;
+      native-format output constant within one LSB after host conversion.
+PASS: smoke boot and built-in command execution through emulated PS/2 keyboard.
+PASS: window dragging/background restoration, close/reopen, maximize/restore,
+      F11, focus routing, minimize, cursor and screen-edge movement.
+
+PASS: Terminal editing/history, 255-byte input cap, long-input overflow handling,
+      120 repeated commands, >256 output-line rollover, scrolling, Ctrl+L
+      and continued command execution with advancing uptime.
+
+MEASUREMENTS AND LIMITS
+Gameplay audio capture: 3.757 s, 44100 Hz host output, 156324 samples above the
+nonzero threshold. Output peak 0.2578 of full-scale after QEMU conversion.
+26 in-level telemetry samples ranged from 29.7 to 35.3 FPS during the scripted
+multi-app test; these are interval counters, not a physical display-refresh
+measurement. Mean-per-interval engine tick work ranged 3.219..4.647 ms.
+Terminal command roundtrip during tone: 301.6 ms, including scripted typing.
+No matched 0.7/0.75 worst-frame-time comparison or physical-speaker listening
+session was performed. Source-path work and buffering are reduced, but this
+is not proof that every perceived hitch on the user's host has disappeared.
+No native sound-card, PulseAudio/SDL playback, ring-3, or FAT32 changes claimed.
+
+EARLY TEST FAILURE
+The mute test initially read the old 4096-byte DMA length, extending beyond the
+new 1024-byte object. It now obtains the actual size from ELF symbols, asserts
+the intended new size, and tests every DMA byte. The corrected test passed.

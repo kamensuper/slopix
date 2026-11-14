@@ -1,0 +1,373 @@
+#include "kernel.h"
+#include "ui/desktop_backend.h"
+#include "perf.h"
+#include "apps.h"
+#include "preferences.h"
+#include "ui/shell.h"
+#include "brand.h"
+#include "display/display.h"
+#include "audio/audio.h"
+#include "user/process.h"
+#include "user/gui.h"
+#include "fs/vfs.h"
+#define TERM 0
+#define DEMO 1
+#define DOOM 2
+#define BROWSER 6
+#define INSTALLED 7
+#define APPS APP_COUNT
+#define FRAME_US 16667
+struct bounds {int x,y,w,h;};
+struct window {struct bounds box,saved;int open,maximized,minimized;};
+static struct window windows[APPS];
+static int right_anchor[APPS],bottom_anchor[APPS];
+static int order[APPS],focus=TERM,drag=-1,grabx,graby;
+static int mx,my,buttons,hover=-1,cursor_dirty=1,term_cache_dirty=1,cube_active;
+static uint64_t next_frame,last_second,cube_render_us;
+static int cube_fresh;
+static unsigned user_app_pid[APP_COUNT];
+static char installed_elf[13];
+static int user_browser_missing;
+static int user_demo_missing;
+void slopde_open_app(unsigned id);
+static int spawn_desktop_gui(const char *name){
+ int pid=process_spawn(name,0);
+ if(pid<=0)return -1;
+ if(!gui_authorize((unsigned)pid)){process_kill((unsigned)pid);return -1;}
+ return pid;
+}
+static void app_close_process(int id){
+ if(id>=0&&id<APPS&&user_app_pid[id]){
+  unsigned pid=user_app_pid[id];
+  process_kill(pid);
+  user_app_pid[id]=0;
+  logstr("GENESIS_CLOSE: userspace process terminated\n");
+ }
+}
+static void app_minimize_process(int id){
+ if(id>=0&&id<APPS&&user_app_pid[id]){gui_send_visibility(user_app_pid[id],0);process_suspend(user_app_pid[id]);}
+}
+static void app_restore_process(int id){
+ if(id>=0&&id<APPS&&user_app_pid[id]){gui_send_visibility(user_app_pid[id],1);process_resume(user_app_pid[id]);}
+}
+static int resizing=-1;
+static void dock_layout(void){ui_shell_layout_changed();}
+
+static struct region overlap(struct region a,struct region b);
+static int min(int a,int b){return a<b?a:b;}
+static int hit(int x,int y,struct bounds r){return x>=r.x&&y>=r.y&&x<r.x+r.w&&y<r.y+r.h;}
+static int window_hit(int x,int y,struct bounds b){return hit(x,y,b)&&(y>=b.y+29||x<b.x+(b.w<330?b.w:330));}
+static int contains(struct bounds a,struct bounds b){return b.x>=a.x&&b.y>=a.y&&b.x+b.w<=a.x+a.w&&b.y+b.h<=a.y+a.h;}
+static struct bounds cube_area(void) {
+    struct bounds b=windows[DEMO].box;int w=min(640,b.w-48),h=min(400,b.h-136);
+    return (struct bounds){b.x+(b.w-w)/2,b.y+54,w,h+76};
+}
+static void invalidate(int id){struct bounds b=windows[id].box;damage(b.x-12,b.y-8,b.w+24,b.h+28);}
+static void event(int id,const char *s){logstr(id==TERM?"WINDOW: ":id==DEMO?"DEMO: ":id==DOOM?"DOOM: ":id==3?"FIND: ":id==4?"SETTINGS: ":"FILES: ");logstr(s);logstr("\n");}
+static void dock_damage(void){ui_shell_damage();}
+static void front(int id) {
+    drag=resizing=-1;
+    if(focus>=0)invalidate(focus);
+    /* Stop stale held-game keys when another window takes keyboard focus. */
+    if(focus==DOOM&&id!=DOOM&&user_app_pid[DOOM])gui_send_visibility(user_app_pid[DOOM],0);
+    focus=id;
+    if(focus==DOOM&&user_app_pid[DOOM])gui_send_visibility(user_app_pid[DOOM],1);
+    int at=0;for(int i=0;i<APPS;i++)if(order[i]!=id)order[at++]=order[i];order[APPS-1]=id;
+    term_cache_dirty=1;invalidate(id);
+}
+static void anchor(int id){
+    struct bounds b=windows[id].saved;
+    struct region a=ui_workarea();right_anchor[id]=b.x>a.x+(a.w-b.w)/2;
+    bottom_anchor[id]=b.y>a.y+(a.h-b.h)/2;
+}
+static struct bounds fit(struct bounds b){
+    struct region a=ui_workarea();if(b.w>a.w)b.w=a.w;if(b.h>a.h)b.h=a.h;
+    if(b.x+b.w>a.x+a.w)b.x=a.x+a.w-b.w;
+    if(b.y+b.h>a.y+a.h)b.y=a.y+a.h-b.h;
+    if(b.x<a.x)b.x=a.x;
+    if(b.y<a.y)b.y=a.y;
+    return b;
+}
+static struct bounds work_bounds(int mode){struct region a=ui_workarea();if(mode==2)a.w/=2;else if(mode==3){int half=a.w/2;a.x+=half;a.w-=half;}return(struct bounds){a.x,a.y,a.w,a.h};}
+static void tile(int id,int side){
+ if(id<0||!windows[id].open)return;
+ struct bounds b=work_bounds(side);const struct application_info*info=app_info((unsigned)id);int minimum=(int)info->min_w;
+ if(b.w<minimum){logstr("TILE: insufficient width; normal geometry retained\n");return;}
+ invalidate(id);windows[id].box=b;windows[id].maximized=side;term_cache_dirty=1;next_frame=0;invalidate(id);event(id,side==2?"tiled-left":"tiled-right");
+}
+static void backdrop(void){
+    for(int y=0;y<32;y++)for(unsigned x=0;x<width;x++)pixel((int)x,y,blend(readpixel((int)x,y),0xdce1d4,240));
+    rgba_blit(slopix_logo,28,28,10,1);
+    text(48,5,"Slopix",0x24263c);text(151,5,"SlopDE 2 / 0.9",0x52536b);
+    char n[21],label[48];decimal(width,n);copystr(label,n,sizeof(label));copystr(label+length(label),"x",sizeof(label)-length(label));
+    decimal(height,n);copystr(label+length(label),n,sizeof(label)-length(label));copystr(label+length(label),display_available()?" F12":" fixed",sizeof(label)-length(label));
+    text((int)width-400,5,label,0x52536b);
+    text((int)width-310,(int)height-37,"Pre-Genesis / Software Graphics",0xa3acc7);
+    background_save();
+}
+static void maximize(int id) {
+    if(id<0||!windows[id].open)return;
+    struct window *w=&windows[id];invalidate(id);
+    if(!w->maximized){w->box=work_bounds(1);w->maximized=1;event(id,"maximized");}
+    else {w->box=fit(w->saved);w->maximized=0;event(id,"restored");}
+    if(id==TERM)term_cache_dirty=1;
+    else if(id==DEMO){next_frame=0;cube_reset_stats(timer_us());}
+    drag=resizing=-1;invalidate(id);dock_damage();
+}
+void slopde_init(void) {
+    ui_shell_init();for(int i=0;i<APPS;i++)order[i]=i;
+    windows[TERM]=(struct window){{60,155,720,460},{0,0,0,0},1,0,0};
+    if(height<700)windows[TERM].box=(struct bounds){40,65,720,420};
+#ifdef RENDER_BENCH
+    windows[TERM].box=(struct bounds){240,150,800,460};
+#endif
+    windows[DEMO]=(struct window){{(int)width-620,115,560,460},{0,0,0,0},0,0,0};
+    if(height<700){windows[DEMO].box.y=65;windows[DEMO].box.h=420;}
+    windows[DOOM]=(struct window){{(int)width-730,80,680,510},{0,0,0,0},0,0,0};
+    if(height<700){windows[DOOM].box.y=32;windows[DOOM].box.h=(int)height-137;}
+    windows[3]=(struct window){{100,70,620,460},{0},0,0,0};
+    windows[4]=(struct window){{140,80,620,470},{0},0,0,0};
+    windows[5]=(struct window){{190,100,640,480},{0},0,0,0};
+    windows[BROWSER]=(struct window){{(int)width-690,115,600,410},{0},0,0,0};
+    windows[INSTALLED]=(struct window){{110,115,610,430},{0},0,0,0};
+    user_demo_missing=0;mx=(int)width/2;my=(int)height/2;dock_layout();
+    for(int i=0;i<APPS;i++){windows[i].saved=windows[i].box;anchor(i);windows[i].box=fit(windows[i].box);}
+    backdrop();damage(0,0,(int)width,(int)height);
+}
+void slopde_resized(unsigned oldw,unsigned oldh){
+    drag=-1;resizing=-1;hover=-1;
+    for(int i=0;i<APPS;i++){
+        struct window *w=&windows[i];
+        if(right_anchor[i])w->saved.x+=(int)width-(int)oldw;
+        if(bottom_anchor[i])w->saved.y+=(int)height-(int)oldh;
+        w->box=w->maximized?work_bounds(w->maximized):fit(w->saved);
+        char n[21];const char *names[]={"id="," x="," y="," w="," h="," max="," open="};
+        unsigned values[]={(unsigned)i,(unsigned)w->box.x,(unsigned)w->box.y,(unsigned)w->box.w,(unsigned)w->box.h,(unsigned)w->maximized,(unsigned)w->open};
+        logstr("DISPLAY_LAYOUT ");for(unsigned k=0;k<7;k++){logstr(names[k]);decimal(values[k],n);logstr(n);}logstr("\n");
+    }
+    input_display_resize(&mx,&my);dock_layout();term_cache_dirty=1;cursor_dirty=1;
+    cube_active=0;next_frame=0;cube_reset_stats(timer_us());backdrop();damage(0,0,(int)width,(int)height);
+}
+static int dock_hit(int x,int y){return ui_shell_panel_hit(x,y);}
+static void dock_animate(uint64_t now){ui_shell_step(now,mx,my);}
+static void dock(void){ui_shell_background();}
+static void draw_window(int id,struct region damaged) {
+    struct window *w=&windows[id];if(!w->open)return;
+    struct bounds b=w->box;
+    if(b.x>damaged.x+damaged.w||b.y>damaged.y+damaged.h||b.x+b.w+12<damaged.x||b.y+b.h+20<damaged.y)return;
+    int x=b.x,y=b.y;
+    ui_chrome((unsigned)id,x,y,b.w,b.h,id==focus,w->maximized);
+    struct region client=overlap(damaged,(struct region){x+14,y+43,b.w-28,b.h-45});
+    graphics_clip(client);
+    if(user_app_pid[id])gui_draw(user_app_pid[id],x+14,y+43,b.w-28,b.h-45);
+    else {
+        text(x+22,y+83,"Ring-3 application unavailable",0xc0d9df);
+        text(x+22,y+111,"Install required ELF on FAT32",0x92cbd9);
+    }
+    graphics_clip(damaged);
+    if(!w->maximized){rect(x+b.w-17,y+b.h-6,11,1,0x65718c);rect(x+b.w-12,y+b.h-10,6,1,0x65718c);}
+}
+static struct region overlap(struct region a,struct region b){int x=a.x>b.x?a.x:b.x,y=a.y>b.y?a.y:b.y;int right=min(a.x+a.w,b.x+b.w),bottom=min(a.y+a.h,b.y+b.h);return(struct region){x,y,right>x?right-x:0,bottom>y?bottom-y:0};}
+static void compose_layer(int layer,struct region r){
+ if(r.w<=0||r.h<=0)return;
+ if(layer<0){graphics_clip(r);background_restore_region(r);char n[21],stamp[48]="up ";decimal(timer_us()/1000000,n);copystr(stamp+3,n,45);copystr(stamp+length(stamp),"s",48-length(stamp));text((int)width-210,5,stamp,0x52536b);dock();return;}
+ int id=order[layer];struct bounds b=windows[id].box;
+ if(!windows[id].open){compose_layer(layer-1,r);return;}
+ struct region opaque={b.x,b.y+32,b.w,b.h-34};
+ struct region cut=overlap(r,opaque);
+ if(cut.w&&cut.h){
+  compose_layer(layer-1,(struct region){r.x,r.y,r.w,cut.y-r.y});
+  compose_layer(layer-1,(struct region){r.x,cut.y+cut.h,r.w,r.y+r.h-cut.y-cut.h});
+  compose_layer(layer-1,(struct region){r.x,cut.y,cut.x-r.x,cut.h});
+  compose_layer(layer-1,(struct region){cut.x+cut.w,cut.y,r.x+r.w-cut.x-cut.w,cut.h});
+ }else compose_layer(layer-1,r);
+ graphics_clip(r);draw_window(id,r);audio_step(timer_us());
+}
+void slopde_render(void) {
+ uint64_t begin=timer_us();audio_step(timer_us());
+ for(unsigned i=0;i<damage_count();i++)compose_layer(APPS-1,damage_get(i));
+ for(unsigned i=0;i<damage_count();i++){graphics_clip(damage_get(i));ui_shell_overlay();}
+ uint64_t composed=timer_us();perf_add(P_COMPOSE,composed-begin);present();cursor_present(mx,my);cursor_dirty=0;
+ uint64_t done=timer_us();perf_add(P_UPLOAD,done-composed);
+ if(cube_fresh){perf_frame(1,done);cube_presented(done,cube_render_us,composed-begin,done-composed);cube_fresh=0;}
+ graphics_reset_clip();
+}
+void slopde_step(uint64_t now) {
+    /* desktop_service calls this only after authentication unlocks. Do not
+     * start user applications during the setup/login phase. */
+    static int term_start_attempted;
+    if(!term_start_attempted){
+        term_start_attempted=1;
+        int pid=spawn_desktop_gui("TERM.ELF");
+        if(pid>0){user_app_pid[TERM]=(unsigned)pid;logstr("TERM_RING3_LAUNCHED\n");invalidate(TERM);}
+        else logstr("TERM_RING3_MISSING: launch disabled until ELF installed\n");
+    }
+    const char*before=preferences_status();preferences_step(now);if(before!=preferences_status()&&windows[4].open)invalidate(4);
+    if(scene_dirty){scene_dirty=0;term_cache_dirty=1;if(windows[TERM].open)invalidate(TERM);}
+    if(now/1000000!=last_second){last_second=now/1000000;damage((int)width-212,0,212,32);}
+    const char*shell_status=ui_shell_status();dock_animate(now);if(shell_status!=ui_shell_status()&&windows[4].open)invalidate(4);
+    /* CP06: DOOM is scheduled only as its private Ring-3 process. */
+    audio_step(timer_us());
+    for(unsigned i=0;i<APPS;i++)if(user_app_pid[i]){
+        /* Any path that closes a window must also terminate its owner.
+         * A minimized window is explicitly suspended instead. */
+        if(!windows[i].open&&!windows[i].minimized){app_close_process((int)i);continue;}
+        if(!process_alive(user_app_pid[i])){
+            invalidate((int)i);windows[i].open=0;windows[i].minimized=0;
+            user_app_pid[i]=0;dock_damage();event((int)i,"userspace-process-exited");
+        }else if(gui_take_dirty(user_app_pid[i])&&windows[i].open)invalidate((int)i);
+    }
+    struct bounds area=cube_area();
+    int visible=0; /* Never schedule the obsolete Ring-0 3D renderer. */
+    int above=0;for(int j=0;j<APPS;j++){int id=order[j];if(id==DEMO){above=1;continue;}if(above&&windows[id].open&&contains(windows[id].box,area))visible=0;}
+    if(visible&&!cube_active){cube_reset_stats(now);next_frame=0;}
+    cube_active=visible;if(!visible)perf_pause(1);
+    if(damage_pending())slopde_render();
+    else if(cursor_dirty){cursor_present(mx,my);cursor_dirty=0;}
+}
+void slopde_key(unsigned key) {
+    if(key==1001){display_cycle();return;}
+    if(key==1000){maximize(focus);return;}
+    if(focus<0&&ui_shell_key(key))return;
+    if(focus>=0&&focus<APPS&&windows[focus].open&&user_app_pid[focus]){
+        gui_send_key(user_app_pid[focus],key);return;
+    }
+    /* Closed/missing user apps have no privileged input handlers. */
+
+}
+void slopde_mouse(int x,int y,int current) {
+    int oldbuttons=buttons;mx=x;my=y;buttons=current;cursor_dirty=1;
+    int over=dock_hit(x,y);if(hover!=over){hover=over;dock_damage();}
+    int covered=0;for(int i=0;i<APPS;i++)if(windows[i].open&&window_hit(x,y,windows[i].box))covered=1;
+    struct region work=ui_workarea();int background=!covered&&over<0&&y>=work.y&&y<work.y+work.h;
+    if(background&&((current&3)&~oldbuttons)){if(focus>=0)invalidate(focus);focus=-1;term_cache_dirty=1;}
+    if(ui_shell_mouse(x,y,current,oldbuttons,background))return;
+    if((current&2)&&!(oldbuttons&2)){for(int i=APPS-1;i>=0;i--){int id=order[i];if(windows[id].open&&window_hit(x,y,windows[id].box)){front(id);struct bounds b=windows[id].box;apps_context((unsigned)id,x-b.x,y-b.y,b.w,b.h);invalidate(id);break;}}return;}
+
+    if((buttons&1)&&!(oldbuttons&1)) {
+        if(y<32&&x>=(int)width-400&&x<(int)width-215){display_cycle();return;}
+        int id=-1;
+        for(int i=APPS-1;i>=0;i--)if(windows[order[i]].open&&window_hit(x,y,windows[order[i]].box)){id=order[i];break;}
+        if(id>=0&&id<APPS) {
+            front(id);struct bounds b=windows[id].box;
+            if(hit(x,y,(struct bounds){b.x+13,b.y+12,20,20})||hit(x,y,(struct bounds){b.x+35,b.y+12,20,20})) {
+                int minimized=x>=b.x+35;if(!minimized&&!app_allow_close((unsigned)id)){invalidate(id);return;}
+                if(minimized)app_minimize_process(id);else app_close_process(id);
+                windows[id].open=0;windows[id].minimized=minimized;drag=resizing=-1;event(id,minimized?"minimized":"closed");invalidate(id);dock_damage();
+                focus=-1;
+                for(int j=APPS-1;j>=0;j--)if(windows[order[j]].open){focus=order[j];break;}
+                
+                if(focus>=0)invalidate(focus);
+                term_cache_dirty=1;
+            }else if(hit(x,y,(struct bounds){b.x+57,b.y+12,20,20}))maximize(id);
+            else if(x>=b.x+b.w-20&&y>=b.y+b.h-20&&!windows[id].maximized){resizing=id;grabx=mx;graby=my;}
+            else if(id==DEMO&&y>=cube_area().y+cube_area().h-23&&x>=cube_area().x&&x<cube_area().x+440){slopde_key((unsigned)('1'+(x-cube_area().x)/110));}
+            else if(user_app_pid[id]&&y>=b.y+43){
+                int lx=x-(b.x+14),ly=y-(b.y+43);
+                if(lx>=0&&ly>=0)gui_client_mouse(user_app_pid[id],lx,ly,b.w-28,b.h-45,1);
+            }
+            else if(id>=3&&id<6&&y>=b.y+43){invalidate(id);}
+            else if(y<b.y+43&&!windows[id].maximized){drag=id;grabx=x-b.x;graby=y-b.y;event(id,"drag-start");}
+        }else if(over>=0) {
+            slopde_open_app((unsigned)over);
+        }else {
+            if(focus>=0)invalidate(focus);
+            focus=-1;term_cache_dirty=1;
+        }
+    }
+    if(resizing>=0&&(buttons&1)){
+        struct window*w=&windows[resizing];invalidate(resizing);int nw=w->box.w+mx-grabx,nh=w->box.h+my-graby;
+        const struct application_info*info=app_info((unsigned)resizing);int minw=(int)info->min_w,minh=(int)info->min_h;
+        w->box.w=nw<minw?minw:nw;w->box.h=nh<minh?minh:nh;w->box=fit(w->box);w->saved=w->box;anchor(resizing);grabx=mx;graby=my;
+        term_cache_dirty=1;next_frame=0;invalidate(resizing);
+    }
+    if(resizing>=0&&!(buttons&1)){event(resizing,"resized");resizing=-1;}
+    if(drag>=0&&(buttons&1)) {
+        struct bounds *b=&windows[drag].box;invalidate(drag);b->x=mx-grabx;b->y=my-graby;
+        *b=fit(*b);
+        windows[drag].saved=*b;anchor(drag);invalidate(drag);
+    }
+    if(drag>=0&&!(buttons&1)) {
+        event(drag,"drag-end");char n[21];logstr(drag==TERM?"POSITION: ":drag==DEMO?"DEMO_POSITION: ":"DOOM_POSITION: ");
+        decimal((unsigned)windows[drag].box.x,n);logstr(n);logstr(",");decimal((unsigned)windows[drag].box.y,n);logstr(n);logstr("\n");int id=drag;drag=-1;if(mx<10)tile(id,2);else if(mx>=(int)width-10)tile(id,3);else if(my<=ui_workarea().y+6)maximize(id);
+    }
+}
+
+void slopde_scancode(unsigned code,int ext,int down){
+ if(focus!=DOOM||!windows[DOOM].open)return;
+ if(user_app_pid[DOOM])gui_send_scancode(user_app_pid[DOOM],code,ext,down);
+
+}
+
+void slopde_open_app(unsigned id){
+ if(id>=APPS)return;
+ static const char *const elf_names[APP_COUNT]={"TERM.ELF",0,0,"FIND.ELF","SET.ELF","FILES.ELF",0,0};
+ if(elf_names[id]&&!user_app_pid[id]){
+  int pid=spawn_desktop_gui(elf_names[id]);
+  if(pid>0){user_app_pid[id]=(unsigned)pid;logstr("GENESIS_CP05_RING3_LAUNCHED\n");}
+  else logstr("GENESIS_CP05_RING3_LOAD_FAILED\n");
+ }
+
+ if(id==DOOM && !user_app_pid[DOOM]){
+ uint32_t bytes=0;int directory=0;
+ if(vfs_stat("DOOM.ELF",&bytes,&directory)&&!directory&&vfs_stat("FREEDOM.WAD",&bytes,&directory)&&!directory){
+  int pid=spawn_desktop_gui("DOOM.ELF");
+  if(pid>0){user_app_pid[DOOM]=(unsigned)pid;logstr("DOOM_RING3_LAUNCHED\n");}
+  else logstr("DOOM_RING3_START_FAILED: no Ring-0 fallback\n");
+ }else logstr("DOOM_RING3_MISSING: install DOOM.ELF and FREEDOM.WAD\n");
+}
+ if(id==BROWSER && !user_app_pid[BROWSER]){
+     uint32_t bytes=0;int directory=0;
+     if(vfs_stat("BROWSE.ELF",&bytes,&directory)&&!directory){
+         int pid=spawn_desktop_gui("BROWSE.ELF");
+         if(pid>0){user_app_pid[BROWSER]=(unsigned)pid;user_browser_missing=0;logstr("BROWSE_RING3_LAUNCHED\n");}
+         else user_browser_missing=1;
+     }else user_browser_missing=1;
+ }
+ if(id==DEMO && !user_app_pid[DEMO]){
+     uint32_t bytes=0;int directory=0;
+     if(vfs_stat("DEMO.ELF",&bytes,&directory)&&!directory){
+         int pid=spawn_desktop_gui("DEMO.ELF");
+         if(pid<=0){user_demo_missing=1;logstr("DEMO_USER_LOAD_FAILED\n");}
+         if(pid>0){user_app_pid[DEMO]=(unsigned)pid;user_demo_missing=0;logstr("DEMO_RING3_LAUNCHED\n");}
+     }else {user_demo_missing=1;logstr("DEMO_RING3_MISSING: install DEMO.SLP\n");}
+ }
+ windows[id].open=1;windows[id].minimized=0;app_restore_process((int)id);front((int)id);dock_damage();
+ /* Only the process-owning Ring-3 ELF may implement the application. */
+ app_opened(id);event((int)id,"opened-from-launcher");
+}
+/* A package-launched executable gets its own Ring-3 PID, owned compositor
+ * surface and close lifecycle; no package name is wired into kernel UI code. */
+int slopde_launch_installed(const char *path){
+ if(!path||!path[0])return 0;
+ if(user_app_pid[INSTALLED]&&process_alive(user_app_pid[INSTALLED]))return 0;
+ int pid=spawn_desktop_gui(path);
+ if(pid<=0)return 0;
+ user_app_pid[INSTALLED]=(unsigned)pid;
+ copystr(installed_elf,path,sizeof(installed_elf));
+ slopde_open_app(INSTALLED);
+ return 1;
+}
+unsigned slopde_app_state(unsigned id){return id<APPS?(windows[id].open?1:windows[id].minimized?2:0):0;}
+unsigned slopde_open_count(void){unsigned n=0;for(unsigned i=0;i<APPS;i++)n+=!!(windows[i].open||windows[i].minimized);return n;}
+static int cycle_active,cycle_index,cycle_order[APPS];
+void slopde_shortcut(unsigned action){
+ if(action==4&&focus<0&&ui_shell_escape())return;
+ if(action==6||action==7){tile(focus,action==6?2:3);return;}
+ if(action==1){if(!cycle_active){for(int i=0;i<APPS;i++)cycle_order[i]=order[i];cycle_index=APPS-1;cycle_active=1;}for(int j=0;j<APPS;j++){cycle_index=(cycle_index+APPS-1)%APPS;if(windows[cycle_order[cycle_index]].open||windows[cycle_order[cycle_index]].minimized){int id=cycle_order[cycle_index];windows[id].open=1;windows[id].minimized=0;app_restore_process(id);front(id);dock_damage();break;}}}
+ else if(action==5)cycle_active=0;
+ else if(action==3)slopde_open_app(3);
+ else if((action==2||(action==4&&focus==3))&&focus>=0&&focus<APPS){int id=focus;if(!app_allow_close((unsigned)id)){invalidate(id);return;}app_close_process(id);drag=resizing=-1;windows[id].open=0;windows[id].minimized=0;invalidate(id);event(id,"closed");focus=-1;for(int i=APPS-1;i>=0;i--)if(windows[order[i]].open){front(order[i]);break;}dock_damage();}
+}
+static void background_service(void){audio_step(timer_us());}
+void slopde_background_changed(void){graphics_resize(background_service);backdrop();term_cache_dirty=1;damage(0,0,(int)width,(int)height);}
+
+int slopde_find_focused(void){return focus==3||(focus<0&&ui_shell_overlay_open());}
+int slopde_doom_focused(void){return focus==DOOM;}
+
+const struct desktop_backend slopde_backend={
+ .name="SlopDE 2",.init=slopde_init,.render=slopde_render,.step=slopde_step,
+ .mouse=slopde_mouse,.key=slopde_key,.shortcut=slopde_shortcut,
+ .resized=slopde_resized,.background_changed=slopde_background_changed,
+ .scancode=slopde_scancode,.open_app=slopde_open_app,.open_count=slopde_open_count,
+ .app_state=slopde_app_state,.wants_escape=slopde_find_focused,.game_focused=slopde_doom_focused};

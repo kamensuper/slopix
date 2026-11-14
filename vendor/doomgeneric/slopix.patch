@@ -1,0 +1,201 @@
+--- a/d_loop.c
++++ b/d_loop.c
+@@ -762,27 +762,8 @@
+     if (counts < 1)
+ 	counts = 1;
+ 
+-    // wait for new tics if needed
+-
+-    while (!PlayersInGame() || lowtic < gametic/ticdup + counts)
+-    {
+-	NetUpdate ();
+-
+-        lowtic = GetLowTic();
+-
+-	if (lowtic < gametic/ticdup)
+-	    I_Error ("TryRunTics: lowtic < gametic");
+-
+-        // Don't stay in this loop forever.  The menu is still running,
+-        // so return to update the screen
+-
+-	if (I_GetTime() / ticdup - entertic > 0)
+-	{
+-	    return;
+-	}
+-
+-        I_Sleep(1);
+-    }
++    /* Cooperative single-player: no waiting inside an application tick. */
++    if (!PlayersInGame() || lowtic < gametic/ticdup + counts) return;
+ 
+     // run the count * ticdup dics
+     while (counts--)
+--- a/d_main.c
++++ b/d_main.c
+@@ -305,27 +305,11 @@
+ 	return;
+     }
+     
+-    // wipe update
+-    wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
+-
+-    wipestart = I_GetTime () - 1;
+-
+-    do
+-    {
+-	do
+-	{
+-	    nowtime = I_GetTime ();
+-	    tics = nowtime - wipestart;
+-            I_Sleep(1);
+-	} while (tics <= 0);
+-        
+-	wipestart = nowtime;
+-	done = wipe_ScreenWipe(wipe_Melt
+-			       , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
+-	I_UpdateNoBlit ();
+-	M_Drawer ();                            // menu is drawn even on top of wipes
+-	I_FinishUpdate ();                      // page flip or blit buffer
+-    } while (!done);
++    /* Slopix: transition immediately. Vanilla melt is a blocking loop;
++     * the desktop owns frame pacing and must keep servicing other apps. */
++    (void)wipestart; (void)nowtime; (void)tics; (void)done;
++    I_FinishUpdate();
++
+ }
+ 
+ //
+--- a/doomfeatures.h
++++ b/doomfeatures.h
+@@ -33,7 +33,7 @@
+ 
+ // Enables sound output
+ 
+-//#undef FEATURE_SOUND
++#undef FEATURE_SOUND
+ 
+ #endif /* #ifndef DOOM_FEATURES_H */
+ 
+--- a/i_input.c
++++ b/i_input.c
+@@ -319,7 +319,6 @@
+             {
+                 D_PostEvent(&event);
+             }
+-            break;
+         }
+     }
+ 
+--- a/i_timer.c
++++ b/i_timer.c
+@@ -51,7 +51,7 @@
+ 
+     ticks -= basetime;
+ 
+-    return (ticks * TICRATE) / 1000;
++    return (uint64_t)ticks * TICRATE / 1000;
+ }
+ 
+ 
+--- a/m_menu.c
++++ b/m_menu.c
+@@ -584,14 +584,9 @@
+ //
+ void M_LoadGame (int choice)
+ {
+-    if (netgame)
+-    {
+-	M_StartMessage(DEH_String(LOADNET),NULL,false);
+-	return;
+-    }
+-	
+-    M_SetupNextMenu(&LoadDef);
+-    M_ReadSaveStrings();
++    /* Slopix has no writable filesystem yet. Keep this limitation visible
++     * without letting an unsupported save terminate the game session. */
++    M_StartMessage("SAVE / LOAD UNAVAILABLE\nSAVE ADAPTER NOT CONNECTED", NULL, false);
+ }
+ 
+ 
+@@ -649,17 +644,9 @@
+ //
+ void M_SaveGame (int choice)
+ {
+-    if (!usergame)
+-    {
+-	M_StartMessage(DEH_String(SAVEDEAD),NULL,false);
+-	return;
+-    }
+-	
+-    if (gamestate != GS_LEVEL)
+-	return;
+-	
+-    M_SetupNextMenu(&SaveDef);
+-    M_ReadSaveStrings();
++    /* Slopix has no writable filesystem yet. Keep this limitation visible
++     * without letting an unsupported save terminate the game session. */
++    M_StartMessage("SAVE / LOAD UNAVAILABLE\nSAVE ADAPTER NOT CONNECTED", NULL, false);
+ }
+ 
+ 
+@@ -680,25 +667,9 @@
+ 
+ void M_QuickSave(void)
+ {
+-    if (!usergame)
+-    {
+-	S_StartSound(NULL,sfx_oof);
+-	return;
+-    }
+-
+-    if (gamestate != GS_LEVEL)
+-	return;
+-	
+-    if (quickSaveSlot < 0)
+-    {
+-	M_StartControlPanel();
+-	M_ReadSaveStrings();
+-	M_SetupNextMenu(&SaveDef);
+-	quickSaveSlot = -2;	// means to pick a slot now
+-	return;
+-    }
+-    DEH_snprintf(tempstring, 80, QSPROMPT, savegamestrings[quickSaveSlot]);
+-    M_StartMessage(tempstring,M_QuickSaveResponse,true);
++    /* Slopix has no writable filesystem yet. Keep this limitation visible
++     * without letting an unsupported save terminate the game session. */
++    M_StartMessage("SAVE / LOAD UNAVAILABLE\nSAVE ADAPTER NOT CONNECTED", NULL, false);
+ }
+ 
+ 
+@@ -718,19 +689,9 @@
+ 
+ void M_QuickLoad(void)
+ {
+-    if (netgame)
+-    {
+-	M_StartMessage(DEH_String(QLOADNET),NULL,false);
+-	return;
+-    }
+-	
+-    if (quickSaveSlot < 0)
+-    {
+-	M_StartMessage(DEH_String(QSAVESPOT),NULL,false);
+-	return;
+-    }
+-    DEH_snprintf(tempstring, 80, QLPROMPT, savegamestrings[quickSaveSlot]);
+-    M_StartMessage(tempstring,M_QuickLoadResponse,true);
++    /* Slopix has no writable filesystem yet. Keep this limitation visible
++     * without letting an unsupported save terminate the game session. */
++    M_StartMessage("SAVE / LOAD UNAVAILABLE\nSAVE ADAPTER NOT CONNECTED", NULL, false);
+ }
+ 
+ 
+--- a/m_menu.h
++++ b/m_menu.h
+@@ -59,3 +59,6 @@
+ 
+ 
+ #endif    
++
++/* Slopix lifecycle adapter clears menus on quit-to-desktop. */
++void M_ClearMenus(void);

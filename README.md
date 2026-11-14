@@ -1,263 +1,204 @@
-# Slopix — an experimental x86-64 OS
-**An AI-generated OS. Human-directed chaos.**
+# Slopix 1.0 Genesis — Checkpoint 08 (development source)
 
-Slopix is an experimental x86-64 hobby operating system written in Assembly, C, and Rust. Its code is generated with AI, with a human directing the design, features, and development.
+**Start here:** [GENESIS-CHECKPOINT08.md](GENESIS-CHECKPOINT08.md) covers this
+checkpoint (SSE2 across the kernel and libc, a faster present path, and proof
+that per-process SSE state survives preemption). Earlier work:
+[GENESIS-CHECKPOINT07.md](GENESIS-CHECKPOINT07.md) (userspace libc + real
+scheduler), [GENESIS-CHECKPOINT04.md](GENESIS-CHECKPOINT04.md) (networking
+instructions, exact test disks, limitations and verification status).
+This is not the completed Slopix 1.0 release. Below is the older Slopix 0.9
+baseline documentation, retained to preserve historical build and design
+context; its instructions may not refer to this Genesis checkpoint.
 
-It boots into **SlopDE**, a software-rendered desktop with movable windows, a working Terminal, a 3D demo, and playable Freedoom.
+## Run this checkpoint
 
-Formerly known as **Moonrise**.
+```sh
+sh run.sh        # launch the existing build/slopix.iso
+make run         # rebuild first, then launch
+```
 
-This is a proof of concept and a learning project. Expect bugs, missing features, and questionable engineering decisions. Run it in QEMU.
+`run.sh` attaches the newest `storage/genesis-*ring3-ready.img` unless you name
+one explicitly:
 
-## What's working
+```sh
+SLOPIX_DISK=storage/genesis-cp08-ring3-ready.img sh run.sh
+sh run.sh --no-disk                 # no storage at all
+SLOPIX_DISPLAY=gtk sh run.sh        # GTK instead of SDL
+SLOPIX_AUDIO_BACKEND=none sh run.sh # silent
+SLOPIX_NET=1 sh run.sh              # emulated RTL8139
+```
 
-- GRUB / Multiboot2 boot into a 64-bit kernel
-- Framebuffer desktop with a menu bar and Dock
-- Dock icon magnification on hover
-- Keyboard and mouse input
-- Overlapping windows with dragging, focus, close, hide, and maximize/restore
-- Terminal with command history, editing, and scrolling
-- Custom C software 3D renderer with perspective, depth handling, and shading
-- Rotating cube, teapot, circle, and torus
-- Live, timer-measured FPS and frame-time counters
-- DoomGeneric running Freedoom Phase 1
-- Freestanding Rust component for physical memory bookkeeping
-- PNG artwork converted into embedded assets during development
+If `make -j4` prints only `make -C sdk` / "Nothing to be done", the tree is
+already built — that is success, not an error. `sh run.sh` needs
+`build/slopix.iso`, which `make` produces.
 
-Terminal, 3D Demo, and DOOM can run together.
+First boot shows the account wizard. Press Enter to begin, type a user name,
+Enter, type a password, Enter, type it again, Enter. After
+`AUTH_ACCOUNT_SAVED`, log in by typing the password and pressing Enter. At the
+`slopix>` prompt:
 
-## Run in QEMU
+```
+ls                  # files on the FAT32 disk
+run BENCH.ELF       # CP08 SSE2 throughput + FPU/SSE context test
+run LIBCDEMO.ELF    # CP07 libc/scheduler regression
+```
 
-Requirements:
+---
 
-- `qemu-system-x86_64`
-- A Slopix ISO, either from a release or built from source
+# Slopix 0.9 — Let There Be Light
 
-If your release archive includes `build/slopix.iso`, open a terminal in the project directory and run:
+An original x86-64 hobby operating system in C, Assembly and freestanding Rust.
+Slopix continues Moonrise; this release keeps the existing kernel and applications
+while introducing protected userspace and SlopDE 2. It is a human-directed,
+AI-built proof of concept, tested primarily in QEMU.
+
+## Run
+
+Extract the complete archive, enter `slopix-0.9-light`, and run:
 
 ```sh
 sh run.sh
 ```
 
-Or launch it manually:
+Requires `qemu-system-x86_64` with its SDL graphical frontend and PulseAudio support.
+The launcher uses BIOS, standard VGA, PS/2 input, TCG, 256 MiB RAM and SB16.
+The launcher defaults to SDL. `SLOPIX_DISPLAY=gtk sh run.sh` explicitly selects
+GTK, whose refresh behavior under this test environment is documented in
+`GTK-REFRESH-REPORT.md`.
+It attaches `storage/slopix-data.img` for persistence when that file exists;
+otherwise it falls back to the newest `storage/genesis-*ring3-ready.img`. It
+never formats an image.
+For silent emulation use `SLOPIX_AUDIO_BACKEND=none sh run.sh`; to boot without
+storage use `sh run.sh --no-disk`. The ISO is `build/slopix.iso`.
 
-```sh
-qemu-system-x86_64 \
-  -machine pc \
-  -accel tcg \
-  -cpu qemu64 \
-  -m 256 \
-  -vga std \
-  -nic none \
-  -cdrom build/slopix.iso \
-  -boot d \
-  -serial stdio \
-  -no-reboot \
-  -no-shutdown
-```
+Back up an existing data image while its VM is stopped before reusing it. Replace
+the supplied image with your copy or adjust the launcher's `-drive` path. Never
+attach the same writable image to two VMs or run host tools against a live image.
+FAT32 supports nested 8.3 paths and streaming multi-megabyte files. No installer is provided.
 
-If you downloaded only the ISO, replace `build/slopix.iso` with its path.
+See [RELEASE-LIGHT.md](RELEASE-LIGHT.md) for the new implementation, audit and
+Genesis readiness status. This incremental build adds streamed FAT32 access and
+folders, a PMM-backed kernel heap, dynamic clipboard, fresh DOOM sessions, an
+original Aero + Haiku visual refresh and a multi-size RGBA icon pipeline.
 
-The tested configuration uses BIOS boot, 256 MiB RAM, standard VGA, and QEMU software CPU emulation. Broad physical hardware support is not currently a goal.
+## What changed
 
-## Desktop controls
+- SlopDE 2: compact window tabs, original scalable icons, a task panel, draggable
+  desktop shortcuts, context menu, panel placement/auto-hide and window tiling. Classic/Dock/Minimal presets, clock and mute access are included.
+- Real Ring-3 programs: disk-loaded static ELF64, separate address spaces,
+  supervisor-only kernel memory, RX/RW-NX mappings, guarded stacks, timer slices,
+  validated syscalls and resource reclamation after exit, faults or `kill`.
+- FileSlop: folder navigation, text viewing, safe file creation, confirmed deletion,
+  refresh, disk status, list/icon views, context actions, internal clipboard and explicit ELF launching.
+- Audio deadline fixes: a bounded four-block DMA ring and main-thread safe points
+  during expensive engine initialization and allocator diagnostics.
+- Internal desktop and filesystem interfaces, application metadata registry,
+  process diagnostics and a standalone application SDK.
 
-| Action | Control |
+Terminal, 3D Demo, DOOM/Freedoom, SlopFind, Slopettings, SlopFetch and SlopMon remain.
+Legacy graphical applications still run in Ring 0. They have not become isolated
+userspace processes. See [ARCHITECTURE-0.9.md](ARCHITECTURE-0.9.md).
+
+## Controls
+
+| Area | Controls |
 |---|---|
-| Open or focus an application | Click its Dock icon |
-| Focus a window | Click it |
-| Move a window | Drag its title bar |
-| Close a window | Red button |
-| Hide a window | Yellow button |
-| Maximize or restore | Green button or `F11` |
+| Windows | Drag the tab; bottom-right corner resizes; X closes, underline minimizes, square maximizes/restores |
+| Shortcuts | Alt+Tab switches, Alt+F4 closes, F11 maximizes/restores, Alt+Left/Right tiles non-DOOM windows |
+| Panel | Click to open/focus an app; Settings → Desktop configures placement and auto-hide |
+| Pinboard | Drag shortcuts; double-click opens; arrows select and Enter opens; right-click background for menu |
+| Display | `display WIDTH HEIGHT`, F12 cycles modes; sizes remain native pixels |
+| Terminal | Arrows edit/history; Home/End, Delete/Backspace, PgUp/PgDn; Ctrl+L clears, Ctrl+U erases |
+| Clipboard | Ctrl+C copies current Terminal input or FileSlop text; Ctrl+V pastes bounded text without executing it |
+| 3D Demo | 1 cube, 2 teapot, 3 circle, 4 torus; footer also selects |
+| DOOM | Esc menu, Enter select, WASD move/strafe, arrows turn, Ctrl fire, Space use, Shift run, Tab map |
+| FileSlop | Arrows/Home/End select, Enter views, Delete requests confirmation, F5 refreshes, Esc returns/cancels |
 
-Closing and reopening Terminal preserves its contents. Closing or hiding DOOM pauses the current game; reopening resumes it.
+Terminal commands include `help`, `clear`, `echo`, `uname`, `version`, `uptime`,
+`meminfo`, `memtest`, `reboot`, `ls`, `cat`, `write`, `append`, `rm`, `sync`,
+`diskinfo`, `audio`, `display`, `slopfetch`, `slopmon`, `date`, `history`, `about`,
+`audioinfo`, `settings`, `slopfind`, `files`, `run`, `ps`, `kill` and `sysinfo`.
 
-## Terminal
+FileSlop: Enter opens folders, Backspace goes up, M creates a folder, N creates
+a file, R renames, C copies. Terminal adds `pwd`, `cd`, `mkdir`, `rmdir`, `stat`,
+`cp`, `mv`, `heapinfo`, `heaptest`. Use `exec READ.ELF /PATH/FILE` for a real
+Ring-3 streaming byte-count/fingerprint utility.
 
-Available commands:
+## Build and develop
 
-| Command | Purpose |
-|---|---|
-| `help` | List commands |
-| `clear` | Clear the Terminal |
-| `echo <text>` | Print text |
-| `uname` | Show system information |
-| `version` | Show the OS version |
-| `uptime` | Show elapsed uptime |
-| `meminfo` | Show memory statistics |
-| `memtest` | Exercise the physical page allocator |
-| `reboot` | Restart the system |
-
-Editing shortcuts:
-
-- Left/right arrows, Home, and End: move the cursor
-- Up/down arrows: browse command history
-- Backspace and Delete: edit input
-- Page Up/Page Down: scroll output
-- `Ctrl+L`: clear the Terminal
-- `Ctrl+U`: erase the input line
-
-## 3D Demo
-
-Focus the window and select a model using the keyboard or clickable footer:
-
-| Key | Model |
-|---|---|
-| `1` | Multicolored cube |
-| `2` | Teapot |
-| `3` | Filled circle |
-| `4` | Torus |
-
-Rendering uses Slopix's own C software rasterizer. Rotation is based on elapsed kernel time, rather than frame count.
-
-The circle is a flat disc, so it becomes thin when viewed edge-on.
-
-## DOOM / Freedoom
-
-Open DOOM from the Dock, then select **New Game**, an episode, and a difficulty.
-
-| Control | Action |
-|---|---|
-| `W` / `S` | Move forward / backward |
-| `A` / `D` | Strafe left / right |
-| Left/right arrows | Turn |
-| `Ctrl` | Fire |
-| `Space` | Use doors and switches |
-| `Shift` | Run |
-| `Alt` | Strafe modifier |
-| `Tab` | Automap |
-| Number keys | Select weapons |
-| `Esc` | Menu |
-| `Enter` | Confirm menu selection |
-
-Slopix includes DoomGeneric and Freedoom Phase 1 assets. No commercial DOOM game data is included.
-
-The current port is keyboard-only and has no audio, multiplayer, or persistent saves. It runs inside the kernel, without process isolation.
-
-## Build from source
-
-Reference environment: **Ubuntu 24.04 x86-64**.
-
-Install dependencies:
+Ubuntu 24.04 x86-64 dependencies:
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y \
-  build-essential grub-common grub-pc-bin xorriso \
-  qemu-system-x86 qemu-system-gui \
-  python3 python3-pil curl ca-certificates
-```
-
-Install the pinned Rust toolchain and freestanding target:
-
-```sh
-curl --proto '=https' --tlsv1.2 -fsSL \
-  https://sh.rustup.rs -o /tmp/slopix-rustup.sh
-
-sh /tmp/slopix-rustup.sh \
-  -y --profile minimal \
-  --default-toolchain 1.85.1 \
+sudo apt-get install -y build-essential grub-common grub-pc-bin xorriso \
+  qemu-system-x86 qemu-system-gui python3 python3-pil python3-numpy \
+  dosfstools mtools curl ca-certificates
+curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/slopix-rustup.sh
+sh /tmp/slopix-rustup.sh -y --profile minimal --default-toolchain 1.85.1 \
   --target x86_64-unknown-none
-
 . "$HOME/.cargo/env"
+make -j2
 ```
 
-From the project root:
+The build embeds the supplied pinned DoomGeneric source and Freedoom data; it
+does not download a game engine. Rust links freestanding `core`, never host `std`.
+`make RUSTC=/absolute/path/to/rustc` supports an explicitly installed toolchain.
+`Dockerfile` supplies the build dependencies. Fresh source builds are checked by
+`python3 tools/clean_build_check.py`; candidate outputs go under
+`build/clean-candidate`, leaving the current ISO untouched.
+
+Build a standalone application with `make -C sdk`, then run `run HELLO.ELF` in the
+guest. The supplied data image contains that example. `run HELLO.ELF 1` deliberately
+faults; `ps` records its exit while the desktop continues. See
+[sdk/README.md](sdk/README.md) for all test modes, ABI, limits and debugging.
+
+## Run the regression suites
 
 ```sh
-make
-sh run.sh
-```
-
-The generated ISO is:
-
-```text
-build/slopix.iso
-```
-
-DoomGeneric source and Freedoom data are bundled, so the build does not need to download them.
-
-## Tests
-
-Run host-side tests and automated QEMU regression tests:
-
-```sh
-make test
-```
-
-Run the longer idle and animation check:
-
-```sh
+python3 tests/release_09.py
+python3 tests/performance_09.py
 python3 tests/stability_test.py --idle 15 --animation 60
 ```
 
-Host-side tests cover memory bookkeeping, the C/Rust interface, rendering, clipping, runtime memory operations, assets, and the DOOM compatibility layer.
+Run one QEMU suite at a time. Tests use disposable disk images. The release gate
+checks an unchanged existing ISO; build first when testing your modifications.
+For automated graphical/audio testing also install `xvfb pulseaudio
+pulseaudio-utils`, then run:
 
-QEMU tests cover boot, Terminal input, windows, application interaction, animation, and memory allocation.
+```sh
+PROBE_LABEL=final09 PROBE_SECONDS=30 EXPECT_UNDERRUNS=0 sh tests/graphical_audio.sh
+TEST_DISPLAY=sdl GRAPHICAL_TEST=tests/gtk_refresh_test.py sh tests/graphical_audio.sh
+```
 
-See [TEST-RESULTS.txt](TEST-RESULTS.txt) for recorded results.
+This starts SDL on a virtual X server and captures a PulseAudio null-sink monitor;
+it does not perform a physical speaker or human latency test.
 
-## Performance
+## Validation and boundaries
 
-Recorded Slopix 0.5 results under QEMU TCG at a 1280×800 desktop:
+See `TEST-RESULTS-0.9.md`, `PERFORMANCE-0.9.md`, `M0-AUDIO-REPORT.md` and the
+included `build/release09-results.json` for the final build's measured evidence.
+Earlier release reports are historical and identify their own builds.
 
-| Workload | Measured throughput |
-|---|---:|
-| Cube animation over 60 seconds | 58.2 FPS average |
-| DOOM alone over 20 seconds | 34.5 FPS average |
-| DOOM with Terminal and 3D Demo open | 29.6 FPS average |
+No networking, general POSIX environment, USB support, host clipboard, userspace
+GUI/audio API, SMP, AVX process state or dynamic linking.
+DOOM has digital effects, not music or multiplayer. FileSlop supports nested folders and same-folder rename/copy; long filenames
+remain unsupported. Clipboard storage is dynamic; the FileSlop editor is 1023 bytes. Text view is bounded to
+64 KiB and 4096 lines; truncation is visible and never modifies the file.
 
-The current DOOM integration caps engine updates at 35 per second.
+Kernel code remains cooperative. Mode changes and some diagnostics can visibly
+pause animation; user slices cannot make Ring-0 drivers preemptible. Real hardware,
+physical speaker output and physical display latency are unverified. FAT32 retains
+its existing safety policy and known intermittent ATA-offline limitation; this
+release does not claim to fix or journal the filesystem.
 
-These are measurements from one shared-host test environment, not guaranteed performance. Results depend on the host, window sizes, and active applications.
+The design brief, concept artwork and eight-page implementation specification are
+in `design/`. Concept images are illustrative; advanced file/window/widget
+features are explicitly separated from implemented 0.9 behavior.
 
-See [PERFORMANCE.md](PERFORMANCE.md) for timing details and limitations.
+## Licensing
 
-## Project layout
-
-| Path | Contents |
-|---|---|
-| `src/` | Kernel, desktop, input, Terminal, and rendering |
-| `src/doom/` | DOOM platform adapters and compatibility layer |
-| `rust/` | Freestanding Rust memory bookkeeping |
-| `assets/` | Artwork and Freedoom game data |
-| `vendor/doomgeneric/` | Bundled engine source |
-| `tools/` | Asset and mesh generation tools |
-| `tests/` | Host and QEMU tests |
-| `boot/` | GRUB configuration |
-
-PNG assets are processed offline into embedded pixel data. The kernel does not contain a PNG decoder.
-
-## Current limitations
-
-- No filesystem or persistent user data
-- No networking or USB support
-- No userspace processes or ring 3 isolation
-- No general-purpose kernel heap
-- Applications share the kernel's address space
-- Application faults can crash the entire OS
-- First DOOM launch temporarily pauses desktop composition
-- Real hardware compatibility is largely untested
-
-Slopix is not ready for daily use. Its purpose is to explore how far a human-directed, AI-generated hobby OS can go.
-
-## Roadmap
-
-Current direction, subject to change:
-
-- Improve desktop consistency and quality of life
-- Fix stability and input issues before expanding scope
-- Improve rendering performance and application scheduling
-- Develop the DOOM port further
-- Eventually introduce isolated userspace applications
-
-There are no fixed release dates.
-
-## License and credits
-
-Slopix is licensed under **GNU GPLv3**. See [LICENSE](LICENSE) for the repository's license terms.
-
-Bundled third-party components retain their own copyright notices and licenses, including DoomGeneric, Freedoom assets, and GRUB.
-
-See [THIRD-PARTY.md](THIRD-PARTY.md) for attribution and component details.
+First-party source and original artwork retain their MIT notices. The combined
+DoomGeneric-containing kernel is distributed under GPL-3.0-or-later; upstream
+GPL-2.0-or-later notices remain intact. Freedoom data has its separate BSD license.
+GRUB, font and Rust component notices and corresponding supplied sources are
+listed in [THIRD-PARTY.md](THIRD-PARTY.md). See `LICENSE`, `COPYING` and `LICENSE-FIRST-PARTY-MIT`.

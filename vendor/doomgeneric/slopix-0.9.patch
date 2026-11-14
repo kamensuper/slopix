@@ -1,0 +1,29 @@
+--- a/w_wad.c
++++ b/w_wad.c
+@@ -24,6 +24,10 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++/* Slopix: cooperative service at stable WAD entry boundaries. This callback
++ * cannot enter the engine or allocate zone memory; it only refills audio and
++ * retires completed source leases through W_ReleaseLumpNum. */
++extern void slopix_audio_checkpoint(void) __attribute__((weak));
+ #include "doomtype.h"
+ 
+ #include "config.h"
+@@ -341,6 +345,7 @@
+ //
+ void W_ReadLump(unsigned int lump, void *dest)
+ {
++    if (slopix_audio_checkpoint) slopix_audio_checkpoint();
+     int c;
+     lumpinfo_t *l;
+ 	
+@@ -381,6 +386,7 @@
+ 
+ void *W_CacheLumpNum(int lumpnum, int tag)
+ {
++    if (slopix_audio_checkpoint) slopix_audio_checkpoint();
+     byte *result;
+     lumpinfo_t *lump;
+ 
