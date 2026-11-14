@@ -49,6 +49,9 @@ struct process {
  uint64_t futex_addr,fs_base;
  char name[13];struct user_file files[FD_MAX];
  char console_line[120];unsigned console_used;
+ /* Who sees this process's stdout: 0 = serial only, CONSOLE_KTERM = kernel
+  * terminal, otherwise the PID of the Ring-3 terminal that spawned it. */
+ unsigned console_owner;
 };
 static struct process tasks[PROCESSES];
 static _Alignas(16) unsigned char stacks[PROCESSES][KSTACK];
@@ -61,10 +64,12 @@ static unsigned char image[USER_IMAGE_CAP],io[4096],net_output[32768];
 static struct sx_dirent entries[SX_DIR_MAX];
 static unsigned entry_count;
 #define CONSOLE_RING 32u
-static char console_messages[CONSOLE_RING][128];
+#define CONSOLE_KTERM 0xffffffffu
+static struct {unsigned owner;char text[128];} console_messages[CONSOLE_RING];
 static unsigned console_head,console_tail;
-static void console_append(unsigned pid,const char *message){
- char *dst=console_messages[console_head];char num[21];decimal(pid,num);
+static void console_append(unsigned owner,unsigned pid,const char *message){
+ console_messages[console_head].owner=owner;
+ char *dst=console_messages[console_head].text;char num[21];decimal(pid,num);
  copystr(dst,"[",128);copystr(dst+length(dst),num,128-length(dst));
  copystr(dst+length(dst),"] ",128-length(dst));
  unsigned n=(unsigned)length(dst);for(unsigned i=0;message[i]&&n<127;i++){
@@ -77,8 +82,13 @@ static void console_append(unsigned pid,const char *message){
 static void console_flush(struct process *p){
  if(!p->console_used)return;
  p->console_line[p->console_used]=0;
- terminal_process_output(p->pid,p->console_line);
- console_append(p->pid,p->console_line);
+ /* Only the terminal that launched a process shows its output; desktop apps
+  * (DOOM, Files, ...) log to serial only instead of flooding SlopTerm. */
+ if(p->console_owner==CONSOLE_KTERM)terminal_process_output(p->pid,p->console_line);
+ else{
+  char n[21];decimal(p->pid,n);logstr("[user ");logstr(n);logstr("] ");logstr(p->console_line);logstr("\n");
+  if(p->console_owner)console_append(p->console_owner,p->pid,p->console_line);
+ }
  p->console_used=0;
 }
 static void console_write(struct process *p,const char *data,unsigned n){
@@ -87,7 +97,7 @@ static void console_write(struct process *p,const char *data,unsigned n){
   if(c=='\n'||c=='\r'){console_flush(p);continue;}
   if(c<32||c>126)c='?';
   p->console_line[p->console_used++]=(char)c;
-  if(p->console_used==sizeof(p->console_line))console_flush(p);
+  if(p->console_used==sizeof(p->console_line)-1)console_flush(p); /* keep room for NUL */
  }
 }
 
@@ -112,7 +122,7 @@ void user_loader_checkpoint(void){audio_checkpoint();}
 static int equal(const char*a,const char*b){while(*a&&*a==*b){a++;b++;}return *a==*b;}
 static void message(const char*kind,unsigned pid,uint64_t value){char n[21];logstr(kind);decimal(pid,n);logstr(n);logstr(" value=");decimal(value,n);logstr(n);logstr("\n");}
 void process_init(void){extern int arch_user_init(void);enabled=arch_user_init();if(!enabled){logstr("USERSPACE_DISABLED: NX unavailable\n");return;}logstr("USERSPACE_READY: separate CR3, NX, TSS, int80, timer slices, EDF\n");}
-static void exit_process(struct process*p,int status,int fault){console_flush(p);for(unsigned i=0;i<AUDIO_VOICES;i++)if(voice_owner[i]==p->pid){audio_sfx_stop(i);voice_owner[i]=0;}gui_process_exit(p->pid);for(unsigned i=0;i<FD_MAX;i++)p->files[i].used=0;p->state=EXITED;p->exit_status=status;p->fault=fault>=0?(unsigned)fault:0;p->crashed=fault>=0;if(fault>=0){crashes++;message("PROCESS_FAULT pid=",p->pid,fault);}else message("PROCESS_EXIT pid=",p->pid,(uint32_t)status);}
+static void exit_process(struct process*p,int status,int fault){console_flush(p);for(unsigned i=0;i<CONSOLE_RING;i++)if(console_messages[i].owner==p->pid)console_messages[i].owner=0;for(unsigned i=0;i<AUDIO_VOICES;i++)if(voice_owner[i]==p->pid){audio_sfx_stop(i);voice_owner[i]=0;}gui_process_exit(p->pid);for(unsigned i=0;i<FD_MAX;i++)p->files[i].used=0;p->state=EXITED;p->exit_status=status;p->fault=fault>=0?(unsigned)fault:0;p->crashed=fault>=0;if(fault>=0){crashes++;message("PROCESS_FAULT pid=",p->pid,fault);}else message("PROCESS_EXIT pid=",p->pid,(uint32_t)status);}
 static void capture(struct user_frame*f,unsigned reason){
  if(!active||(f->cs&3)!=3)panic("invalid user trap context");
  active->frame=*f;active->reason=reason;user_leave();
@@ -155,7 +165,7 @@ static int pick_next(void){
  }
  return best;
 }
-static int spawn_with_arg(const char*path,uint64_t arg,const char*text_arg){
+static int spawn_with_arg(const char*path,uint64_t arg,const char*text_arg,unsigned owner){
  if(!enabled||!next_pid||next_pid>0x7fffffff)return -1;
  unsigned at;for(at=0;at<PROCESSES;at++)if(tasks[at].state==EMPTY||tasks[at].state==EXITED)break;if(at==PROCESSES)return -1;
  struct process*p=&tasks[at];if(p->vm.tables[0])user_vm_destroy(&p->vm);
@@ -165,11 +175,11 @@ static int spawn_with_arg(const char*path,uint64_t arg,const char*text_arg){
  if(!vfs_stat(path,&size,&directory)||directory||size>sizeof(image)||size<64||!vfs_read_at(path,0,image,size,&got)||got!=size){logstr("USER_LOAD: missing, oversized or unreadable ELF\n");return -1;}
  uint64_t entry;if(!user_vm_create(&p->vm)||!user_elf_load(&p->vm,image,size,&entry)){user_vm_destroy(&p->vm);logstr("USER_LOAD: invalid/unsupported ELF or allocation failure\n");return -1;}
  p->pid=next_pid++;p->frame=(struct user_frame){.rdi=arg,.rip=entry,.cs=0x23,.flags=0x202,.rsp=USER_STACK-8,.ss=0x1b};
- p->priority=PRIO_DEFAULT;p->policy=POLICY_OTHER;
+ p->priority=PRIO_DEFAULT;p->policy=POLICY_OTHER;p->console_owner=owner;
  if(text_arg){size_t n=length(text_arg);if(n>127||!user_vm_copy(&p->vm,USER_STACK-256,(void*)text_arg,n+1,1)){user_vm_destroy(&p->vm);return -1;}p->frame.rsi=USER_STACK-256;}
  copystr(p->name,path,sizeof(p->name));user_fp_init(p->fp);p->state=READY;message("PROCESS_CREATED pid=",p->pid,p->vm.count+USER_TABLES);return (int)p->pid;
 }
-int process_spawn(const char*path,uint64_t arg){return spawn_with_arg(path,arg,0);}
+int process_spawn(const char*path,uint64_t arg){return spawn_with_arg(path,arg,0,0);}
 static int copy_name(struct process*p,uint64_t address,char out[128]){
  for(unsigned i=0;i<128;i++){if(!user_vm_copy(&p->vm,address+i,out+i,1,0))return 0;if(!out[i])return i!=0;}
  return 0;
@@ -303,12 +313,17 @@ static int64_t syscall(struct process*p){
  }
  case SX_CONSOLE_POLL:{
   if(b<2||b>128||!user_vm_range(&p->vm,a,(size_t)b,1))return -14;
-  if(console_head==console_tail)return 0;
-  const char *line=console_messages[console_tail];unsigned n=(unsigned)length(line);
+  /* Return only lines addressed to the calling terminal. */
+  unsigned at=console_tail;
+  while(at!=console_head&&console_messages[at].owner!=p->pid)at=(at+1)%CONSOLE_RING;
+  if(at==console_head)return 0;
+  const char *line=console_messages[at].text;unsigned n=(unsigned)length(line);
   if(n>=b)n=(unsigned)b-1;
   if(!user_vm_copy(&p->vm,a,(void*)line,n,1))return -14;
   const char end=0;if(!user_vm_copy(&p->vm,a+n,(void*)&end,1,1))return -14;
-  console_tail=(console_tail+1)%CONSOLE_RING;return n;
+  console_messages[at].owner=0;
+  while(console_tail!=console_head&&!console_messages[console_tail].owner)console_tail=(console_tail+1)%CONSOLE_RING;
+  return n;
  }
  case SX_PROCINFO:{
   if(!b||b>2048||!user_vm_range(&p->vm,a,(size_t)b,1))return -14;
@@ -356,7 +371,8 @@ static int64_t syscall(struct process*p){
  }
  case SX_SPAWN:{
   char name[128];if(!copy_name(p,a,name))return -14;
-  int pid=process_spawn(name,b);return pid<0?-11:pid;
+  /* Children inherit the caller's terminal, or report to the caller itself. */
+  int pid=spawn_with_arg(name,b,0,p->console_owner?p->console_owner:p->pid);return pid<0?-11:pid;
  }
  case SX_CLOSE:if(a<FD_BASE||a>=FD_BASE+FD_MAX||!p->files[a-FD_BASE].used)return -9;p->files[a-FD_BASE].used=0;return 0;
  /* ---- CP07 additions ---------------------------------------------------- */
@@ -476,10 +492,10 @@ int process_command(const char*name,char*args,void(*line)(const char*)){
  if(equal(name,"kill")){unsigned n=0;while(*args>='0'&&*args<='9'&&n<0x10000000)n=n*10+(unsigned)(*args++-'0');line(!*args&&n&&process_kill(n)?"Process terminated":"Invalid or inactive PID");return 1;}
  if(equal(name,"exec")){
   char*value=args;while(*value&&*value!=' ')value++;if(*value)*value++=0;while(*value==' ')value++;
-  int pid=*args?spawn_with_arg(args,0,value):-1;
+  int pid=*args?spawn_with_arg(args,0,value,CONSOLE_KTERM):-1;
   if(pid<0)line("Executable load failed; see serial diagnostics");else {char s[200]="User process started ";field(s,"pid=",(unsigned)pid);line(s);}return 1;
  }
  if(!equal(name,"run"))return 0;
  char*arg=args;while(*arg&&*arg!=' ')arg++;uint64_t mode=0;if(*arg){*arg++=0;while(*arg==' ')arg++;unsigned digits=0;while(*arg>='0'&&*arg<='9'&&digits<2){mode=mode*10+(unsigned)(*arg++-'0');digits++;}if(!digits||*arg||mode>15){line("run FILE.ELF [0..15]");return 1;}}
- int pid=process_spawn(args,mode);if(pid<0)line("Executable load failed; see serial diagnostics");else {char s[200]="User process started ";field(s,"pid=",(unsigned)pid);line(s);}return 1;
+ int pid=spawn_with_arg(args,mode,0,CONSOLE_KTERM);if(pid<0)line("Executable load failed; see serial diagnostics");else {char s[200]="User process started ";field(s,"pid=",(unsigned)pid);line(s);}return 1;
 }
