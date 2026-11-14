@@ -23,6 +23,10 @@
 struct bounds {int x,y,w,h;};
 struct window {struct bounds box,saved;int open,maximized,minimized;};
 static struct window windows[APPS];
+/* Fixed-size focus tracks use timer_us, not frame counts. */
+static struct anim_track focus_anim[APPS];
+static int focus_value[APPS],focus_from[APPS],focus_to[APPS],focus_target=-2;
+static uint64_t focus_frame_at;
 static int right_anchor[APPS],bottom_anchor[APPS];
 static int order[APPS],focus=TERM,drag=-1,grabx,graby;
 static int chrome_hot_win=-1,chrome_hot=CHROME_NONE,chrome_press_win=-1,chrome_press=CHROME_NONE;
@@ -69,6 +73,25 @@ static struct bounds cube_area(void) {
 static void invalidate(int id){struct bounds b=windows[id].box;struct chrome_rect e=chrome_extent(b.x,b.y,b.w,b.h);damage(e.x,e.y,e.w,e.h);}
 /* Callers pass validated ids only; see ui/winid.h. */
 static void invalidate_title(int id){struct bounds b=windows[id].box;damage(b.x,b.y,b.w,CHROME_TITLE_H);}
+static void focus_step(uint64_t now){
+ if(focus!=focus_target){
+  for(int i=0;i<APPS;i++){
+   if(anim_running(&focus_anim[i]))focus_value[i]=anim_lerp(focus_from[i],focus_to[i],anim_value(&focus_anim[i],now));
+   focus_from[i]=focus_value[i];focus_to[i]=i==focus?255:0;
+   if(focus_from[i]!=focus_to[i]&&windows[i].open)anim_start(&focus_anim[i],now,120000,ANIM_SMOOTHSTEP);
+   else {anim_cancel(&focus_anim[i]);focus_value[i]=focus_to[i];}
+  }
+  focus_target=focus;focus_frame_at=0;
+ }
+ if(now<focus_frame_at)return;
+ int active=0;
+ for(int i=0;i<APPS;i++)if(anim_running(&focus_anim[i])){
+  int next=anim_lerp(focus_from[i],focus_to[i],anim_value(&focus_anim[i],now));
+  if(next!=focus_value[i]){focus_value[i]=next;if(windows[i].open)invalidate(i);}
+  anim_step(&focus_anim[i],now);if(anim_running(&focus_anim[i]))active=1;
+ }
+ if(active)focus_frame_at=now+ANIM_FRAME_60;
+}
 static int top_window_at(int x,int y){for(int i=APPS-1;i>=0;i--){int id=order[i];if(windows[id].open&&window_hit(x,y,id))return id;}return -1;}
 static enum chrome_part part_of(int id,int x,int y){struct bounds b=windows[id].box;return chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[id].maximized);}
 static void event(int id,const char *s){logstr(id==TERM?"WINDOW: ":id==DEMO?"DEMO: ":id==DOOM?"DOOM: ":id==3?"FIND: ":id==4?"SETTINGS: ":"FILES: ");logstr(s);logstr("\n");}
@@ -123,7 +146,8 @@ static void maximize(int id) {
     drag=resizing=-1;invalidate(id);dock_damage();
 }
 void slopde_init(void) {
-    ui_shell_init();for(int i=0;i<APPS;i++)order[i]=i;
+    ui_shell_init();for(int i=0;i<APPS;i++){order[i]=i;focus_value[i]=i==focus?255:0;}
+    focus_target=focus;
     windows[TERM]=(struct window){{60,155,720,460},{0,0,0,0},1,0,0};
     if(height<700)windows[TERM].box=(struct bounds){40,65,720,420};
 #ifdef RENDER_BENCH
@@ -166,7 +190,7 @@ static void draw_window(int id,struct region damaged) {
     if(e.x>=damaged.x+damaged.w||e.y>=damaged.y+damaged.h||e.x+e.w<=damaged.x||e.y+e.h<=damaged.y)return;
     int x=b.x,y=b.y;
     ui_chrome_state(id==chrome_hot_win?chrome_hot:CHROME_NONE,id==chrome_press_win?chrome_press:CHROME_NONE,damaged);
-    ui_chrome((unsigned)id,x,y,b.w,b.h,id==focus,w->maximized);
+    ui_chrome((unsigned)id,x,y,b.w,b.h,focus_value[id],w->maximized);
     struct chrome_rect cr=chrome_client(x,y,b.w,b.h);
     struct region client=overlap(damaged,as_region(cr));
     graphics_clip(client);
@@ -232,6 +256,7 @@ void slopde_step(uint64_t now) {
     int above=0;for(int j=0;j<APPS;j++){int id=order[j];if(id==DEMO){above=1;continue;}if(above&&windows[id].open&&contains(windows[id].box,area))visible=0;}
     if(visible&&!cube_active){cube_reset_stats(now);next_frame=0;}
     cube_active=visible;if(!visible)perf_pause(1);
+    focus_step(now);
     if(damage_pending())slopde_render();
     else if(cursor_dirty){cursor_present(mx,my);cursor_dirty=0;}
 }

@@ -1,6 +1,7 @@
 /* Pinboard, panel and context menu. Native pixels; all I/O is debounced and
  * runs on the main thread, never in a paint callback or input IRQ. */
 #include "shell.h"
+#include "anim.h"
 #include "../apps.h"
 #include "../preferences.h"
 #include "../fs/vfs.h"
@@ -12,6 +13,9 @@ _Static_assert(sizeof(struct shell_config)==96,"desktop config format");
 static struct shell_config cfg;
 static int shown=1,hover=-1,pin=-1,drag_pin=-1,grabx,graby,moved,menu,menu_x,menu_y,menu_hover=-1;
 static unsigned last_pin=PINS;
+static struct anim_track hover_anim[APP_COUNT];
+static int hover_value[APP_COUNT],hover_from[APP_COUNT],hover_to[APP_COUNT];
+static uint64_t hover_frame_at;
 static uint64_t last_click,hide_at,save_at,clock_at;
 static char clock_text[6]="--:--";
 static int pending;
@@ -33,7 +37,7 @@ void ui_shell_damage(void){struct region p=panel();damage(p.x,p.y,p.w,p.h);}
 static void change(void){pending=1;save_at=timer_us()+1500000;status="Desktop applied; save pending";}
 const char*ui_shell_status(void){return status;}
 unsigned ui_shell_options(void){return cfg.autohide|(cfg.top<<1)|(cfg.style<<2);}
-void ui_shell_configure(unsigned options){cfg.autohide=options&1;cfg.top=(options>>1)&1;cfg.style=(options>>2)%3;shown=1;hover=-1;change();desktop_resized(width,height);damage(0,0,(int)width,(int)height);}
+void ui_shell_configure(unsigned options){cfg.autohide=options&1;cfg.top=(options>>1)&1;cfg.style=(options>>2)%3;shown=1;hover=-1;for(unsigned i=0;i<APP_COUNT;i++){anim_cancel(&hover_anim[i]);hover_value[i]=hover_from[i]=hover_to[i]=0;}change();desktop_resized(width,height);damage(0,0,(int)width,(int)height);}
 int ui_shell_save(void){
  if(!pending)return 1;
  if(audio_get_status().playing){status="Desktop save waits for playback";return 0;}
@@ -59,7 +63,25 @@ void ui_shell_step(uint64_t now,int x,int y){
  struct region p=panel();int before=shown;
  if(!cfg.autohide||inside(x,y,p)||(cfg.top?y<36:y>=(int)height-4)){shown=1;hide_at=now+600000;}
  else if(now>=hide_at)shown=0;
- int next=ui_shell_panel_hit(x,y);if(next!=hover||before!=shown){hover=next;ui_shell_damage();}
+ int next=ui_shell_panel_hit(x,y);
+ if(next!=hover){
+  for(unsigned i=0;i<APP_COUNT;i++){
+   if(anim_running(&hover_anim[i]))hover_value[i]=anim_lerp(hover_from[i],hover_to[i],anim_value(&hover_anim[i],now));
+   hover_from[i]=hover_value[i];hover_to[i]=(int)i==next?255:0;
+   if(hover_from[i]!=hover_to[i])anim_start(&hover_anim[i],now,120000,ANIM_SMOOTHSTEP);
+  }
+  hover=next;hover_frame_at=0;
+ }
+ if(before!=shown)ui_shell_damage();
+ if(now>=hover_frame_at){
+  int active=0;
+  for(unsigned i=0;i<APP_COUNT;i++)if(anim_running(&hover_anim[i])){
+   int v=anim_lerp(hover_from[i],hover_to[i],anim_value(&hover_anim[i],now));
+   if(v!=hover_value[i]){hover_value[i]=v;struct region r=item(i);damage(r.x,r.y,r.w,r.h);}
+   anim_step(&hover_anim[i],now);if(anim_running(&hover_anim[i]))active=1;
+  }
+  if(active)hover_frame_at=now+ANIM_FRAME_60;
+ }
  if(pending&&now>=save_at){if(audio_get_status().playing)status="Desktop save waits for playback";else ui_shell_save();}
 }
 /* SlopDE 3 panel: flat surface, one hairline toward content, accent used
@@ -78,7 +100,7 @@ void ui_shell_background(void){
  rect(47,p.y+10,1,p.h-20,line);
  const char*labels[]={"Term","3D","DOOM","Find","Setup","Files","Browse","Apps"};
  for(unsigned i=0;i<APP_COUNT;i++){struct region b=item(i);unsigned state=desktop_app_state(i);int hot=hover==(int)i;
-  if(hot||state==2)roundbox(b.x,b.y,b.w,b.h,7,blend(surface,prefs.light?0x1f2833:0xffffff,hot?(state==2?40:26):18),255);
+  if(hover_value[i]||state==2){unsigned shade=state==2?18u:0u;shade+=(unsigned)hover_value[i]*(state==2?22u:26u)/255u;roundbox(b.x,b.y,b.w,b.h,7,blend(surface,prefs.light?0x1f2833:0xffffff,shade),255);}
   if(state){int iw=state==2?(b.w>40?b.w/2:b.w-8):6;roundbox(b.x+(b.w-iw)/2,b.y+b.h-3,iw,3,1,state==2?accent():(prefs.light?0x8a94a1:0x7d8794),255);}
   int base=cfg.style==1?32:cfg.style==2?20:24;int s=prefs.magnify&&hot?base+6:base;
   int ix=cfg.style==1?b.x+(b.w-s)/2:b.x+7;ui_icon(i,ix,b.y+(b.h-s)/2-(state?1:0),s);

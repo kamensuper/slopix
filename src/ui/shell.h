@@ -2,7 +2,8 @@
 #define SLOPIX_SHELL_H
 #include "../kernel.h"
 void ui_icon(unsigned id,int x,int y,int size);
-void ui_chrome(unsigned id,int x,int y,int w,int h,int focused,int maximized);
+/* focus_emphasis is interpolated from 0 (inactive) to 255 (active). */
+void ui_chrome(unsigned id,int x,int y,int w,int h,int focus_emphasis,int maximized);
 /* SlopDE 3: per-draw hover/pressed control (enum chrome_part) and clip. */
 void ui_chrome_state(int hot,int pressed,struct region clip);
 void ui_shell_init(void);

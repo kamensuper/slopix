@@ -56,11 +56,13 @@ void ui_chrome(unsigned id,int x,int y,int w,int h,int focused,int maximized){
  if(w<=2||h<=CHROME_TITLE_H)goto done;
  int light=prefs.light!=0,r=chrome_radius(w,h,maximized);
  uint32_t accent=prefs.accent?prefs.accent:0x4f8cc9;
- uint32_t title=light?(focused?0xf3f5f8:0xe8ebef):(focused?0x272d36:0x1e232a);
+ /* focused is an interpolated 0..255 emphasis, not a boolean. */
+ unsigned emphasis=focused<0?0:focused>255?255:(unsigned)focused;
+ uint32_t title=blend(light?0xe8ebef:0x1e232a,light?0xf3f5f8:0x272d36,emphasis);
  uint32_t body=light?0xfafbfc:(id==0?0x10161d:0x171c23);
- uint32_t border=light?(focused?blend(0xbfc6cf,accent,70):0xd2d6dc):(focused?blend(0x3b4450,accent,80):0x30363f);
+ uint32_t border=blend(light?0xd2d6dc:0x30363f,light?blend(0xbfc6cf,accent,70):blend(0x3b4450,accent,80),emphasis);
  uint32_t sep=light?0xdde1e6:0x343b45;
- uint32_t ink=light?(focused?0x1d2530:0x7c8592):(focused?0xe9edf2:0x8a93a0);
+ uint32_t ink=blend(light?0x7c8592:0x8a93a0,light?0x1d2530:0xe9edf2,emphasis);
  if(!maximized&&!minimal())shadow(x,y,w,h,r);
  /* Frame: 1px border, then the surface. Corners outside the rounded
   * silhouette are left untouched: the compositor repainted the layers
@@ -71,7 +73,7 @@ void ui_chrome(unsigned id,int x,int y,int w,int h,int focused,int maximized){
  roundbox(x+1,y+1,w-2,h-2,r>1?r-1:0,title,255);
  graphics_clip(chrome_clip);
  rect(x+1,y+CHROME_TITLE_H-1,w-2,1,sep);
- if(focused)rect(x+r+1,y+1,w-2*r-2,1,blend(title,0xffffff,light?160:30));
+ if(emphasis)rect(x+r+1,y+1,w-2*r-2,1,blend(title,0xffffff,(light?160u:30u)*emphasis/255u));
  /* Controls: flat monochrome glyphs; hover/pressed show a disc. Close
   * turns red on hover so the destructive action is unmistakable. */
  int n=chrome_button_count(w);
