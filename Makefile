@@ -55,6 +55,16 @@ build/slopde-geom-test: tests/slopde_geom_test.c src/ui/chrome_geom.h | build
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fwrapv $< -o $@
 slopde-geom-test: build/slopde-geom-test
 	./build/slopde-geom-test
+.PHONY: slopde-window-test slopde-anim-test slopde-test
+build/slopde-window-test: tests/slopde_window_test.c src/ui/winid.h | build
+	$(HOSTCC) -std=c11 -O2 -g -Wall -Wextra -Werror -Warray-bounds=2 -fwrapv $< -o $@
+slopde-window-test: build/slopde-window-test
+	./build/slopde-window-test
+build/slopde-anim-test: tests/slopde_anim_test.c src/ui/anim.h | build
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fwrapv $< -o $@
+slopde-anim-test: build/slopde-anim-test
+	./build/slopde-anim-test
+slopde-test: slopde-geom-test slopde-window-test slopde-anim-test
 renderer-test: build/renderer-test build/graphics-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/renderer-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/graphics-test
@@ -184,6 +194,7 @@ perf-test:
 	$(HOSTCC) -std=c11 -O1 -g -fsanitize=address,undefined tests/perf_test.c src/perf.c -o build/perf-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/perf-test
 test: preferences-test perf-test
+test: slopde-test
 build/input.o: src/perf.h
 
 build/user_vm.o: src/user/vm.c src/user/vm.h src/memory.h
