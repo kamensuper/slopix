@@ -44,8 +44,10 @@ __attribute__((noreturn)) void _start(void){
  if(sx_gui_open(320,200)<0)sx_exit(91);
  logstr("DOOM_RING3_BOOT\n");
  static char *argv[]={"doom","-iwad","FREEDOM.WAD","-nomusic","-nogui","-nomouse"};
+ /* doomgeneric_Create only initializes the engine and returns; the platform
+ * must drive doomgeneric_Tick itself. The old doom_fail here killed DOOM
+ * (exit 90) right after init and made the input/tick loop unreachable. */
  doomgeneric_Create(6,argv);
- doom_fail("DoomGeneric main loop returned unexpectedly");
  uint64_t next=sx_time();for(;;){uint64_t e;while((e=sx_gui_poll())){
   unsigned type=sx_gui_event_type(e);
   if(type==4)scancode((unsigned)(e&255),(int)((e>>8)&1),(int)((e>>9)&1));
