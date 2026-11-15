@@ -104,7 +104,9 @@ static int resizing=-1;
 static unsigned sent_pid[APP_COUNT],sent_w[APP_COUNT],sent_h[APP_COUNT];
 static void sync_client_size(int id){
  if(id<0||id>=APPS||!user_app_pid[id]||!windows[id].open||id==resizing)return;
- int cw=windows[id].box.w-28,ch=windows[id].box.h-45;if(cw<1||ch<1)return;
+ /* Same client rectangle gui_draw/gui_client_pointer use (SlopDE 3 chrome). */
+ struct chrome_rect cr=chrome_client(0,0,windows[id].box.w,windows[id].box.h);
+ int cw=cr.w,ch=cr.h;if(cw<1||ch<1)return;
  if(sent_pid[id]==user_app_pid[id]&&sent_w[id]==(unsigned)cw&&sent_h[id]==(unsigned)ch)return;
  if(gui_send_resize(user_app_pid[id],(unsigned)cw,(unsigned)ch)){sent_pid[id]=user_app_pid[id];sent_w[id]=(unsigned)cw;sent_h[id]=(unsigned)ch;}
 }
