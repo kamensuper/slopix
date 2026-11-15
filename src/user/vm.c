@@ -42,6 +42,7 @@ static const struct user_page*page(const struct user_vm*v,uint64_t va){
 }
 int user_vm_range(const struct user_vm*v,uint64_t va,size_t n,int write){
  if(va<USER_BASE||va>=USER_STACK||n>USER_STACK-va)return 0;
+ if(!n)return page(v,va)!=0; /* B-35: an empty range must still be mapped */
  while(n){const struct user_page*p=page(v,va);if(!p||(write&&!(p->flags&VM_WRITE)))return 0;size_t k=4096-(va&4095);if(k>n)k=n;va+=k;n-=k;}
  return 1;
 }

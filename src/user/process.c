@@ -27,6 +27,8 @@
 #define QUANTUM_US 2000
 #define PRIO_DEFAULT 16u
 #define PRIO_MAX 32u
+#define PRIO_USER_MAX 20u
+#define STARVE_US 100000u /* a runnable task waits at most ~100 ms */
 #define USER_IMAGE_CAP (1024u*1024u)
 #define IA32_FS_BASE 0xc0000100u
 /* Descriptor space: 0..2 are the standard console channels (which are not
@@ -60,6 +62,7 @@ static unsigned char image[USER_IMAGE_CAP],io[4096],net_output[32768];
 #define SX_DIR_MAX 48u
 static struct sx_dirent entries[SX_DIR_MAX];
 static unsigned entry_count;
+static unsigned entry_skip; /* SX_READDIR paging offset */
 #define CONSOLE_RING 32u
 static char console_messages[CONSOLE_RING][128];
 static unsigned console_head,console_tail;
@@ -92,6 +95,7 @@ static void console_write(struct process *p,const char *data,unsigned n){
 }
 
 static void collect_dir(const char *name,uint32_t size,int directory){
+ if(entry_skip){entry_skip--;return;}
  if(entry_count>=SX_DIR_MAX)return;
  struct sx_dirent *e=&entries[entry_count++];
  for(unsigned i=0;i<sizeof(*e);i++)((unsigned char*)e)[i]=0;
@@ -146,6 +150,15 @@ static int pick_next(void){
   if(p->next_deadline_ns<best_deadline){best_deadline=p->next_deadline_ns;best=(int)i;}
  }
  if(best>=0)return best;
+ /* Starvation guard (B-08): a runnable task that has not been picked for
+  * STARVE_US goes next whatever its priority, so a busy high-priority
+  * loop slows others down but can never freeze them. */
+ uint64_t now=timer_us(),oldest=UINT64_MAX;
+ for(unsigned i=0;i<PROCESSES;i++){const struct process*p=&tasks[i];
+  if(p->state!=READY||p->suspended||p->policy==POLICY_DEADLINE)continue;
+  if(now-p->started>=STARVE_US&&p->started<oldest){oldest=p->started;best=(int)i;}
+ }
+ if(best>=0)return best;
  unsigned best_prio=0;uint64_t best_vruntime=UINT64_MAX;
  for(unsigned i=0;i<PROCESSES;i++){const struct process*p=&tasks[i];
   if(p->state!=READY||p->suspended)continue;
@@ -172,6 +185,24 @@ static int spawn_with_arg(const char*path,uint64_t arg,const char*text_arg){
 int process_spawn(const char*path,uint64_t arg){return spawn_with_arg(path,arg,0);}
 static int copy_name(struct process*p,uint64_t address,char out[128]){
  for(unsigned i=0;i<128;i++){if(!user_vm_copy(&p->vm,address+i,out+i,1,0))return 0;if(!out[i])return i!=0;}
+ return 0;
+}
+/* System files that Ring-3 programs may not open, create, overwrite or
+ * remove (B-07): the login record, both preference slots, and the package
+ * manager's staging files. The kernel itself (auth, Settings via
+ * SX_PREF_SAVE, slop install) still uses them through the VFS directly. */
+static int protected_path(const char*path){
+ while(*path=='/')path++;
+ char up[16];unsigned n=0;
+ for(;path[n]&&n<15;n++){char c=path[n];if(c=='/')return 0;up[n]=(c>='a'&&c<='z')?(char)(c-32):c;}
+ if(path[n])return 0;
+ up[n]=0;
+ static const char*const names[]={"ACCOUNT.DAT","SLOP0.CFG","SLOP1.CFG"};
+ for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);i++)if(equal(up,names[i]))return 1;
+ return n>=8&&up[0]=='S'&&up[1]=='L'&&up[2]=='P'&&equal(up+n-4,".TMP");
+}
+int process_exit_info(unsigned pid,int*crashed,unsigned*fault){
+ for(unsigned i=0;i<PROCESSES;i++)if(tasks[i].pid==pid&&tasks[i].state==EXITED){*crashed=tasks[i].crashed;*fault=tasks[i].fault;return 1;}
  return 0;
 }
 static int64_t syscall(struct process*p){
@@ -209,6 +240,7 @@ static int64_t syscall(struct process*p){
  }
  case SX_OPEN:{
   char name[128];if(!copy_name(p,a,name))return -14;
+  if(protected_path(name))return -13; /* EACCES */
   uint32_t size;int directory;
   if(!vfs_stat(name,&size,&directory))return -2;   /* ENOENT */
   if(directory)return -21;                          /* EISDIR */
@@ -261,15 +293,18 @@ static int64_t syscall(struct process*p){
  }
  case SX_READDIR:{
   char path[128];if(!copy_name(p,a,path))return -14;
-  if(!c||c>SX_DIR_MAX||!user_vm_range(&p->vm,b,(size_t)c*sizeof(struct sx_dirent),1))return -14;
-  entry_count=0;
+  /* rdx = count | offset<<16 (B-11): callers page through big directories. */
+  unsigned want=(unsigned)(c&0xffffu),skip=(unsigned)((c>>16)&0xffffu);
+  if(!want||want>SX_DIR_MAX||(c>>32)||!user_vm_range(&p->vm,b,(size_t)want*sizeof(struct sx_dirent),1))return -14;
+  entry_count=0;entry_skip=skip;
   if(!vfs_list_path(path,collect_dir))return -5;
-  unsigned count=entry_count<c?entry_count:(unsigned)c;
+  unsigned count=entry_count<want?entry_count:want;
   if(!user_vm_copy(&p->vm,b,entries,count*sizeof(entries[0]),1))return -14;
   return count;
  }
  case SX_REMOVE:case SX_MKDIR:{
   char path[128];if(!copy_name(p,a,path))return -14;
+  if(protected_path(path))return -13; /* EACCES */
   return f->rax==SX_REMOVE?(vfs_remove(path)?0:-5):(vfs_mkdir(path)?0:-5);
  }
  case SX_DESKTOP_OPEN:
@@ -330,6 +365,7 @@ static int64_t syscall(struct process*p){
  case SX_CREATE:{
   if(b>2)return -22; /* 0=create new, 1=create or truncate, 2=open or create, keep contents */
   char name[128];if(!copy_name(p,a,name))return -14;
+  if(protected_path(name))return -13; /* EACCES */
   uint32_t size=0;int directory=0;
   int exists=vfs_stat(name,&size,&directory);
   if(exists&&(directory||!b))return directory?-21:-17;
@@ -366,6 +402,8 @@ static int64_t syscall(struct process*p){
   if(!user_vm_copy(&p->vm,b,&r,sizeof(r),0))return -14;
   if(r.policy<0||r.policy>POLICY_DEADLINE)return -22;
   if(r.priority<1||(unsigned)r.priority>PRIO_MAX)return -22;
+  /* Ordinary programs may not outrank the default class by much (B-08). */
+  if((unsigned)r.priority>PRIO_USER_MAX)r.priority=(int)PRIO_USER_MAX;
   if(r.policy==POLICY_DEADLINE){
    if(!r.period_ns||!r.runtime_ns||r.runtime_ns>r.period_ns)return -22;
    if(r.deadline_ns>r.period_ns)return -22;
@@ -386,7 +424,8 @@ static int64_t syscall(struct process*p){
    unsigned want=(unsigned)(b&0x7fffffffu);if(!want)want=1;unsigned woke=0;
    for(unsigned i=0;i<PROCESSES&&woke<want;i++){
     struct process*q=&tasks[i];
-    if(q->state==BLOCKED&&q->futex_addr==a){q->state=READY;q->futex_addr=0;q->wake=0;woke++;}
+    /* Same process only (B-09): addresses are per address space. */
+    if(q->state==BLOCKED&&q->futex_addr==a&&q->pid==p->pid){q->state=READY;q->futex_addr=0;q->wake=0;woke++;}
    }
    return (int64_t)woke;
   }
@@ -425,7 +464,8 @@ int process_step(void){
  for(unsigned i=0;i<PROCESSES;i++){
   struct process*q=&tasks[i];
   if(q->state!=BLOCKED)continue;
-  if(q->wake&&now>=q->wake){q->state=READY;q->wake=0;q->futex_addr=0;
+  if(q->wake&&now>=q->wake){if(q->futex_addr)q->frame.rax=(uint64_t)-110; /* futex timed out: ETIMEDOUT, not a wake */
+   q->state=READY;q->wake=0;q->futex_addr=0;
    if(q->policy==POLICY_DEADLINE)q->next_deadline_ns=(now+q->period_ns/1000)*1000;
   }
  }
