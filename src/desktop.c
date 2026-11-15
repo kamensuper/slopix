@@ -326,7 +326,7 @@ void slopde_key(unsigned key) {
     /* Closed/missing user apps have no privileged input handlers. */
 
 }
-void slopde_mouse(int x,int y,int current) {
+static void slopde_mouse_inner(int x,int y,int current) {
     int oldbuttons=buttons;mx=x;my=y;buttons=current;cursor_dirty=1;
     int over=dock_hit(x,y);if(hover!=over){hover=over;dock_damage();}
     {int hw=top_window_at(x,y),hp=hw>=0?(int)part_of(hw,x,y):CHROME_NONE;
@@ -382,7 +382,8 @@ void slopde_mouse(int x,int y,int current) {
             else if(id==DEMO&&y>=cube_area().y+cube_area().h-23&&x>=cube_area().x&&x<cube_area().x+440){slopde_key((unsigned)('1'+(x-cube_area().x)/110));}
             else if(user_app_pid[id]&&part==CHROME_CLIENT){
                 struct chrome_rect cr=chrome_client(b.x,b.y,b.w,b.h);int lx=x-cr.x,ly=y-cr.y;
-                if(lx>=0&&ly>=0)gui_client_mouse(user_app_pid[id],lx,ly,cr.w,cr.h,1);
+                /* Delivered with real button state by forward_pointer(). */
+                (void)lx;(void)ly;
             }
             else if(id>=3&&id<6&&part==CHROME_CLIENT){invalidate(id);}
             else if(part==CHROME_TITLE&&!windows[id].maximized){drag=id;grabx=x-b.x;graby=y-b.y;event(id,"drag-start");}
@@ -409,6 +410,40 @@ void slopde_mouse(int x,int y,int current) {
         event(drag,"drag-end");char n[21];logstr(drag==TERM?"POSITION: ":drag==DEMO?"DEMO_POSITION: ":"DOOM_POSITION: ");
         decimal((unsigned)windows[drag].box.x,n);logstr(n);logstr(",");decimal((unsigned)windows[drag].box.y,n);logstr(n);logstr("\n");int id=drag;drag=-1;if(mx<10)tile(id,2);else if(mx>=(int)width-10)tile(id,3);else if(my<=ui_workarea().y+6)maximize(id);
     }
+}
+
+/* Pointer protocol for Ring-3 apps (fixes SlopUI buttons never firing).
+ * Every move, press and release over the focused window's client area is
+ * forwarded with the real button mask. A press in the client gives that
+ * window pointer capture: until all buttons are released it keeps receiving
+ * events, clamped to its surface, even if the pointer leaves the window.
+ * Without capture, held buttons are reported as 0 so a drag that started on
+ * the desktop or on window chrome can never look like a press to an app. */
+static int pointer_capture=-1;
+static void forward_pointer(int x,int y,int current,int oldbuttons){
+ if(drag>=0||resizing>=0){pointer_capture=-1;return;}
+ int id=-1,clamp=0;
+ if(slopde_win_valid(pointer_capture,APPS)&&windows[pointer_capture].open&&user_app_pid[pointer_capture]){id=pointer_capture;clamp=1;}
+ else{
+  pointer_capture=-1;
+  int top=top_window_at(x,y);
+  if(slopde_win_valid(top,APPS)&&top==focus&&user_app_pid[top]){
+   struct bounds b=windows[top].box;
+   if(chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[top].maximized)==CHROME_CLIENT)id=top;
+  }
+ }
+ if(id<0)return;
+ unsigned press_edge=(unsigned)(current&~oldbuttons)&7u;
+ unsigned report=clamp?(unsigned)current&7u:press_edge?(unsigned)current&7u:0u;
+ struct bounds b=windows[id].box;struct chrome_rect cr=chrome_client(b.x,b.y,b.w,b.h);
+ int delivered=gui_client_pointer(user_app_pid[id],x-cr.x,y-cr.y,cr.w,cr.h,report,clamp);
+ if(delivered&&press_edge)pointer_capture=id;
+ if(!(current&7))pointer_capture=-1;
+}
+void slopde_mouse(int x,int y,int current){
+ int oldbuttons=buttons;
+ slopde_mouse_inner(x,y,current);
+ forward_pointer(x,y,current,oldbuttons);
 }
 
 void slopde_scancode(unsigned code,int ext,int down){
