@@ -10,7 +10,7 @@
 static uint32_t screen[BW*BH];
 static char doc[DOC_CAP+1];
 static struct bh_page page;
-static char address[96]="START.HTM",history[8][96];
+static char address[128]="START.HTM",history[8][128];
 static unsigned history_count,history_index,scroll,edit,dirty=1,selected=BH_MAX_LINES;
 static int address_mode,show_help,replace_address;
 static char error[70];
@@ -49,7 +49,7 @@ static int readfile(const char*name){
  bh_parse(&page,doc,n);return 1;
 }
 static void navigate(const char*name,int record){
- char target[96];cp(target,name,sizeof(target));
+ char target[128];cp(target,name,sizeof(target));
  int remote=prefix(target,"http://");
  if(prefix(target,"https://")){
   cp(error,"HTTPS is unavailable (no TLS/cert validation)",sizeof(error));dirty=1;return;
@@ -97,7 +97,7 @@ static int resolve_link(const char*base,const char*ref,char*out,unsigned cap){
  unsigned at=0;
  for(unsigned i=0;i<hostend;i++)out[at++]=base[i];
  out[at]=0;
- char path[96];unsigned k=0;
+ char path[128];unsigned k=0;
  if(ref[0]=='/'){cp(path,ref,sizeof(path));}
  else {
   unsigned pos=hostend,dir=0;
@@ -113,7 +113,7 @@ static int resolve_link(const char*base,const char*ref,char*out,unsigned cap){
   for(unsigned i=0;i<=n;i++)path[k+i]=ref[i];
  }
  /* Normalize literal dot segments, without percent-decoding URI path data. */
- char clean[96];unsigned w=0,pos=0;
+ char clean[128];unsigned w=0,pos=0;
  while(path[pos]&&path[pos]!='?'&&path[pos]!='#'){
   while(path[pos]=='/')pos++;
   if(!path[pos]||path[pos]=='?'||path[pos]=='#')break;
@@ -137,7 +137,7 @@ static int resolve_link(const char*base,const char*ref,char*out,unsigned cap){
 }
 static void follow_link(void){
  if(selected>=page.count||!page.lines[selected].href[0])return;
- char link[96];if(!resolve_link(address,page.lines[selected].href,link,sizeof(link))){
+ char link[128];if(!resolve_link(address,page.lines[selected].href,link,sizeof(link))){
   cp(error,"Unsupported or oversized hyperlink",sizeof(error));dirty=1;return;
  }navigate(link,1);
 }

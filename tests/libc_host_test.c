@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include "syscall.h"
@@ -633,6 +634,24 @@ static void test_argv(void) {
     CHECK(argc >= 2 && strlen(argv[1]) <= 5);
 }
 
+static void test_strtol(void) {
+    /* B-22: overflow saturates with ERANGE instead of wrapping. */
+    errno = 0;
+    CHECK(strtol("99999999999999999999", NULL, 10) == LONG_MAX && errno == ERANGE);
+    errno = 0;
+    CHECK(strtol("-99999999999999999999", NULL, 10) == LONG_MIN && errno == ERANGE);
+    errno = 0;
+    CHECK(strtol("-9223372036854775808", NULL, 10) == LONG_MIN && errno == 0);
+    CHECK(strtol("9223372036854775807", NULL, 10) == LONG_MAX);
+    char *end;
+    CHECK(strtol("  -42xyz", &end, 10) == -42 && *end == 'x');
+    CHECK(strtol("0x1F", NULL, 0) == 31 && strtol("017", NULL, 0) == 15);
+    CHECK(strtol("abc", &end, 10) == 0 && strcmp(end, "abc") == 0);
+    CHECK(strtoul("-1", NULL, 10) == ULONG_MAX);
+    errno = 0;
+    CHECK(strtoul("99999999999999999999999", NULL, 10) == ULONG_MAX && errno == ERANGE);
+}
+
 static void test_console(void) {
     printf("console-line\n");
     CHECK(console_len > 0);
@@ -651,6 +670,7 @@ int main(void) {
     test_files();
     test_file_modes();
     test_argv();
+    test_strtol();
     test_sched_and_clock();
     test_console();
 

@@ -46,3 +46,24 @@ Pass/fail comes from the step exit codes reported by GitHub; the uploaded log ar
 ## Known risks in this round
 - ABI: `SX_CREATE` mode 2 is new; old binaries are unaffected. The initial user `rsp` moved from USER_STACK-8 to USER_STACK-264 (same 16-byte alignment class).
 - Pointer protocol changes what apps receive: apps now get moves and releases. `sdk/terminal.c` acts on any event with button 1 down; with capture it will now see repeated button-1 moves during a drag (it previously saw one press). Check terminal click behaviour in the first boot.
+
+## Session 2: P2/P3 fixes and polish (unverified until CI runs)
+
+| Item | Change | Files |
+|------|--------|-------|
+| B-07 | Ring-3 programs get EACCES opening, creating, overwriting or removing `ACCOUNT.DAT`, `SLOP0.CFG`, `SLOP1.CFG` and `SLP*.TMP` (root directory, case-insensitive). Kernel-side users (login, Settings via SX_PREF_SAVE, slop install) are unaffected | `src/user/process.c` |
+| B-08 | Unprivileged SX_SCHED_PARAM priority capped at 20 (default 16, max 32). Starvation guard: a runnable task not picked for 100 ms goes next regardless of priority | `src/user/process.c` |
+| B-09 | FUTEX_WAKE only wakes waiters of the calling process; a futex wait that times out now returns -ETIMEDOUT instead of looking like a wake | `src/user/process.c` |
+| B-11 | SX_READDIR takes `count | offset<<16` (old callers unchanged); `sx_readdir_at()` in the SDK; FileSlop pages through up to 128 entries and says so when it stops | `src/user/process.c`, `sdk/slopix.h`, `sdk/files.c` |
+| B-12 | Close button / Alt+F4 send a new `SX_GUI_EVENT_CLOSE` (type 6; 5 stays reserved for RESIZE) and give the app 1.5 s to exit before it is terminated. Reopening during the grace period starts a fresh instance. Terminal, Settings (saves prefs first), FileSlop and SlopFind exit cleanly on CLOSE | `src/desktop.c`, `src/user/gui.c/.h`, `sdk/*.c` |
+| B-42 (part) | Letterbox padding around scaled app surfaces uses the window background colour instead of black bars. Real resize events are still to do | `src/user/gui.c` |
+| Polish | Toast notifications bottom-right: "<App> quit unexpectedly" when an app dies on a CPU fault, "<App> could not start" when launch fails | `src/desktop.c`, `process_exit_info()` in `src/user/process.c` |
+| Polish | Apps act on the left-button press edge (`sx_gui_left_pressed`), so a drag no longer re-triggers clicks now that moves are delivered | `sdk/slopix.h`, `sdk/terminal.c`, `sdk/files.c`, `sdk/find.c` |
+| B-25 | "SlopDE 2" / "Pre-Genesis" labels updated to SlopDE 3 / Slopix 1.0 Genesis (desktop backdrop, login screen, Settings backend picker, terminal banner, backend name in the boot log). The terminal `version` string is unchanged because guest tests check it | `src/desktop.c`, `src/auth.c`, `src/apps.c` |
+| B-17 | Correction: the audit's B-17 was wrong, rollback already removed the failed temp. The real problem was that a leftover `SLP*.TMP` (e.g. after power loss) blocked every install; install now removes stale temps | `src/slop_package.c` |
+| B-18 | Uninstall skips files that are already gone, so a half-failed remove can be retried | `src/slop_package.c` |
+| B-22 | strtol/strtoul saturate with ERANGE, reject bad bases with EINVAL, `strtoul("-1") == ULONG_MAX`; tests added | `sdk/libc/src/stdlib.c`, `tests/libc_host_test.c` |
+| B-23 | Browser address, target and history buffers 96 -> 128 bytes (matches the kernel URL limit) | `sdk/browser.c` |
+| B-35 | `user_vm_range` with length 0 still requires a mapped address | `src/user/vm.c` |
+
+Still open after session 2: B-10 async HTTP, B-13 compositor, B-31 file handles, real RESIZE events, B-19/B-20/B-34 network hardening, B-21 key eviction when the queue is full, B-24, B-26, B-27, B-28, B-29, B-33, B-36, B-37, B-38, B-43, B-44, B-47.

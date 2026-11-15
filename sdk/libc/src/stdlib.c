@@ -168,22 +168,11 @@ int atoi(const char *nptr) {
     return (int)strtol(nptr, NULL, 10);
 }
 
-long strtol(const char *nptr, char **endptr, int base) {
-    const char *s = nptr;
-    while (*s == ' ' || *s == '\t' || *s == '\n') s++;
-    int neg = 0;
-    if (*s == '-') { neg = 1; s++; }
-    else if (*s == '+') s++;
-    if (base == 0) {
-        if (*s == '0') {
-            if (s[1] == 'x' || s[1] == 'X') { base = 16; s += 2; }
-            else { base = 8; }
-        } else base = 10;
-    } else if (base == 16 && *s == '0' && (s[1] == 'x' || s[1] == 'X')) {
-        s += 2;
-    }
+/* Shared digit parser. Saturates instead of wrapping (B-22): *overflow is
+ * set once the value no longer fits in an unsigned long. */
+static const char *parse_digits(const char *s, int base, unsigned long *out, int *any, int *overflow) {
     unsigned long val = 0;
-    int any = 0;
+    *any = 0; *overflow = 0;
     while (*s) {
         int digit;
         if (*s >= '0' && *s <= '9') digit = *s - '0';
@@ -191,41 +180,53 @@ long strtol(const char *nptr, char **endptr, int base) {
         else if (*s >= 'A' && *s <= 'Z') digit = *s - 'A' + 10;
         else break;
         if (digit >= base) break;
-        val = val * base + digit;
-        any = 1;
+        if (val > (ULONG_MAX - (unsigned long)digit) / (unsigned long)base) *overflow = 1;
+        else val = val * (unsigned long)base + (unsigned long)digit;
+        *any = 1;
         s++;
     }
+    *out = val;
+    return s;
+}
+
+static const char *parse_prefix(const char *s, int *base, int *neg) {
+    while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == '\v' || *s == '\f') s++;
+    *neg = 0;
+    if (*s == '-') { *neg = 1; s++; }
+    else if (*s == '+') s++;
+    if (*base == 0) {
+        if (*s == '0') {
+            if (s[1] == 'x' || s[1] == 'X') { *base = 16; s += 2; }
+            else *base = 8;
+        } else *base = 10;
+    } else if (*base == 16 && *s == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        s += 2;
+    }
+    return s;
+}
+
+long strtol(const char *nptr, char **endptr, int base) {
+    int neg, any, overflow;
+    unsigned long val;
+    const char *s = parse_prefix(nptr, &base, &neg);
+    if (base < 2 || base > 36) { if (endptr) *endptr = (char *)nptr; __set_errno(-EINVAL); return 0; }
+    s = parse_digits(s, base, &val, &any, &overflow);
     if (endptr) *endptr = (char *)(any ? s : nptr);
-    if (neg) val = -val;
+    unsigned long limit = neg ? (unsigned long)LONG_MAX + 1ul : (unsigned long)LONG_MAX;
+    if (overflow || val > limit) { __set_errno(-ERANGE); return neg ? LONG_MIN : LONG_MAX; }
+    if (neg) return val == limit ? LONG_MIN : -(long)val;
     return (long)val;
 }
 
 unsigned long strtoul(const char *nptr, char **endptr, int base) {
-    const char *s = nptr;
-    while (*s == ' ' || *s == '\t' || *s == '\n') s++;
-    if (base == 0) {
-        if (*s == '0') {
-            if (s[1] == 'x' || s[1] == 'X') { base = 16; s += 2; }
-            else { base = 8; }
-        } else base = 10;
-    } else if (base == 16 && *s == '0' && (s[1] == 'x' || s[1] == 'X')) {
-        s += 2;
-    }
-    unsigned long val = 0;
-    int any = 0;
-    while (*s) {
-        int digit;
-        if (*s >= '0' && *s <= '9') digit = *s - '0';
-        else if (*s >= 'a' && *s <= 'z') digit = *s - 'a' + 10;
-        else if (*s >= 'A' && *s <= 'Z') digit = *s - 'A' + 10;
-        else break;
-        if (digit >= base) break;
-        val = val * base + digit;
-        any = 1;
-        s++;
-    }
+    int neg, any, overflow;
+    unsigned long val;
+    const char *s = parse_prefix(nptr, &base, &neg);
+    if (base < 2 || base > 36) { if (endptr) *endptr = (char *)nptr; __set_errno(-EINVAL); return 0; }
+    s = parse_digits(s, base, &val, &any, &overflow);
     if (endptr) *endptr = (char *)(any ? s : nptr);
-    return val;
+    if (overflow) { __set_errno(-ERANGE); return ULONG_MAX; }
+    return neg ? 0ul - val : val;   /* C semantics: strtoul("-1") == ULONG_MAX */
 }
 
 /* Simple RNG */
