@@ -59,6 +59,7 @@ static void free_file(FILE *f) {
  * are retried so the caller never sees a silent truncation. */
 static int raw_write(FILE *f, const char *buf, size_t n) {
     size_t done = 0;
+    unsigned retries = 0;
     while (done < n) {
         size_t chunk = n - done;
         size_t limit = (f->flags & FLAG_CONSOLE) ? CONSOLE_CHUNK : 4096u;
@@ -66,6 +67,13 @@ static int raw_write(FILE *f, const char *buf, size_t n) {
         long r = (f->flags & FLAG_CONSOLE)
             ? syscall3(SX_WRITE, (long)(buf + done), (long)chunk, 0)
             : syscall3(SX_FWRITE, f->fd, (long)(buf + done), (long)chunk);
+        if (r == -EAGAIN && (f->flags & FLAG_CONSOLE) && retries < 200) {
+            /* The kernel rate-limits console output; wait instead of
+             * silently dropping the rest of the line. */
+            retries++;
+            syscall1(SX_SLEEP, 10000);
+            continue;
+        }
         if (r <= 0) {
             if (r < 0) { f->flags |= FLAG_ERR; __set_errno(r); }
             return -1;
@@ -100,24 +108,43 @@ static int fill_buffer(FILE *f) {
     return 0;
 }
 
-FILE *fopen(const char *path, const char *mode) {
-    int flags;
-    if (mode[0] == 'r') flags = FLAG_READ | (mode[1] == '+' ? FLAG_WRITE : 0);
-    else if (mode[0] == 'w') flags = FLAG_WRITE | (mode[1] == '+' ? FLAG_READ : 0);
-    else if (mode[0] == 'a') flags = FLAG_WRITE | (mode[1] == '+' ? FLAG_READ : 0);
-    else { __set_errno(-EINVAL); return NULL; }
+/* SX_CREATE modes: 0 = create a new file and fail if it exists,
+ * 1 = create or truncate, 2 = open or create and keep the contents. */
+#define SX_CREATE_NEW      0
+#define SX_CREATE_TRUNCATE 1
+#define SX_CREATE_KEEP     2
 
-    int fd;
-    if (flags & FLAG_READ) {
-        long r = syscall1(SX_OPEN, (long)path);
-        if (r < 0) { __set_errno(r); return NULL; }
-        fd = (int)r;
-    } else {
-        long r = syscall2(SX_CREATE, (long)path, (mode[0] == 'w'));
-        if (r < 0) { __set_errno(r); return NULL; }
-        fd = (int)r;
-        if (mode[0] == 'a') syscall2(SX_SEEK, fd, 0x7fffffff);
+/* Position a freshly opened descriptor at end of file (append modes). */
+static void seek_to_end(int fd, const char *path) {
+    uint32_t size = 0;
+    if (syscall2(SX_STAT, (long)path, (long)&size) >= 0) syscall2(SX_SEEK, fd, (long)size);
+}
+
+FILE *fopen(const char *path, const char *mode) {
+    if (!path || !mode) { __set_errno(-EINVAL); return NULL; }
+    int plus = strchr(mode, '+') != NULL;   /* "rb+", "r+b", "w+" ... */
+    int flags;
+    long r;
+    switch (mode[0]) {
+    case 'r':
+        flags = FLAG_READ | (plus ? FLAG_WRITE : 0);
+        r = syscall1(SX_OPEN, (long)path);
+        break;
+    case 'w':
+        flags = FLAG_WRITE | (plus ? FLAG_READ : 0);
+        r = syscall2(SX_CREATE, (long)path, SX_CREATE_TRUNCATE);
+        break;
+    case 'a':
+        flags = FLAG_WRITE | (plus ? FLAG_READ : 0);
+        r = syscall2(SX_CREATE, (long)path, SX_CREATE_KEEP);
+        break;
+    default:
+        __set_errno(-EINVAL);
+        return NULL;
     }
+    if (r < 0) { __set_errno(r); return NULL; }
+    int fd = (int)r;
+    if (mode[0] == 'a') seek_to_end(fd, path);
 
     FILE *f = alloc_file(fd, flags | FLAG_BUF);
     if (!f) { syscall1(SX_CLOSE, fd); __set_errno(-ENOMEM); return NULL; }
@@ -445,18 +472,22 @@ FILE *fdopen(int fd, const char *mode) {
 /* Descriptor space is disjoint by construction: 0..2 are console channels and
  * 10..13 are per-process file slots, so no call is ambiguous. */
 int open(const char *path, int flags, ...) {
-    int fd;
+    long r;
     if (flags & O_CREAT) {
-        int truncate = (flags & O_TRUNC) || (flags & O_WRONLY) || !(flags & O_RDWR);
-        long r = syscall2(SX_CREATE, (long)path, truncate);
-        if (r < 0) { __set_errno(r); return -1; }
-        fd = (int)r;
+        /* Only O_TRUNC truncates. O_WRONLY|O_CREAT|O_APPEND used to wipe the
+         * file it was meant to append to. */
+        long mode = (flags & O_TRUNC) ? SX_CREATE_TRUNCATE
+                  : (flags & O_EXCL) ? SX_CREATE_NEW : SX_CREATE_KEEP;
+        r = syscall2(SX_CREATE, (long)path, mode);
+    } else if ((flags & O_TRUNC) && (flags & (O_WRONLY | O_RDWR))) {
+        r = syscall1(SX_OPEN, (long)path);          /* must already exist */
+        if (r >= 0) { syscall1(SX_CLOSE, r); r = syscall2(SX_CREATE, (long)path, SX_CREATE_TRUNCATE); }
     } else {
-        long r = syscall1(SX_OPEN, (long)path);
-        if (r < 0) { __set_errno(r); return -1; }
-        fd = (int)r;
+        r = syscall1(SX_OPEN, (long)path);
     }
-    if (flags & O_APPEND) syscall2(SX_SEEK, fd, 0x7fffffff);
+    if (r < 0) { __set_errno(r); return -1; }
+    int fd = (int)r;
+    if (flags & O_APPEND) seek_to_end(fd, path);
     return fd;
 }
 

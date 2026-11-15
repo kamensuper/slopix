@@ -2,35 +2,78 @@
 #include "stdlib.h"
 #include "string.h"
 #include "limits.h"
+#include "errno.h"
+#include "stdio.h"
 
-/* Simple bump allocator with free list */
-#define ALIGN_UP(x, a) (((x) + (a) - 1) & ~((a) - 1))
+/* First-fit free-list allocator over pages obtained with SX_MAP.
+ *
+ * Invariants:
+ *  - every block, free or in use, starts with a 16-byte free_block_t header
+ *    whose size field is the usable byte count (a multiple of 16);
+ *  - the free list is address ordered and its blocks never overlap;
+ *  - the heap grows on demand. The kernel grants at most 8 pages per SX_MAP
+ *    call, so growth maps in 8-page chunks; each chunk is published as a free
+ *    block and merges with its neighbour when the addresses are contiguous.
+ *  - total heap is bounded by HEAP_MAX_BYTES so a runaway loop fails with
+ *    ENOMEM instead of exhausting the machine. */
+#define ALIGN_UP(x, a) (((x) + (a) - 1) & ~((size_t)(a) - 1))
 #define MIN_ALLOC 16
-#define MAX_HEAP_PAGES 8
+#define MAP_CHUNK_PAGES 8
+#define HEAP_MAX_BYTES (64u * 1024u * 1024u)
 
 typedef struct free_block {
     size_t size;
     struct free_block *next;
 } free_block_t;
+#define HDR sizeof(free_block_t)
+_Static_assert(sizeof(free_block_t) == 16, "allocator header must keep 16-byte alignment");
 
-static char *heap_base = NULL;
-static char *heap_limit = NULL;
+static char *heap_base = NULL;   /* lowest mapped heap address */
+static char *heap_limit = NULL;  /* one past the highest mapped heap byte */
 static free_block_t *free_list = NULL;
-static int heap_initialized = 0;
 
-static void heap_init(void) {
-    if (heap_initialized) return;
-    heap_base = (char *)syscall1(SX_MAP, MAX_HEAP_PAGES);
-    if ((long)heap_base < 0) {
-        heap_base = NULL;
-        heap_limit = NULL;
-        return;
+/* Address-ordered insertion with coalescing on both sides. */
+static void insert_free(free_block_t *block) {
+    free_block_t *before = NULL;
+    free_block_t *after = free_list;
+    while (after && (char *)after < (char *)block) {
+        before = after;
+        after = after->next;
     }
-    heap_limit = heap_base + MAX_HEAP_PAGES * 4096;
-    free_list = (free_block_t *)heap_base;
-    free_list->size = MAX_HEAP_PAGES * 4096 - sizeof(free_block_t);
-    free_list->next = NULL;
-    heap_initialized = 1;
+    block->next = after;
+    if (before) before->next = block;
+    else free_list = block;
+    if (after && (char *)block + HDR + block->size == (char *)after) {
+        block->size += HDR + after->size;
+        block->next = after->next;
+    }
+    if (before && (char *)before + HDR + before->size == (char *)block) {
+        before->size += HDR + block->size;
+        before->next = block->next;
+    }
+}
+
+/* Map enough new pages for a request of `bytes` usable bytes. */
+static int heap_grow(size_t bytes) {
+    if (bytes > HEAP_MAX_BYTES) return 0;
+    size_t want = ALIGN_UP(bytes + HDR, 4096), got = 0;
+    while (got < want) {
+        size_t mapped = heap_base ? (size_t)(heap_limit - heap_base) : 0;
+        if (mapped >= HEAP_MAX_BYTES) break;
+        size_t pages = (want - got) / 4096;
+        if (pages > MAP_CHUNK_PAGES) pages = MAP_CHUNK_PAGES;
+        long r = syscall1(SX_MAP, (long)pages);
+        if (r <= 0) break;
+        char *chunk = (char *)r;
+        size_t len = pages * 4096u;
+        if (!heap_base || chunk < heap_base) heap_base = chunk;
+        if (!heap_limit || chunk + len > heap_limit) heap_limit = chunk + len;
+        free_block_t *b = (free_block_t *)chunk;
+        b->size = len - HDR;
+        insert_free(b);
+        got += len;
+    }
+    return got >= want;
 }
 
 static free_block_t **find_free(size_t size) {
@@ -42,73 +85,53 @@ static free_block_t **find_free(size_t size) {
     return NULL;
 }
 
-static void *split_block(free_block_t **prev, size_t size) {
+/* Remove a block from the free list, splitting off the tail only when the
+ * remainder can hold a header plus a minimum allocation. An exact or near
+ * fit hands out the whole block (this used to underflow and corrupt the heap). */
+static void *take_block(free_block_t **prev, size_t size) {
     free_block_t *block = *prev;
-    size_t remaining = block->size - size - sizeof(free_block_t);
-    if (remaining >= MIN_ALLOC) {
-        free_block_t *new_block = (free_block_t *)((char *)block + sizeof(free_block_t) + size);
-        new_block->size = remaining;
-        new_block->next = block->next;
+    if (block->size >= size + HDR + MIN_ALLOC) {
+        free_block_t *rest = (free_block_t *)((char *)block + HDR + size);
+        rest->size = block->size - size - HDR;
+        rest->next = block->next;
         block->size = size;
-        block->next = new_block;
+        *prev = rest;
+    } else {
+        *prev = block->next;
     }
-    *prev = block->next;
-    return (char *)block + sizeof(free_block_t);
+    block->next = NULL;
+    return (char *)block + HDR;
 }
 
 void *malloc(size_t size) {
     if (!size) return NULL;
-    heap_init();
-    if (!heap_base) return NULL;
+    if (size > HEAP_MAX_BYTES) { __set_errno(-ENOMEM); return NULL; }
     size = ALIGN_UP(size, 16);
     free_block_t **prev = find_free(size);
-    if (!prev) return NULL;
-    return split_block(prev, size);
+    if (!prev && heap_grow(size)) prev = find_free(size);
+    if (!prev) { __set_errno(-ENOMEM); return NULL; }
+    return take_block(prev, size);
 }
 
 void free(void *ptr) {
-    if (!ptr) return;
-    heap_init();
-    if (!heap_base || !heap_limit) return;
-
-    /* Ignore pointers that do not belong to this heap instead of corrupting
+    if (!ptr || !heap_base) return;
+    /* Ignore pointers that cannot belong to this heap instead of corrupting
      * the list: a bad free must never take the whole process down. */
     char *p = (char *)ptr;
-    if (p < heap_base + sizeof(free_block_t) || p > heap_limit - MIN_ALLOC) return;
-    free_block_t *block = (free_block_t *)(p - sizeof(free_block_t));
-
-    /* Reject double frees outright. Without this test the list can become
-     * cyclic, which turns every later malloc() into an infinite loop. */
+    if (p < heap_base + HDR || p >= heap_limit || ((size_t)p & 15u)) return;
+    free_block_t *block = (free_block_t *)(p - HDR);
+    if (!block->size || block->size > (size_t)(heap_limit - p)) return;
+    /* Reject double frees, including a pointer that now lies inside a
+     * merged free block; otherwise the list can become cyclic. */
     for (free_block_t *it = free_list; it; it = it->next) {
-        if (it == block) return;
+        if ((char *)block >= (char *)it && (char *)block < (char *)it + HDR + it->size) return;
     }
-
-    /* Address-ordered insertion keeps neighbours adjacent in the list. */
-    free_block_t *before = NULL;
-    free_block_t *after = free_list;
-    while (after && (char *)after < (char *)block) {
-        before = after;
-        after = after->next;
-    }
-    block->next = after;
-    if (before) before->next = block;
-    else free_list = block;
-
-    /* Merge with the block that follows in memory. */
-    if (after && (char *)block + sizeof(free_block_t) + block->size == (char *)after) {
-        block->size += sizeof(free_block_t) + after->size;
-        block->next = after->next;
-    }
-    /* Merge with the block that precedes in memory. */
-    if (before && (char *)before + sizeof(free_block_t) + before->size == (char *)block) {
-        before->size += sizeof(free_block_t) + block->size;
-        before->next = block->next;
-    }
+    insert_free(block);
 }
 
 void *calloc(size_t nmemb, size_t size) {
     size_t total = nmemb * size;
-    if (nmemb && total / nmemb != size) return NULL;
+    if (nmemb && total / nmemb != size) { __set_errno(-ENOMEM); return NULL; }
     void *ptr = malloc(total);
     if (ptr) memset(ptr, 0, total);
     return ptr;
@@ -117,10 +140,9 @@ void *calloc(size_t nmemb, size_t size) {
 void *realloc(void *ptr, size_t size) {
     if (!ptr) return malloc(size);
     if (!size) { free(ptr); return NULL; }
-    /* Could implement in-place grow/shrink, but for now just alloc+copy+free */
-    free_block_t *block = (free_block_t *)((char *)ptr - sizeof(free_block_t));
+    free_block_t *block = (free_block_t *)((char *)ptr - HDR);
     size_t old_size = block->size;
-    if (old_size >= size) return ptr;
+    if (ALIGN_UP(size, 16) <= old_size) return ptr;
     void *new_ptr = malloc(size);
     if (!new_ptr) return NULL;
     memcpy(new_ptr, ptr, old_size);
@@ -130,6 +152,8 @@ void *realloc(void *ptr, size_t size) {
 
 void exit(int status) __attribute__((noreturn));
 void exit(int status) {
+    /* Buffered output written without a trailing newline used to vanish. */
+    fflush(NULL);
     syscall1(SX_EXIT, status);
     __builtin_unreachable();
 }
@@ -232,24 +256,36 @@ static void swap(char *a, char *b, size_t size) {
     }
 }
 
-static void qsort_rec(char *base, size_t nmemb, size_t size,
+/* Heap sort: O(n log n) worst case, no recursion, no allocation, and it
+ * never keeps a pointer to an element that a swap can move (the old
+ * quicksort compared against a pivot pointer and returned unsorted data). */
+static void sift_down(char *base, size_t root, size_t end, size_t size,
                       int (*compar)(const void *, const void *)) {
-    if (nmemb <= 1) return;
-    char *pivot = base + (nmemb / 2) * size;
-    size_t i = 0, j = nmemb - 1;
-    while (i <= j) {
-        while (compar(base + i * size, pivot) < 0) i++;
-        while (compar(base + j * size, pivot) > 0) j--;
-        if (i <= j) { swap(base + i * size, base + j * size, size); i++; if (j) j--; }
+    for (;;) {
+        size_t child = 2 * root + 1;
+        if (child >= end) return;
+        if (child + 1 < end && compar(base + child * size, base + (child + 1) * size) < 0) child++;
+        if (compar(base + root * size, base + child * size) >= 0) return;
+        swap(base + root * size, base + child * size, size);
+        root = child;
     }
-    if (j > 0) qsort_rec(base, j + 1, size, compar);
-    if (i < nmemb) qsort_rec(base + i * size, nmemb - i, size, compar);
 }
 
-void qsort(void *base, size_t nmemb, size_t size,
+void qsort(void *array, size_t nmemb, size_t size,
            int (*compar)(const void *, const void *)) {
-    qsort_rec(base, nmemb, size, compar);
+    char *base = (char *)array;
+    if (!base || nmemb < 2 || !size || !compar) return;
+    if (nmemb <= 16) {
+        for (size_t i = 1; i < nmemb; i++)
+            for (size_t j = i; j > 0 && compar(base + (j - 1) * size, base + j * size) > 0; j--)
+                swap(base + (j - 1) * size, base + j * size, size);
+        return;
+    }
+    for (size_t i = nmemb / 2; i-- > 0;) sift_down(base, i, nmemb, size, compar);
+    for (size_t end = nmemb - 1; end > 0; end--) {
+        swap(base, base + end * size, size);
+        sift_down(base, 0, end, size, compar);
+    }
 }
 
 char *getenv(const char *name) { (void)name; return NULL; }
-int system(const char *command) { (void)command; return -1; }
