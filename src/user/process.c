@@ -164,7 +164,7 @@ static int spawn_with_arg(const char*path,uint64_t arg,const char*text_arg){
  uint32_t size=0,got=0;int directory=0;
  if(!vfs_stat(path,&size,&directory)||directory||size>sizeof(image)||size<64||!vfs_read_at(path,0,image,size,&got)||got!=size){logstr("USER_LOAD: missing, oversized or unreadable ELF\n");return -1;}
  uint64_t entry;if(!user_vm_create(&p->vm)||!user_elf_load(&p->vm,image,size,&entry)){user_vm_destroy(&p->vm);logstr("USER_LOAD: invalid/unsupported ELF or allocation failure\n");return -1;}
- p->pid=next_pid++;p->frame=(struct user_frame){.rdi=arg,.rip=entry,.cs=0x23,.flags=0x202,.rsp=USER_STACK-8,.ss=0x1b};
+ p->pid=next_pid++;p->frame=(struct user_frame){.rdi=arg,.rip=entry,.cs=0x23,.flags=0x202,.rsp=USER_STACK-264,.ss=0x1b} /* the 256 bytes above rsp hold the command-line text */;
  p->priority=PRIO_DEFAULT;p->policy=POLICY_OTHER;
  if(text_arg){size_t n=length(text_arg);if(n>127||!user_vm_copy(&p->vm,USER_STACK-256,(void*)text_arg,n+1,1)){user_vm_destroy(&p->vm);return -1;}p->frame.rsi=USER_STACK-256;}
  copystr(p->name,path,sizeof(p->name));user_fp_init(p->fp);p->state=READY;message("PROCESS_CREATED pid=",p->pid,p->vm.count+USER_TABLES);return (int)p->pid;
@@ -179,7 +179,7 @@ static int64_t syscall(struct process*p){
  switch(f->rax){
  case SX_WRITE:{
   if(b>127||!user_vm_copy(&p->vm,a,io,(size_t)b,0))return -14;
-  uint64_t second=timer_us()/1000000;if(second!=p->quota_epoch){p->quota_epoch=second;p->printed=0;}if(b>512-p->printed)return -11;
+  uint64_t second=timer_us()/1000000;if(second!=p->quota_epoch){p->quota_epoch=second;p->printed=0;}if(b>16384-p->printed)return -11; /* 16 KiB/s per process; libc retries on EAGAIN */
   p->printed+=(unsigned)b;console_write(p,(const char*)io,(unsigned)b);return (int64_t)b;
  }
  case SX_EXIT:exit_process(p,(int)(uint32_t)a,-1);return 0;
@@ -328,16 +328,17 @@ static int64_t syscall(struct process*p){
   return count;
  }
  case SX_CREATE:{
-  if(b>1)return -22;
+  if(b>2)return -22; /* 0=create new, 1=create or truncate, 2=open or create, keep contents */
   char name[128];if(!copy_name(p,a,name))return -14;
   uint32_t size=0;int directory=0;
   int exists=vfs_stat(name,&size,&directory);
   if(exists&&(directory||!b))return directory?-21:-17;
   unsigned slot=0;while(slot<FD_MAX&&p->files[slot].used)slot++;
   if(slot==FD_MAX)return -24;
-  if(!vfs_write(name,0,0))return -5;
+  int keep=b==2&&exists;
+  if(!keep&&!vfs_write(name,0,0))return -5;
   copystr(p->files[slot].name,name,sizeof(p->files[slot].name));
-  p->files[slot].offset=0;p->files[slot].used=1;return (int64_t)(FD_BASE+slot);
+  p->files[slot].offset=0;p->files[slot].size=keep?size:0;p->files[slot].used=1;return (int64_t)(FD_BASE+slot);
  }
  case SX_FWRITE:{
   if(a<FD_BASE||a>=FD_BASE+FD_MAX||!p->files[a-FD_BASE].used)return -9;
@@ -347,7 +348,7 @@ static int64_t syscall(struct process*p){
   if(c>UINT32_MAX-file->offset)return -27;
   if(!user_vm_copy(&p->vm,b,io,(size_t)c,0))return -14;
   if(!vfs_write_at(file->name,file->offset,io,(uint32_t)c))return -5;
-  file->offset+=(uint32_t)c;return (int64_t)c;
+  file->offset+=(uint32_t)c;if(file->offset>file->size)file->size=file->offset;return (int64_t)c;
  }
  case SX_SEEK:{
   if(a<FD_BASE||a>=FD_BASE+FD_MAX||!p->files[a-FD_BASE].used)return -9;

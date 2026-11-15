@@ -469,7 +469,7 @@ build/libc-host-test: tests/libc_host_test.c $(wildcard sdk/libc/src/*.c) $(wild
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -DSLOPIX_HOST -fno-builtin -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
 	  -I sdk/libc/include \
 	  tests/libc_host_test.c \
-	  sdk/libc/src/stdlib.c sdk/libc/src/string.c sdk/libc/src/stdio.c sdk/libc/src/errno.c \
+	  sdk/libc/src/stdlib.c sdk/libc/src/string.c sdk/libc/src/stdio.c sdk/libc/src/errno.c sdk/libc/src/args.c \
 	  -o $@
 
 libc-host-test: build/libc-host-test
