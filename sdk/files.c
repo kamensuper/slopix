@@ -17,7 +17,9 @@ static void refresh(void){int64_t n=0;count=0;
  for(;;){unsigned want=FILES_MAX-count;if(want>48)want=48;if(!want)break;n=sx_readdir_at(cwd,entries+count,want,count);if(n<0)break;count+=(unsigned)n;if((unsigned)n<want)break;}
  if(n<0&&!count)info("Cannot list FAT32 path");
  else info(count>=FILES_MAX?"Showing the first 128 entries":"Enter open | N new | M mkdir | D delete");
- if(selected>=count)selected=0;if(top>selected)top=selected;}
+ if(selected>=count)selected=0;
+ if(top>selected)top=selected;
+}
 static void open_selected(void){if(selected>=count)return;struct sx_dirent *e=&entries[selected];join(e->name,selected_path);
  if(e->directory){gc(cwd,selected_path,sizeof(cwd));selected=top=0;refresh();return;}
  int64_t fd=sx_open(selected_path);if(fd<0){info("File could not be opened");return;}
