@@ -6,6 +6,8 @@
  *
  * Build: make libc-host-test
  */
+/* MAP_ANONYMOUS is not part of strict C11/POSIX; expose it explicitly. */
+#define _DEFAULT_SOURCE
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
