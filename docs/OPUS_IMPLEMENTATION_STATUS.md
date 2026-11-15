@@ -9,7 +9,18 @@ Status words: **verified** = a build or test actually ran and passed; **unverifi
 - The agent's shell (Hyper desktop app under Wine/Bottles) has git but no C compiler, make, Python or QEMU. It cannot build or boot Slopix.
 - All compilation and testing therefore happens in GitHub Actions (`.github/workflows/ci.yml`). Nothing below is verified until that workflow has run on this branch.
 
-## Done in session 1 (all unverified until CI runs)
+## CI results (GitHub Actions, run on this branch)
+
+| Commit | What | Build | libc host | SlopDE host | runtime | sdk check | QEMU boot |
+|--------|------|-------|-----------|-------------|---------|-----------|-----------|
+| `02f4e87` | baseline SlopDE 3 + CI only | pass | pass | pass | pass | pass | pass |
+| `e804245` | libc half of a split commit | **fail** (expected: args.c not yet in the libc Makefile) | pass | pass | pass | pass | pass |
+| `b548d94` | all libc + kernel fixes and tests | pass | pass | pass | pass | pass | pass |
+| `31f9447` | + SlopDE pointer protocol + docs | pass | pass | pass | pass | pass | pass |
+
+Pass/fail comes from the step exit codes reported by GitHub; the uploaded log artifacts were not read. The QEMU boot test proves the kernel reaches INTERACTIVE_DESKTOP_READY with no disk; it does not exercise the mouse, so B-03 is **built and boots, behaviour unverified**. The libc items are **verified** by the host test that ran in CI.
+
+## Done in session 1
 
 | Item | Change | Files |
 |------|--------|-------|
