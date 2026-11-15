@@ -115,6 +115,7 @@ __attribute__((noreturn)) void _start(void) {
     for (;;) {
         uint64_t e;
         while ((e = sx_gui_poll())) {
+            if (sx_gui_event_type(e) == SX_GUI_EVENT_CLOSE) { sx_pref_save(); sx_exit(0); }
             if (sx_gui_event_type(e) == SX_GUI_EVENT_KEY && shortcut((unsigned)e)) continue;
             if (sui_feed_sx(&ui, e)) build(0);
         }

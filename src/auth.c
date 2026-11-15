@@ -107,7 +107,7 @@ static void screen_background(void){
  roundbox(w/2-450,h/2+130,780,200,100,0x1eb99d,28);
  for(int i=0;i<6;i++){rect(0,h-100+i*10,w,10,blend(0x15354c,0x07152b,(unsigned)i*38));}
  text(28,20,"SLOPIX",0xd5f9ed);
- text(w-230,20,"Pre-Genesis / 0.9",0xc0d5e2);
+ text(w-230,20,"Slopix 1.0 Genesis",0xc0d5e2);
  text(32,h-34,"slopix // the machine is yours",0x94bbca);
 }
 void auth_render(void){

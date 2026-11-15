@@ -112,7 +112,9 @@ static int install(const char*path,const struct pkg*p){
  if(exists(reg)){line("Name already installed or in use; no files replaced");return 0;}
  for(unsigned i=0;i<p->count;i++){
   if(exists(p->files[i].name)){line("Name already installed or in use; no files replaced");return 0;}
-  temporary(tmp,i);if(exists(tmp)){line("Old SLP*.TMP exists; remove it after checking interrupted install");return 0;}
+  /* A staging file left by an interrupted install is ours (apps cannot create
+   * SLP*.TMP); clean it up instead of blocking every future install (B-17). */
+  temporary(tmp,i);if(exists(tmp)&&!vfs_remove(tmp)){line("Stale SLP*.TMP from an interrupted install could not be removed");return 0;}
  }
  unsigned staged=0,moved=0;int ok=1;
  for(unsigned i=0;i<p->count&&ok;i++){
@@ -160,11 +162,13 @@ int slop_package_command(const char *command,char*args,void (*out)(const char*))
   if(!manifest(reg,&p,1)||!eql(p.name,args)){line("Not a valid registered Slop package");return 1;}
   /* A user may have replaced an installed asset with personal data. Never
    * delete that unrelated data on uninstall. Validate all before deleting any. */
-  for(unsigned i=0;i<p.count;i++)if(!verify_file(p.files[i].name,&p.files[i],0,1)){
-   line("Installed file missing or modified; refusing destructive uninstall");return 1;
+  /* Files already gone (a previous remove failed half way) are skipped, so a
+   * failed uninstall can always be retried (B-18). */
+  for(unsigned i=0;i<p.count;i++)if(exists(p.files[i].name)&&!verify_file(p.files[i].name,&p.files[i],0,1)){
+   line("Installed file was modified; refusing destructive uninstall");return 1;
   }
   int ok=1;
-  for(unsigned i=0;i<p.count;i++)if(!vfs_remove(p.files[i].name))ok=0;
+  for(unsigned i=0;i<p.count;i++)if(exists(p.files[i].name)&&!vfs_remove(p.files[i].name))ok=0;
   if(!ok)line("Could not remove all package files; registration retained for retry");
   else if(!vfs_remove(reg))line("Package files removed; registry cleanup failed");
   else line("Package removed");

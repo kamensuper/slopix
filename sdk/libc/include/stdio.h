@@ -8,7 +8,7 @@
 #define EOF (-1)
 #define BUFSIZ 1024
 #define FILENAME_MAX 128
-#define FOPEN_MAX 4
+#define FOPEN_MAX 8
 
 typedef long off_t;
 typedef long ssize_t;
@@ -86,6 +86,7 @@ int mkdir(const char *path, int mode);
 #define O_CREAT     0x0100
 #define O_TRUNC     0x0200
 #define O_APPEND    0x0400
+#define O_EXCL      0x0800
 
 /* Seek whence */
 #define SEEK_SET 0

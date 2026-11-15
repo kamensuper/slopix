@@ -171,8 +171,9 @@ __attribute__((noreturn)) void _start(void) {
         uint64_t e;
         while ((e = sx_gui_poll())) {
             unsigned t = sx_gui_event_type(e);
+            if (t == SX_GUI_EVENT_CLOSE) sx_exit(0);
             if (t == SX_GUI_EVENT_KEY) key((unsigned)e);
-            else if (t == SX_GUI_EVENT_MOUSE && (sx_gui_mouse_buttons(e) & 1)) click((int)sx_gui_mouse_x(e), (int)sx_gui_mouse_y(e));
+            else if (t == SX_GUI_EVENT_MOUSE) { static unsigned held; if (sx_gui_left_pressed(e, &held)) click((int)sx_gui_mouse_x(e), (int)sx_gui_mouse_y(e)); }
             else if (t == SX_GUI_EVENT_VISIBILITY) dirty = 1;
         }
         for (unsigned i = 0; i < 4; i++) { char line[128]; int64_t got = sx_console_poll(line, sizeof(line) - 1); if (got <= 0) break; line[got] = 0; output(line); }

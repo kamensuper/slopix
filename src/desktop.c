@@ -49,13 +49,49 @@ static int spawn_desktop_gui(const char *name){
  if(!gui_authorize((unsigned)pid)){process_kill((unsigned)pid);return -1;}
  return pid;
 }
+/* Toast notifications: one short message bottom-right above the panel,
+ * shown for a few seconds. Used for crashes and launch failures so a
+ * window never just vanishes without explanation. */
+#define TOAST_US 4500000u
+static char toast_text[96];
+static uint64_t toast_until;
+static struct region toast_rect(void){
+ struct region a=ui_workarea();int w=(int)length(toast_text)*10+44,h=44;
+ if(w>a.w-24)w=a.w-24;
+ return (struct region){a.x+a.w-w-16,a.y+a.h-h-16,w,h};
+}
+static void toast_damage(void){struct region r=toast_rect();damage(r.x-2,r.y-2,r.w+8,r.h+10);}
+static void toast(const char*message){
+ if(toast_text[0])toast_damage();
+ copystr(toast_text,message,sizeof(toast_text));toast_until=timer_us()+TOAST_US;toast_damage();
+}
+static void toast_app(int id,const char*what){
+ char m[96];copystr(m,app_name((unsigned)id),sizeof(m));copystr(m+length(m)," ",sizeof(m)-length(m));
+ copystr(m+length(m),what,sizeof(m)-length(m));toast(m);
+}
+static void toast_step(uint64_t now){if(toast_text[0]&&now>=toast_until){toast_damage();toast_text[0]=0;}}
+static void draw_toast(void){
+ struct region r=toast_rect();
+ roundbox(r.x+2,r.y+4,r.w,r.h,12,0x000000,50);
+ roundbox(r.x,r.y,r.w,r.h,12,prefs.light?0xffffff:0x2b313b,248);
+ roundbox(r.x+12,r.y+12,4,r.h-24,2,prefs.accent,255);
+ text(r.x+26,r.y+12,toast_text,prefs.light?0x1f2833:0xe6eaef);
+}
+/* Closing asks the app to save and exit (SX_GUI_EVENT_CLOSE) and only
+ * terminates it if it is still running after CLOSE_GRACE_US (B-12). */
+#define CLOSE_GRACE_US 1500000u
+static uint64_t close_deadline[APP_COUNT];
 static void app_close_process(int id){
- if(id>=0&&id<APPS&&user_app_pid[id]){
-  unsigned pid=user_app_pid[id];
-  process_kill(pid);
-  user_app_pid[id]=0;
-  logstr("GENESIS_CLOSE: userspace process terminated\n");
+ if(id<0||id>=APPS||!user_app_pid[id])return;
+ unsigned pid=user_app_pid[id];
+ if(!close_deadline[id]&&process_alive(pid)&&gui_active(pid)){
+  process_resume(pid);gui_send_close(pid);close_deadline[id]=timer_us()+CLOSE_GRACE_US;
+  logstr("GENESIS_CLOSE: close requested\n");return;
  }
+ if(close_deadline[id]&&timer_us()<close_deadline[id]&&process_alive(pid))return;
+ if(process_alive(pid)){process_kill(pid);logstr("GENESIS_CLOSE: userspace process terminated\n");}
+ else logstr("GENESIS_CLOSE: userspace process exited\n");
+ user_app_pid[id]=0;close_deadline[id]=0;
 }
 static void app_minimize_process(int id){
  if(id>=0&&id<APPS&&user_app_pid[id]){gui_send_visibility(user_app_pid[id],0);process_suspend(user_app_pid[id]);}
@@ -166,7 +202,7 @@ static void backdrop(void){
     char n[21],label[48];decimal(width,n);copystr(label,n,sizeof(label));copystr(label+length(label),"x",sizeof(label)-length(label));
     decimal(height,n);copystr(label+length(label),n,sizeof(label)-length(label));copystr(label+length(label),display_available()?" F12":" fixed",sizeof(label)-length(label));
     text((int)width-400,5,label,0x52536b);
-    text((int)width-310,(int)height-37,"Pre-Genesis / Software Graphics",0xa3acc7);
+    text((int)width-310,(int)height-37,"Slopix 1.0 Genesis",0xa3acc7);
     background_save();
 }
 static void maximize(int id) {
@@ -275,6 +311,7 @@ void slopde_render(void) {
  uint64_t begin=timer_us();audio_step(timer_us());
  for(unsigned i=0;i<damage_count();i++)compose_layer(APPS-1,damage_get(i));
  for(unsigned i=0;i<damage_count();i++){graphics_clip(damage_get(i));ui_shell_overlay();}
+ if(toast_text[0])for(unsigned i=0;i<damage_count();i++){graphics_clip(damage_get(i));draw_toast();}
  uint64_t composed=timer_us();perf_add(P_COMPOSE,composed-begin);present();cursor_present(mx,my);cursor_dirty=0;
  uint64_t done=timer_us();perf_add(P_UPLOAD,done-composed);
  animation_period=anim_pace(animation_period,done-begin);
@@ -303,6 +340,8 @@ void slopde_step(uint64_t now) {
         if(!windows[i].open&&!windows[i].minimized){app_close_process((int)i);continue;}
         if(!process_alive(user_app_pid[i])){
             invalidate((int)i);windows[i].open=0;windows[i].minimized=0;
+            {int crashed=0;unsigned fault=0;if(process_exit_info(user_app_pid[i],&crashed,&fault)&&crashed)toast_app((int)i,"quit unexpectedly");}
+            close_deadline[i]=0;
             user_app_pid[i]=0;dock_damage();event((int)i,"userspace-process-exited");
         }else if(gui_take_dirty(user_app_pid[i])&&windows[i].open)invalidate((int)i);
     }
@@ -311,6 +350,7 @@ void slopde_step(uint64_t now) {
     int above=0;for(int j=0;j<APPS;j++){int id=order[j];if(id==DEMO){above=1;continue;}if(above&&windows[id].open&&contains(windows[id].box,area))visible=0;}
     if(visible&&!cube_active){cube_reset_stats(now);next_frame=0;}
     cube_active=visible;if(!visible)perf_pause(1);
+    toast_step(now);
     fx_step(now);
     focus_step(now);
     if(damage_pending())slopde_render();
@@ -326,7 +366,7 @@ void slopde_key(unsigned key) {
     /* Closed/missing user apps have no privileged input handlers. */
 
 }
-void slopde_mouse(int x,int y,int current) {
+static void slopde_mouse_inner(int x,int y,int current) {
     int oldbuttons=buttons;mx=x;my=y;buttons=current;cursor_dirty=1;
     int over=dock_hit(x,y);if(hover!=over){hover=over;dock_damage();}
     {int hw=top_window_at(x,y),hp=hw>=0?(int)part_of(hw,x,y):CHROME_NONE;
@@ -382,7 +422,8 @@ void slopde_mouse(int x,int y,int current) {
             else if(id==DEMO&&y>=cube_area().y+cube_area().h-23&&x>=cube_area().x&&x<cube_area().x+440){slopde_key((unsigned)('1'+(x-cube_area().x)/110));}
             else if(user_app_pid[id]&&part==CHROME_CLIENT){
                 struct chrome_rect cr=chrome_client(b.x,b.y,b.w,b.h);int lx=x-cr.x,ly=y-cr.y;
-                if(lx>=0&&ly>=0)gui_client_mouse(user_app_pid[id],lx,ly,cr.w,cr.h,1);
+                /* Delivered with real button state by forward_pointer(). */
+                (void)lx;(void)ly;
             }
             else if(id>=3&&id<6&&part==CHROME_CLIENT){invalidate(id);}
             else if(part==CHROME_TITLE&&!windows[id].maximized){drag=id;grabx=x-b.x;graby=y-b.y;event(id,"drag-start");}
@@ -411,6 +452,40 @@ void slopde_mouse(int x,int y,int current) {
     }
 }
 
+/* Pointer protocol for Ring-3 apps (fixes SlopUI buttons never firing).
+ * Every move, press and release over the focused window's client area is
+ * forwarded with the real button mask. A press in the client gives that
+ * window pointer capture: until all buttons are released it keeps receiving
+ * events, clamped to its surface, even if the pointer leaves the window.
+ * Without capture, held buttons are reported as 0 so a drag that started on
+ * the desktop or on window chrome can never look like a press to an app. */
+static int pointer_capture=-1;
+static void forward_pointer(int x,int y,int current,int oldbuttons){
+ if(drag>=0||resizing>=0){pointer_capture=-1;return;}
+ int id=-1,clamp=0;
+ if(slopde_win_valid(pointer_capture,APPS)&&windows[pointer_capture].open&&user_app_pid[pointer_capture]){id=pointer_capture;clamp=1;}
+ else{
+  pointer_capture=-1;
+  int top=top_window_at(x,y);
+  if(slopde_win_valid(top,APPS)&&top==focus&&user_app_pid[top]){
+   struct bounds b=windows[top].box;
+   if(chrome_hit(x,y,b.x,b.y,b.w,b.h,windows[top].maximized)==CHROME_CLIENT)id=top;
+  }
+ }
+ if(id<0)return;
+ unsigned press_edge=(unsigned)(current&~oldbuttons)&7u;
+ unsigned report=clamp?(unsigned)current&7u:press_edge?(unsigned)current&7u:0u;
+ struct bounds b=windows[id].box;struct chrome_rect cr=chrome_client(b.x,b.y,b.w,b.h);
+ int delivered=gui_client_pointer(user_app_pid[id],x-cr.x,y-cr.y,cr.w,cr.h,report,clamp);
+ if(delivered&&press_edge)pointer_capture=id;
+ if(!(current&7))pointer_capture=-1;
+}
+void slopde_mouse(int x,int y,int current){
+ int oldbuttons=buttons;
+ slopde_mouse_inner(x,y,current);
+ forward_pointer(x,y,current,oldbuttons);
+}
+
 void slopde_scancode(unsigned code,int ext,int down){
  if(focus!=DOOM||!windows[DOOM].open)return;
  if(user_app_pid[DOOM])gui_send_scancode(user_app_pid[DOOM],code,ext,down);
@@ -419,11 +494,13 @@ void slopde_scancode(unsigned code,int ext,int down){
 
 void slopde_open_app(unsigned id){
  if(id>=APPS)return;
+ /* Reopening during a close grace period starts a fresh instance. */
+ if(close_deadline[id]&&user_app_pid[id]){process_kill(user_app_pid[id]);user_app_pid[id]=0;close_deadline[id]=0;}
  static const char *const elf_names[APP_COUNT]={"TERM.ELF",0,0,"FIND.ELF","SET.ELF","FILES.ELF",0,0};
  if(elf_names[id]&&!user_app_pid[id]){
   int pid=spawn_desktop_gui(elf_names[id]);
   if(pid>0){user_app_pid[id]=(unsigned)pid;logstr("GENESIS_CP05_RING3_LAUNCHED\n");}
-  else logstr("GENESIS_CP05_RING3_LOAD_FAILED\n");
+  else {toast_app((int)id,"could not start");logstr("GENESIS_CP05_RING3_LOAD_FAILED\n");}
  }
 
  if(id==DOOM && !user_app_pid[DOOM]){
@@ -486,7 +563,7 @@ int slopde_find_focused(void){return focus==3||(focus<0&&ui_shell_overlay_open()
 int slopde_doom_focused(void){return focus==DOOM;}
 
 const struct desktop_backend slopde_backend={
- .name="SlopDE 2",.init=slopde_init,.render=slopde_render,.step=slopde_step,
+ .name="SlopDE 3",.init=slopde_init,.render=slopde_render,.step=slopde_step,
  .mouse=slopde_mouse,.key=slopde_key,.shortcut=slopde_shortcut,
  .resized=slopde_resized,.background_changed=slopde_background_changed,
  .scancode=slopde_scancode,.open_app=slopde_open_app,.open_count=slopde_open_count,

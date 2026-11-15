@@ -1,16 +1,19 @@
 /* Slopix libc startup - _start -> main(argc, argv, envp).
- * The kernel enters at _start with the SX_SPAWN payload in %rdi. */
+ * The kernel enters at _start with the SX_SPAWN payload in %rdi and, when a
+ * command line was given, a pointer to its text in %rsi. */
 #include "syscall.h"
 #include "stdlib.h"
 #include "errno.h"
 
 extern int main(int argc, char **argv, char **envp);
 extern void __libc_init_tls(void);
+extern int __libc_build_argv(uint64_t number, const char *text, char *store, size_t cap,
+                             char **argv, int max_args);
+
+#define MAX_ARGS 32
 
 __attribute__((noreturn, visibility("hidden")))
-void _start(uint64_t arg) {
-    (void)arg;
-
+void _start(uint64_t arg, const char *text) {
     /* Never run libc from Ring 0. */
     unsigned short cs;
     __asm__ volatile("mov %%cs, %0" : "=r"(cs));
@@ -21,27 +24,11 @@ void _start(uint64_t arg) {
 
     __libc_init_tls();
 
-    /* Command lines are not part of ABI v2 yet; the SX_SPAWN payload is
-     * delivered to main() as argv[1] so programs can still branch on it. */
-    char payload[24];
-    char *argv[3];
+    static char arg_store[256];
+    static char *argv[MAX_ARGS + 1];
     char *envp[1] = { 0 };
-    int argc = 1;
-    argv[0] = (char *)"slopix";
-    argv[1] = 0;
-    argv[2] = 0;
-    if (arg) {
-        unsigned i = 0;
-        do { payload[i] = (char)('0' + arg % 10); arg /= 10; } while (arg && i < sizeof(payload) - 1);
-        /* reverse in place */
-        for (unsigned a = 0, b = i; a < b; a++, b--) { char t = payload[a]; payload[a] = payload[b]; payload[b] = t; }
-        payload[i + 1] = 0;
-        argv[1] = payload;
-        argc = 2;
-    }
+    int argc = __libc_build_argv(arg, text, arg_store, sizeof(arg_store), argv, MAX_ARGS + 1);
 
-    int ret = main(argc, argv, envp);
-
-    syscall1(SX_EXIT, ret);
-    __builtin_unreachable();
+    /* exit() flushes stdio; returning from main must not lose buffered text. */
+    exit(main(argc, argv, envp));
 }

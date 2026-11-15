@@ -1,5 +1,6 @@
 /* Standalone search/launcher app, not the old kernel-integrated UI. */
 #include "gui_kit.h"
+static unsigned mouse_held;
 static const char *names[]={"Terminal","3D Demo","DOOM","SlopFind","Settings","FileSlop","SlopBrowse"};
 static char query[48];static unsigned qlen,selection;static int dirty=1;
 static unsigned matches[7],found;
@@ -17,7 +18,7 @@ static void draw(void){gbase("SlopFind / Ring 3");gt(16,52,"Search installed des
  for(unsigned i=0;i<found;i++)gbutton(15,121+i*28,480,names[matches[i]],i==selection);
  gt(18,284,"Enter launch | arrows select",0x466577);gp();dirty=0;}
 __attribute__((noreturn)) void _start(void){if(sx_gui_open(GW,GH)<0)sx_exit(1);refresh();for(;;){
- uint64_t e;while((e=sx_gui_poll())){
+ uint64_t e;while((e=sx_gui_poll())){if(sx_gui_event_type(e)==SX_GUI_EVENT_CLOSE)sx_exit(0);
  if(sx_gui_event_type(e)==SX_GUI_EVENT_KEY)key((unsigned)e);
- else if(sx_gui_event_type(e)==SX_GUI_EVENT_MOUSE&&sx_gui_mouse_buttons(e)&1){unsigned y=sx_gui_mouse_y(e);if(y>=121&&y<121+found*28){selection=(y-121)/28;open();}}}
+ else if(sx_gui_event_type(e)==SX_GUI_EVENT_MOUSE&&sx_gui_left_pressed(e,&mouse_held)){unsigned y=sx_gui_mouse_y(e);if(y>=121&&y<121+found*28){selection=(y-121)/28;open();}}}
  if(dirty){draw();}sx_sleep(14000);}}

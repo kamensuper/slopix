@@ -14,6 +14,8 @@ int process_kill(unsigned pid);
 int process_suspend(unsigned pid);
 int process_resume(unsigned pid);
 int process_alive(unsigned pid);
+/* For an exited pid: crashed=1 if it died on a CPU fault. Returns 0 if unknown. */
+int process_exit_info(unsigned pid,int*crashed,unsigned*fault);
 void process_report(void(*line)(const char*));
 int process_command(const char*name,char*args,void(*line)(const char*));
 void arch_user_stack(uint64_t top);
