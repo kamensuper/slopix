@@ -24,8 +24,13 @@ jobs:
       - name: Build kernel, ISO and SDK apps
         run: |
           mkdir -p ci-logs
-          make -j"$(nproc)" 2>&1 | tee ci-logs/build.log
-          test "${PIPESTATUS[0]}" -eq 0
+          set +e
+          make -j"$(nproc)" > ci-logs/build.log 2>&1
+          status=$?
+          tail -n 80 ci-logs/build.log
+          # Surface compiler errors as annotations (readable through the API).
+          if [ $status -ne 0 ]; then grep -E 'error|Error|undefined reference' ci-logs/build.log | head -n 25 | while IFS= read -r line; do echo "::error::$line"; done; fi
+          exit $status
 
       - name: libc host test
         if: always()
@@ -41,7 +46,13 @@ jobs:
 
       - name: SDK check (apps with -Werror, SlopUI host test)
         if: always()
-        run: make -C sdk check
+        run: |
+          set +e
+          make -C sdk check > ci-logs/sdk-check.log 2>&1
+          status=$?
+          tail -n 60 ci-logs/sdk-check.log
+          if [ $status -ne 0 ]; then grep -E 'error|Error|FAIL' ci-logs/sdk-check.log | head -n 25 | while IFS= read -r line; do echo "::error::$line"; done; fi
+          exit $status
 
       - name: Headless QEMU boot
         if: always()
