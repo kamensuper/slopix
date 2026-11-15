@@ -1,7 +1,9 @@
 /* Slopix FileSlop CP05: completely separate Ring-3 ELF. FAT32 access only
  * through bounded syscalls. Read, view, create, remove and mkdir supported. */
 #include "gui_kit.h"
-static struct sx_dirent entries[48];
+#define FILES_MAX 128u
+static struct sx_dirent entries[FILES_MAX];
+static unsigned mouse_held;
 static char cwd[112]="/",name[16],content[600],message[52];
 static unsigned count,selected,top,edit_len;
 static int mode,dirty=1,confirm_dir,edit_stage;
@@ -9,8 +11,13 @@ static char selected_path[128];
 enum {LIST,VIEW,NEW,DELETE_CONFIRM};
 static void info(const char*s){gc(message,s,sizeof(message));dirty=1;}
 static void join(const char*entry,char*path){gc(path,cwd,128);unsigned n=gs(path);if(n>1&&n<126)path[n++]='/';path[n]=0;gc(path+n,entry,128-n);}
-static void refresh(void){int64_t n=sx_readdir(cwd,entries,48);if(n<0){count=0;info("Cannot list FAT32 path");}
- else{count=(unsigned)n;info("Enter open | N new | M mkdir | D delete");}if(selected>=count)selected=0;if(top>selected)top=selected;}
+/* Pages through the directory 48 entries at a time (B-11); the list used to
+ * stop silently at 48. */
+static void refresh(void){int64_t n=0;count=0;
+ for(;;){unsigned want=FILES_MAX-count;if(want>48)want=48;if(!want)break;n=sx_readdir_at(cwd,entries+count,want,count);if(n<0)break;count+=(unsigned)n;if((unsigned)n<want)break;}
+ if(n<0&&!count)info("Cannot list FAT32 path");
+ else info(count>=FILES_MAX?"Showing the first 128 entries":"Enter open | N new | M mkdir | D delete");
+ if(selected>=count)selected=0;if(top>selected)top=selected;}
 static void open_selected(void){if(selected>=count)return;struct sx_dirent *e=&entries[selected];join(e->name,selected_path);
  if(e->directory){gc(cwd,selected_path,sizeof(cwd));selected=top=0;refresh();return;}
  int64_t fd=sx_open(selected_path);if(fd<0){info("File could not be opened");return;}
@@ -64,6 +71,6 @@ static void paint(void){gbase("FileSlop / Ring 3");gt(15,46,cwd,0x34596b);
   gt(14,162,confirm_dir?"Folder deletion unsupported":"Press Enter to delete",0x506c7b);}
  gt(12,281,message,0x41657a);gp();dirty=0;}
 __attribute__((noreturn)) void _start(void){if(sx_gui_open(GW,GH)<0)sx_exit(1);refresh();for(;;){uint64_t e;
- while((e=sx_gui_poll())){if(sx_gui_event_type(e)==SX_GUI_EVENT_KEY)key((unsigned)e);
- else if(sx_gui_event_type(e)==SX_GUI_EVENT_MOUSE&&sx_gui_mouse_buttons(e)&1){unsigned y=sx_gui_mouse_y(e);if(mode==LIST&&y>=99&&y<99+8*24){unsigned n=top+(y-99)/24;if(n<count){selected=n;open_selected();dirty=1;}}}}
+ while((e=sx_gui_poll())){if(sx_gui_event_type(e)==SX_GUI_EVENT_CLOSE)sx_exit(0);if(sx_gui_event_type(e)==SX_GUI_EVENT_KEY)key((unsigned)e);
+ else if(sx_gui_event_type(e)==SX_GUI_EVENT_MOUSE&&sx_gui_left_pressed(e,&mouse_held)){unsigned y=sx_gui_mouse_y(e);if(mode==LIST&&y>=99&&y<99+8*24){unsigned n=top+(y-99)/24;if(n<count){selected=n;open_selected();dirty=1;}}}}
  if(dirty){paint();}sx_sleep(14000);}}

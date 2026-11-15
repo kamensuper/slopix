@@ -25,6 +25,8 @@ static inline int64_t sx_call(uint64_t n,uint64_t a,uint64_t b,uint64_t c){int64
 struct sx_dirent {char name[16];uint32_t size;uint32_t directory;};
 struct sx_prefs {uint32_t accent,light,volume,magnify,wallpaper,fit;};
 static inline int64_t sx_readdir(const char*path,struct sx_dirent*out,unsigned count){return sx_call(SX_READDIR,(uintptr_t)path,(uintptr_t)out,count);}
+/* Paged listing: entries starting at `offset` (fewer than count = end of directory). */
+static inline int64_t sx_readdir_at(const char*path,struct sx_dirent*out,unsigned count,unsigned offset){return sx_call(SX_READDIR,(uintptr_t)path,(uintptr_t)out,(uint64_t)count|((uint64_t)(offset&0xffffu)<<16));}
 static inline int64_t sx_remove(const char*path){return sx_call(SX_REMOVE,(uintptr_t)path,0,0);}
 static inline int64_t sx_mkdir(const char*path){return sx_call(SX_MKDIR,(uintptr_t)path,0,0);}
 static inline int64_t sx_desktop_open(unsigned id){return sx_call(SX_DESKTOP_OPEN,id,0,0);}
@@ -83,10 +85,16 @@ static inline uint64_t sx_gui_poll(void){return (uint64_t)sx_call(SX_GUI_POLL,0,
 #define SX_GUI_EVENT_KEY 1u
 #define SX_GUI_EVENT_MOUSE 2u
 #define SX_GUI_EVENT_VISIBILITY 3u
+/* 5 is reserved for RESIZE. CLOSE asks the app to save and exit; the
+ * desktop ends it after a short grace period if it does not. */
+#define SX_GUI_EVENT_CLOSE 6u
 static inline unsigned sx_gui_event_type(uint64_t e){return (unsigned)(e>>32);}
 static inline unsigned sx_gui_mouse_x(uint64_t e){return (unsigned)(e&4095u);}
 static inline unsigned sx_gui_mouse_y(uint64_t e){return (unsigned)((e>>12)&4095u);}
 static inline unsigned sx_gui_mouse_buttons(uint64_t e){return (unsigned)((e>>24)&7u);}
+/* Apps now receive moves and releases too. This returns 1 only on the event
+ * where the left button goes down; *held remembers the previous state. */
+static inline int sx_gui_left_pressed(uint64_t e,unsigned*held){unsigned now=sx_gui_mouse_buttons(e)&1u;int edge=now&&!*held;*held=now;return edge;}
 static inline uint64_t sx_time(void){return (uint64_t)sx_call(SX_TIME,0,0,0);}
 static inline void sx_yield(void){sx_call(SX_YIELD,0,0,0);}
 static inline void sx_sleep(uint64_t us){sx_call(SX_SLEEP,us,0,0);}
