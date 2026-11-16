@@ -20,7 +20,7 @@ describe('slingshot', () => {
   });
 
   it('launches the physical bird in the direction opposite to the drag', () => {
-    const h = new Harness(makeLevel(['red'], () => {}));
+    const h = new Harness(makeLevel(['pip'], () => {}));
     expect(h.sim.launch(-1.6, -0.9)).toBe(true);
     const bird = h.sim.activeBird!;
     expect(bird.vx).toBeGreaterThan(0);
@@ -31,14 +31,14 @@ describe('slingshot', () => {
   });
 
   it('cancels a pull below the minimum threshold', () => {
-    const h = new Harness(makeLevel(['red'], () => {}));
+    const h = new Harness(makeLevel(['pip'], () => {}));
     expect(h.sim.launch(-SLING.minPull * 0.5, 0)).toBe(false);
     expect(h.sim.phase).toBe('aiming');
     expect(h.sim.queue).toHaveLength(1);
   });
 
   it('predicts the trajectory the physics engine actually produces', () => {
-    const h = new Harness(makeLevel(['red'], () => {}));
+    const h = new Harness(makeLevel(['pip'], () => {}));
     const pull = pullFromAim((40 * Math.PI) / 180, 0.7, { x: 0, y: 0 });
     const v = launchVelocity(pull.x, pull.y, { x: 0, y: 0 });
     const predicted = new Float32Array(400);
@@ -58,13 +58,13 @@ describe('slingshot', () => {
 
 describe('structures', () => {
   const tower = () =>
-    makeLevel(['red', 'red'], (b) => {
-      // Three storeys of posts and lintels with a pig on each floor and a stone cap.
+    makeLevel(['pip', 'pip'], (b) => {
+      // Three storeys of posts and lintels with a foe on each floor and a stone cap.
       let top = 0;
       for (let floor = 0; floor < 3; floor++) {
         b.post(floor === 1 ? 'glass' : 'wood', 23, top, 2);
         b.post(floor === 1 ? 'glass' : 'wood', 26, top, 2);
-        b.pig('small', 24.5, top);
+        b.foe('small', 24.5, top);
         top = b.plank(floor === 2 ? 'stone' : 'wood', 24.5, top + 2, 3.5);
       }
       b.tri('wood', 24.5, top, 2, 1);
@@ -81,7 +81,7 @@ describe('structures', () => {
       expect(e.hp).toBe(e.maxHp);
       expect(e.body.isAwake()).toBe(false);
     });
-    expect(h.sim.pigs.every((p) => p.hp === p.maxHp)).toBe(true);
+    expect(h.sim.foes.every((p) => p.hp === p.maxHp)).toBe(true);
     expect(h.sim.score).toBe(0);
     expect(h.events('impact')).toHaveLength(0);
   });
@@ -102,7 +102,7 @@ describe('structures', () => {
 
   it('let a heavy stone crush glass it lands on', () => {
     const h = new Harness(
-      makeLevel(['red'], (b) => {
+      makeLevel(['pip'], (b) => {
         b.plank('glass', 25, 0, 2);
         b.block('stone', 'rect', 25, 4.5, 1, 1);
       }),
@@ -113,27 +113,27 @@ describe('structures', () => {
     expect(h.sim.blocks.some((e) => e.material === 'stone' && e.alive)).toBe(true);
   });
 
-  it('hurt a pig when debris falls on it', () => {
+  it('hurt a foe when debris falls on it', () => {
     const h = new Harness(
-      makeLevel(['red'], (b) => {
-        b.pig('medium', 25, 0);
+      makeLevel(['pip'], (b) => {
+        b.foe('medium', 25, 0);
         b.block('stone', 'rect', 25, 6, 1, 1);
       }),
     );
-    const pig = h.sim.pigs[0]!;
+    const foe = h.sim.foes[0]!;
     h.seconds(3);
-    expect(pig.hp).toBeLessThan(pig.maxHp);
-    expect(h.events('pigDamaged').length + h.events('pigDefeated').length).toBeGreaterThan(0);
+    expect(foe.hp).toBeLessThan(foe.maxHp);
+    expect(h.events('foeDamaged').length + h.events('foeDefeated').length).toBeGreaterThan(0);
   });
 });
 
 describe('joints', () => {
-  // A wooden platform hanging from two ropes with a pig on it, held by a wooden hanger piece.
+  // A wooden platform hanging from two ropes with a foe on it, held by a wooden hanger piece.
   const swing = () =>
-    makeLevel(['red'], (b) => {
+    makeLevel(['pip'], (b) => {
       b.block('wood', 'rect', 24, 4, 3, 0.25);
       const deck = b.last;
-      b.pig('small', 24, 4.125);
+      b.foe('small', 24, 4.125);
       b.block('wood', 'rect', 22.6, 7, 0.25, 0.25);
       const hook = b.last;
       b.pin(hook, 22.6, 7);
@@ -148,7 +148,7 @@ describe('joints', () => {
     h.seconds(4);
     expect(h.sim.joints).toHaveLength(3);
     expect(Math.abs(deck.y - y0)).toBeLessThan(0.05);
-    expect(h.sim.pigs[0]!.hp).toBe(h.sim.pigs[0]!.maxHp);
+    expect(h.sim.foes[0]!.hp).toBe(h.sim.foes[0]!.maxHp);
     expect(h.events('blockDamaged')).toHaveLength(0);
   });
 

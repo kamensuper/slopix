@@ -19,7 +19,7 @@ try {
   const report = await page.evaluate(async () => {
     const r = window.__game.renderer;
     const totals = {};
-    const names = ['drawSky', 'drawGround', 'drawTerrain', 'drawBlock', 'drawBird', 'drawPig', 'drawSlingshotBack', 'drawSlingshotFront', 'drawForeground'];
+    const names = ['drawSky', 'drawGround', 'drawTerrain', 'drawBlock', 'drawBird', 'drawFoe', 'drawSlingshotBack', 'drawSlingshotFront', 'drawForeground'];
     for (const name of names) {
       const orig = r[name].bind(r);
       r[name] = (...a) => {

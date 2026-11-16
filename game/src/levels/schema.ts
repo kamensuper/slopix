@@ -6,7 +6,8 @@ import {
   BIRD_TYPES,
   BLOCK_MATERIALS,
   BLOCK_SHAPES,
-  PIG_VARIANTS,
+  FOE_VARIANTS,
+  TERRAIN_SURFACES,
   THEME_IDS,
   type BirdType,
   type BlockDef,
@@ -15,15 +16,16 @@ import {
   type DecorDef,
   type JointDef,
   type LevelDef,
-  type PigDef,
-  type PigVariant,
+  type FoeDef,
+  type FoeVariant,
   type TerrainDef,
+  type TerrainSurface,
   type ThemeId,
 } from '../core/types';
 
 export const LEVEL_LIMITS = {
   maxBlocks: 400,
-  maxPigs: 40,
+  maxFoes: 40,
   maxBirds: 12,
   maxTerrain: 60,
   maxDecor: 80,
@@ -126,16 +128,19 @@ function readBlock(r: Reader, raw: unknown, where: string, bounds: { w: number; 
   return block;
 }
 
-function readPig(r: Reader, raw: unknown, where: string, bounds: { w: number; h: number }): PigDef | null {
+function readFoe(r: Reader, raw: unknown, where: string, bounds: { w: number; h: number }): FoeDef | null {
   if (!isDict(raw)) {
     r.problems.push(`${where} must be an object`);
     return null;
   }
-  return {
-    variant: r.oneOf<PigVariant>(raw, 'variant', where, PIG_VARIANTS),
+  const foe: FoeDef = {
+    variant: r.oneOf<FoeVariant>(raw, 'variant', where, FOE_VARIANTS),
     x: r.num(raw, 'x', where, -10, bounds.w + 10),
     y: r.num(raw, 'y', where, -1, bounds.h + 10),
   };
+  const patrol = r.num(raw, 'patrol', where, 0, 12, 0);
+  if (patrol !== 0 && foe.variant === 'floater') foe.patrol = patrol;
+  return foe;
 }
 
 function readTerrain(r: Reader, raw: unknown, where: string, bounds: { w: number; h: number }): TerrainDef | null {
@@ -168,6 +173,10 @@ function readTerrain(r: Reader, raw: unknown, where: string, bounds: { w: number
   }
   const angle = r.num(raw, 'angle', where, -360, 360, 0);
   if (angle !== 0) terrain.angle = angle;
+  if (raw.surface !== undefined) {
+    terrain.surface = r.oneOf<TerrainSurface>(raw, 'surface', where, TERRAIN_SURFACES);
+    if (terrain.surface === 'conveyor') terrain.speed = r.num(raw, 'speed', where, -12, 12, 2);
+  }
   return terrain;
 }
 
@@ -222,6 +231,10 @@ function readJoint(r: Reader, raw: unknown, where: string, blockCount: number): 
   }
   if (joint.kind === 'rope' && joint.bx === undefined) r.problems.push(`${where} (rope) needs bx/by`);
   if (raw.strength !== undefined) joint.strength = r.num(raw, 'strength', where, 1, 1e6);
+  if (raw.motor !== undefined && joint.kind === 'pin') {
+    const motor = r.num(raw, 'motor', where, -720, 720);
+    if (motor !== 0) joint.motor = motor;
+  }
   return joint;
 }
 
@@ -257,12 +270,12 @@ export function normalizeLevel(input: unknown): LevelDef {
     const block = readBlock(r, raw, `blocks[${i}]`, bounds);
     if (block) blocks.push(block);
   }
-  const pigs: PigDef[] = [];
-  for (const [i, raw] of r.list(input, 'pigs', 'level', LEVEL_LIMITS.maxPigs, true).entries()) {
-    const pig = readPig(r, raw, `pigs[${i}]`, bounds);
-    if (pig) pigs.push(pig);
+  const foes: FoeDef[] = [];
+  for (const [i, raw] of r.list(input, 'foes', 'level', LEVEL_LIMITS.maxFoes, true).entries()) {
+    const foe = readFoe(r, raw, `foes[${i}]`, bounds);
+    if (foe) foes.push(foe);
   }
-  if (pigs.length === 0) r.problems.push('level needs at least one pig');
+  if (foes.length === 0) r.problems.push('level needs at least one foe');
 
   const terrain: TerrainDef[] = [];
   for (const [i, raw] of r.list(input, 'terrain', 'level', LEVEL_LIMITS.maxTerrain, false).entries()) {
@@ -294,16 +307,55 @@ export function normalizeLevel(input: unknown): LevelDef {
     world,
     slingshot,
     blocks,
-    pigs,
+    foes,
     terrain,
     stars: { two, three },
   };
+  if (isDict(input.env)) {
+    const wind = r.num(input.env, 'wind', 'env', -12, 12, 0);
+    const gravity = r.num(input.env, 'gravity', 'env', 0.2, 2, 1);
+    if (wind !== 0 || gravity !== 1) {
+      level.env = {};
+      if (wind !== 0) level.env.wind = wind;
+      if (gravity !== 1) level.env.gravity = gravity;
+    }
+  } else if (input.env !== undefined) r.problems.push('level.env must be an object');
   if (decor.length > 0) level.decor = decor;
   if (joints.length > 0) level.joints = joints;
   if (typeof input.hint === 'string' && input.hint.length > 0) level.hint = input.hint.slice(0, 160);
 
+  r.problems.push(...structuralProblems(level));
   if (r.problems.length > 0) throw new LevelFormatError(r.problems);
   return level;
+}
+
+/** Problems a level can have even when every field is well-formed: things that make it unplayable. */
+export function structuralProblems(level: LevelDef): string[] {
+  const problems: string[] = [];
+  const { width, height } = level.world;
+  const sx = level.slingshot.x;
+  for (const [i, foe] of level.foes.entries()) {
+    if (foe.x < 0 || foe.x > width || foe.y < 0 || foe.y > height) problems.push(`foes[${i}] is outside the playfield`);
+    if (Math.abs(foe.x - sx) < 3 && Math.abs(foe.y - level.slingshot.y) < 5) problems.push(`foes[${i}] stands on the slingshot`);
+  }
+  for (const [i, block] of level.blocks.entries()) {
+    if (block.x < 0 || block.x > width) problems.push(`blocks[${i}] is outside the playfield`);
+    if (Math.abs(block.x - sx) < 1.6 && block.y - level.slingshot.y < 5 && block.y >= level.slingshot.y) problems.push(`blocks[${i}] blocks the slingshot`);
+  }
+  for (const [i, joint] of (level.joints ?? []).entries()) {
+    if (joint.a >= level.blocks.length || (joint.b !== undefined && joint.b >= level.blocks.length)) problems.push(`joints[${i}] refers to a block that does not exist`);
+  }
+  return problems;
+}
+
+/** Every problem with a level, as text; empty when the level is valid. Never throws. */
+export function levelProblems(input: unknown): string[] {
+  try {
+    normalizeLevel(input);
+    return [];
+  } catch (error) {
+    return error instanceof LevelFormatError ? error.problems : [error instanceof Error ? error.message : 'unknown error'];
+  }
 }
 
 /** Parses level JSON text. Throws LevelFormatError for malformed JSON as well as invalid content. */

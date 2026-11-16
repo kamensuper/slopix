@@ -7,9 +7,9 @@
  *   let top = b.post('wood', 20, 0, 2);      // vertical beam standing on the ground
  *   b.post('wood', 22, 0, 2);
  *   top = b.plank('wood', 21, top, 2.5);     // lintel resting on both posts
- *   b.pig('small', 21, 0);                   // pig sheltering underneath
+ *   b.foe('small', 21, 0);                   // foe sheltering underneath
  */
-import { PIGS } from '../core/config';
+import { FOES } from '../core/config';
 import type {
   BirdType,
   BlockDef,
@@ -18,8 +18,10 @@ import type {
   DecorDef,
   JointDef,
   LevelDef,
-  PigDef,
-  PigVariant,
+  LevelEnv,
+  TerrainSurface,
+  FoeDef,
+  FoeVariant,
   TerrainDef,
   ThemeId,
 } from '../core/types';
@@ -27,7 +29,7 @@ import { normalizeLevel } from './schema';
 
 export class LevelBuilder {
   private readonly blocks: BlockDef[] = [];
-  private readonly pigs: PigDef[] = [];
+  private readonly foes: FoeDef[] = [];
   private readonly terrain: TerrainDef[] = [];
   private readonly decorItems: DecorDef[] = [];
   private readonly jointList: JointDef[] = [];
@@ -38,6 +40,7 @@ export class LevelBuilder {
   private starTwo = 0;
   private starThree = 0;
   private hintText = '';
+  private envDef: LevelEnv = {};
 
   constructor(
     readonly id: string,
@@ -57,6 +60,18 @@ export class LevelBuilder {
   sling(x: number, y = 0): this {
     this.slingX = x;
     this.slingY = y;
+    return this;
+  }
+
+  /** Steady wind: acceleration on flying birds in m/s^2, positive blows to the right. */
+  wind(acceleration: number): this {
+    this.envDef.wind = acceleration;
+    return this;
+  }
+
+  /** Gravity multiplier (1 = normal). */
+  gravity(scale: number): this {
+    this.envDef.gravity = scale;
     return this;
   }
 
@@ -119,17 +134,36 @@ export class LevelBuilder {
     return this.rect('tnt', cx, bottom, size, size);
   }
 
-  /** Pig resting at (cx, bottom). Returns the y of its top. */
-  pig(variant: PigVariant, cx: number, bottom: number): number {
-    const radius = PIGS[variant].radius;
-    this.pigs.push({ variant, x: cx, y: bottom + radius });
+  /** Foe resting at (cx, bottom). Returns the y of its top. */
+  foe(variant: FoeVariant, cx: number, bottom: number): number {
+    const radius = FOES[variant].radius;
+    this.foes.push({ variant, x: cx, y: bottom + radius });
     return bottom + radius * 2;
   }
 
+  /** Balloonist hovering with its centre at (cx, cy); `patrol` metres of sideways drift make it a moving target. */
+  balloon(cx: number, cy: number, patrol = 0): this {
+    const def: FoeDef = { variant: 'floater', x: cx, y: cy };
+    if (patrol !== 0) def.patrol = patrol;
+    this.foes.push(def);
+    return this;
+  }
+
   /** Static, indestructible platform with its bottom centre at (cx, bottom). Returns the y of its top. */
-  ledge(cx: number, bottom: number, w: number, h: number): number {
-    this.terrain.push({ shape: 'rect', x: cx, y: bottom + h / 2, w, h });
+  ledge(cx: number, bottom: number, w: number, h: number, surface?: TerrainSurface, speed?: number): number {
+    const piece: TerrainDef = { shape: 'rect', x: cx, y: bottom + h / 2, w, h };
+    if (surface) piece.surface = surface;
+    if (surface === 'conveyor') piece.speed = speed ?? 2;
+    this.terrain.push(piece);
     return bottom + h;
+  }
+
+  /** Static slab centred at (cx, cy), tilted by `angle` degrees (ramps, slides). */
+  ramp(cx: number, cy: number, w: number, h: number, angle: number, surface?: TerrainSurface): this {
+    const piece: TerrainDef = { shape: 'rect', x: cx, y: cy, w, h, angle };
+    if (surface) piece.surface = surface;
+    this.terrain.push(piece);
+    return this;
   }
 
   /** Static convex terrain polygon: counter-clockwise points relative to (x, y). */
@@ -164,6 +198,21 @@ export class LevelBuilder {
     return this;
   }
 
+  /** Driven hinge: block `a` turns about (x, y) at `degPerSecond` (counter-clockwise positive). */
+  motor(a: number, x: number, y: number, degPerSecond: number): this {
+    this.jointList.push({ kind: 'pin', a, ax: x, ay: y, motor: degPerSecond });
+    return this;
+  }
+
+  /** Block hanging from a fixed hook straight above its centre. Returns the block index. */
+  hang(material: BlockMaterial, shape: BlockShape, cx: number, cy: number, w: number, h: number, hookY: number, strength?: number): number {
+    this.block(material, shape, cx, cy, w, h);
+    const index = this.last;
+    const top = cy + (shape === 'circle' ? w : h) / 2;
+    this.rope(index, cx, top - 0.05, null, cx, hookY, strength);
+    return index;
+  }
+
   /** Non-colliding scenery standing on the ground (or at height `y`). */
   decor(kind: string, x: number, options: { y?: number; scale?: number; flip?: boolean; front?: boolean } = {}): this {
     const item: DecorDef = { kind, x };
@@ -184,10 +233,11 @@ export class LevelBuilder {
       world: { width: this.width, height: this.height },
       slingshot: { x: this.slingX, y: this.slingY },
       blocks: this.blocks,
-      pigs: this.pigs,
+      foes: this.foes,
       terrain: this.terrain,
       decor: this.decorItems,
       joints: this.jointList,
+      env: this.envDef,
       stars: { two: this.starTwo, three: this.starThree },
       hint: this.hintText,
     });

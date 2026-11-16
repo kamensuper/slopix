@@ -4,20 +4,21 @@
  * floating score text, camera shake ...).
  */
 import type { AbilityKind } from './config';
-import type { BirdType, BlockMaterial, BlockShape, PigVariant } from './types';
+import type { BirdType, BlockMaterial, BlockShape, FoeVariant } from './types';
 
 /** What a collision surface is made of. */
-export type SurfaceKind = BlockMaterial | 'pig' | 'bird' | 'ground';
+export type SurfaceKind = BlockMaterial | 'foe' | 'bird' | 'ground';
 
-export type ExplosionSource = 'bomb' | 'egg' | 'tnt';
-export type ScoreReason = 'damage' | 'block' | 'pig' | 'bird' | 'clear';
+/** ember = Ember's blast, quake = Brawn's ground slam, nova = the burst that ends a gravity well. */
+export type ExplosionSource = 'ember' | 'tnt' | 'sapper' | 'quake' | 'nova';
+export type ScoreReason = 'damage' | 'block' | 'foe' | 'bird' | 'clear';
 export type ExpireReason = 'rest' | 'timeout' | 'bounds' | 'exploded' | 'resolved';
 
 export type SimEvent =
   | { type: 'birdReady'; bird: BirdType; remaining: number }
   | { type: 'birdLaunched'; id: number; bird: BirdType; x: number; y: number; vx: number; vy: number; power: number }
-  | { type: 'birdImpact'; id: number; bird: BirdType | 'egg'; x: number; y: number; speed: number; first: boolean; other: SurfaceKind }
-  | { type: 'birdExpired'; id: number; bird: BirdType | 'egg'; x: number; y: number; reason: ExpireReason }
+  | { type: 'birdImpact'; id: number; bird: BirdType; x: number; y: number; speed: number; first: boolean; other: SurfaceKind }
+  | { type: 'birdExpired'; id: number; bird: BirdType; x: number; y: number; reason: ExpireReason }
   | { type: 'ability'; ability: AbilityKind; id: number; bird: BirdType; x: number; y: number; vx: number; vy: number }
   | { type: 'explosion'; source: ExplosionSource; x: number; y: number; radius: number }
   /** Generic collision, for impact sounds and dust. `energy` is the damage energy of the hit. */
@@ -37,14 +38,27 @@ export type SimEvent =
       vy: number;
     }
   /** `armored` = the hit was soaked up by a helmet / armour that is still holding. */
-  | { type: 'pigDamaged'; id: number; variant: PigVariant; x: number; y: number; damage: number; hpFraction: number; armored: boolean }
-  | { type: 'armorBroken'; id: number; variant: PigVariant; x: number; y: number; vx: number; vy: number }
-  | { type: 'pigDefeated'; id: number; variant: PigVariant; x: number; y: number; vx: number; vy: number; remaining: number }
+  | { type: 'foeDamaged'; id: number; variant: FoeVariant; x: number; y: number; damage: number; hpFraction: number; armored: boolean }
+  | { type: 'armorBroken'; id: number; variant: FoeVariant; x: number; y: number; vx: number; vy: number }
+  | { type: 'foeDefeated'; id: number; variant: FoeVariant; x: number; y: number; vx: number; vy: number; remaining: number }
   | { type: 'score'; points: number; x: number; y: number; reason: ScoreReason }
-  | { type: 'jointBroken'; kind: 'rope' | 'pin'; x: number; y: number }
-  | { type: 'shotResolved'; pigsLeft: number; birdsLeft: number }
+  /** `cut` = a bird flew through the rope. */
+  | { type: 'jointBroken'; kind: 'rope' | 'pin'; x: number; y: number; cut: boolean }
+  /** Rime's frost burst. `count` = pieces and foes that froze. */
+  | { type: 'freeze'; x: number; y: number; radius: number; count: number }
+  /** Jolt's lightning. `arcs` holds x0, y0, x1, y1 for every jump of the current. */
+  | { type: 'shock'; x: number; y: number; arcs: number[]; hits: number }
+  /** Nova's gravity well opens (`active`) or closes. */
+  | { type: 'gravityWell'; x: number; y: number; radius: number; active: boolean }
+  /** A crystal shattered and rang out. */
+  | { type: 'resonance'; x: number; y: number; radius: number }
+  /** A bird sprang off rubber or a bouncy surface. */
+  | { type: 'bounce'; x: number; y: number; speed: number }
+  | { type: 'balloonPopped'; id: number; x: number; y: number }
+  | { type: 'iceCrack'; x: number; y: number }
+  | { type: 'shotResolved'; foesLeft: number; birdsLeft: number }
   | { type: 'levelWon'; baseScore: number; clearBonus: number; unusedBirds: number; birdBonus: number; score: number }
-  | { type: 'levelLost'; score: number; pigsLeft: number };
+  | { type: 'levelLost'; score: number; foesLeft: number };
 
 export type SimEventType = SimEvent['type'];
 export type SimEventOf<T extends SimEventType> = Extract<SimEvent, { type: T }>;

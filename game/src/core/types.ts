@@ -5,17 +5,25 @@
  * World space: metres, x to the right, y UP, the ground surface is y = 0.
  */
 
-export type BirdType = 'red' | 'chuck' | 'bomb' | 'blues' | 'matilda';
-export const BIRD_TYPES: readonly BirdType[] = ['red', 'chuck', 'bomb', 'blues', 'matilda'];
+/**
+ * The flock. pip = Striker, zip = Dasher, ember = Bomber, sprig = Splitter, brawn = Crusher,
+ * rime = Frostwing, jolt = Voltwing, nova = Gravity bird.
+ */
+export type BirdType = 'pip' | 'zip' | 'ember' | 'sprig' | 'brawn' | 'rime' | 'jolt' | 'nova';
+export const BIRD_TYPES: readonly BirdType[] = ['pip', 'zip', 'ember', 'sprig', 'brawn', 'rime', 'jolt', 'nova'];
 
-export type PigVariant = 'small' | 'medium' | 'large' | 'helmet' | 'armored' | 'king';
-export const PIG_VARIANTS: readonly PigVariant[] = ['small', 'medium', 'large', 'helmet', 'armored', 'king'];
+/**
+ * The Burrowers. small / medium / large differ in size and toughness; helmet and armored wear metal;
+ * shield blocks frontal hits; sapper explodes when defeated; floater hangs under a balloon; king is the boss.
+ */
+export type FoeVariant = 'small' | 'medium' | 'large' | 'helmet' | 'armored' | 'king' | 'shield' | 'sapper' | 'floater';
+export const FOE_VARIANTS: readonly FoeVariant[] = ['small', 'medium', 'large', 'helmet', 'armored', 'king', 'shield', 'sapper', 'floater'];
 
-/** The three primary construction materials. */
-export type MaterialId = 'wood' | 'glass' | 'stone' | 'metal';
+/** Construction materials. Each one has a rule of its own, see MATERIALS in config.ts. */
+export type MaterialId = 'wood' | 'glass' | 'stone' | 'metal' | 'ice' | 'ironwood' | 'crystal' | 'rubber';
 /** Everything a block can be made of (TNT is a special explosive crate). */
 export type BlockMaterial = MaterialId | 'tnt';
-export const BLOCK_MATERIALS: readonly BlockMaterial[] = ['wood', 'glass', 'stone', 'metal', 'tnt'];
+export const BLOCK_MATERIALS: readonly BlockMaterial[] = ['wood', 'glass', 'stone', 'metal', 'ice', 'ironwood', 'crystal', 'rubber', 'tnt'];
 
 /**
  * rect   - box of w x h (planks, beams, squares, slabs)
@@ -26,8 +34,8 @@ export const BLOCK_MATERIALS: readonly BlockMaterial[] = ['wood', 'glass', 'ston
 export type BlockShape = 'rect' | 'tri' | 'wedge' | 'circle';
 export const BLOCK_SHAPES: readonly BlockShape[] = ['rect', 'tri', 'wedge', 'circle'];
 
-export type ThemeId = 'grasslands' | 'desert' | 'snowlands';
-export const THEME_IDS: readonly ThemeId[] = ['grasslands', 'desert', 'snowlands'];
+export type ThemeId = 'grasslands' | 'desert' | 'snowlands' | 'storm' | 'ironworks' | 'celestial';
+export const THEME_IDS: readonly ThemeId[] = ['grasslands', 'desert', 'snowlands', 'storm', 'ironworks', 'celestial'];
 
 export interface BlockDef {
   shape: BlockShape;
@@ -44,12 +52,18 @@ export interface BlockDef {
   flip?: boolean;
 }
 
-export interface PigDef {
-  variant: PigVariant;
-  /** Centre of the pig, metres. */
+export interface FoeDef {
+  variant: FoeVariant;
+  /** Centre of the foe, metres. */
   x: number;
   y: number;
+  /** Floaters only: the balloon drifts left and right by this many metres (a moving target). */
+  patrol?: number;
 }
+
+/** What a piece of terrain is surfaced with. */
+export type TerrainSurface = 'ice' | 'bouncy' | 'conveyor';
+export const TERRAIN_SURFACES: readonly TerrainSurface[] = ['ice', 'bouncy', 'conveyor'];
 
 /** Static, indestructible scenery that takes part in collisions (ledges, hills, ramps). */
 export interface TerrainDef {
@@ -64,12 +78,16 @@ export interface TerrainDef {
   points?: [number, number][];
   /** Counter-clockwise rotation in degrees. */
   angle?: number;
+  /** ice: almost frictionless. bouncy: springs things back. conveyor: carries whatever lies on it. */
+  surface?: TerrainSurface;
+  /** conveyor only: belt speed in m/s, positive carries to the right. */
+  speed?: number;
 }
 
 /**
  * Connection between two blocks, or between a block and the static world.
  * rope - holds pieces together up to its length (slack allowed); snaps above `strength` newtons.
- * pin  - hinge: the pieces may rotate about the shared anchor.
+ * pin  - hinge: the pieces may rotate about the shared anchor; with `motor` it turns by itself.
  */
 export interface JointDef {
   kind: 'rope' | 'pin';
@@ -85,6 +103,16 @@ export interface JointDef {
   by?: number;
   /** Force at which the joint breaks; omitted = only breaks when a piece is destroyed. */
   strength?: number;
+  /** pin only: driven hinge turning at this many degrees per second (counter-clockwise positive). */
+  motor?: number;
+}
+
+/** Level-wide physics modifiers. */
+export interface LevelEnv {
+  /** Steady horizontal wind as an acceleration on flying birds, m/s^2 (positive blows to the right). */
+  wind?: number;
+  /** Gravity multiplier (1 = normal). */
+  gravity?: number;
 }
 
 /** Purely visual scenery (no physics). */
@@ -117,10 +145,11 @@ export interface LevelDef {
   /** Base of the slingshot (where it meets the ground / platform). */
   slingshot: { x: number; y: number };
   blocks: BlockDef[];
-  pigs: PigDef[];
+  foes: FoeDef[];
   terrain: TerrainDef[];
   joints?: JointDef[];
   decor?: DecorDef[];
+  env?: LevelEnv;
   stars: StarThresholds;
   /** One-line hint shown when the level starts. */
   hint?: string;
@@ -167,6 +196,10 @@ export interface GameSettings {
   muted: boolean;
   /** Tones down screen shake, slow motion, camera impulses and ambient motion. */
   reducedMotion: boolean;
+  /** Show the whole predicted flight path instead of its first stretch. */
+  aimAssist: boolean;
+  /** Fewer particles and no ambient weather, for slow devices. */
+  lowEffects: boolean;
 }
 
 export interface LevelResult {
@@ -176,7 +209,7 @@ export interface LevelResult {
   levelName: string;
   /** Final score including every bonus. */
   score: number;
-  /** Points earned from damage, destruction and defeated pigs. */
+  /** Points earned from damage, destruction and defeated foes. */
   baseScore: number;
   /** Bonus for clearing the level. */
   clearBonus: number;
@@ -189,8 +222,8 @@ export interface LevelResult {
   /** Best score after this attempt. */
   best: number;
   isNewBest: boolean;
-  pigsDefeated: number;
-  pigsTotal: number;
+  foesDefeated: number;
+  foesTotal: number;
   birdsUsed: number;
   /** A following level exists in the campaign. */
   hasNext: boolean;

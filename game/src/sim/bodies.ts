@@ -1,9 +1,9 @@
 /** Physics body factory: turns level data into Planck bodies with the right shapes, mass and collision filters. */
 import { CircleShape, PolygonShape, type Body, type World } from 'planck';
-import { BIRD_GROUP, BIRDS, ABILITY, CATEGORY, DAMAGE, MATERIALS, PHYSICS, PIG_PHYSICS, PIGS, WORLD } from '../core/config';
+import { BIRD_GROUP, BIRDS, CATEGORY, DAMAGE, MATERIALS, PHYSICS, FOE_PHYSICS, FOES, TERRAIN, WORLD } from '../core/config';
 import { DEG } from '../core/math';
-import type { BlockDef, LevelDef, PigDef } from '../core/types';
-import type { BirdEntity, BlockEntity, PigEntity, ProjectileType, TerrainEntity } from './entities';
+import type { BlockDef, LevelDef, FoeDef } from '../core/types';
+import type { BirdEntity, BlockEntity, FoeEntity, ProjectileType, SurfaceTag, TerrainEntity } from './entities';
 import { blockArea, blockOutline, insetPolygon, polygonArea, terrainOutline, type Point } from './geometry';
 
 function toVertices(points: Point[]): { x: number; y: number }[] {
@@ -30,17 +30,21 @@ export function createTerrain(world: World, level: LevelDef, id: number): Terrai
   };
   const x0 = -WORLD.groundMargin;
   const x1 = level.world.width + WORLD.groundMargin;
-  const outlines: Point[][] = [
-    [
-      [x0, -WORLD.groundDepth],
-      [x1, -WORLD.groundDepth],
-      [x1, 0],
-      [x0, 0],
-    ],
-    ...level.terrain.map(terrainOutline),
+  const ground: Point[] = [
+    [x0, -WORLD.groundDepth],
+    [x1, -WORLD.groundDepth],
+    [x1, 0],
+    [x0, 0],
   ];
-  for (const outline of outlines) {
-    body.createFixture({ shape: new PolygonShape(toVertices(insetPolygon(outline, PHYSICS.polygonInset))), ...options });
+  body.createFixture({ shape: new PolygonShape(toVertices(insetPolygon(ground, PHYSICS.polygonInset))), ...options });
+  for (const piece of level.terrain) {
+    const shape = new PolygonShape(toVertices(insetPolygon(terrainOutline(piece), PHYSICS.polygonInset)));
+    if (!piece.surface) {
+      body.createFixture({ shape, ...options });
+      continue;
+    }
+    const tag: SurfaceTag = { surface: piece.surface, speed: piece.surface === 'conveyor' ? (piece.speed ?? 2) : 0 };
+    body.createFixture({ shape, ...options, ...TERRAIN[piece.surface], userData: tag });
   }
   return entity;
 }
@@ -111,28 +115,34 @@ export function createBlock(world: World, def: BlockDef, id: number): BlockEntit
     stage: 0,
     seed: Math.imul(id, 2654435761) >>> 0,
     scoreBank: 0,
+    frozen: false,
+    shockTick: -1,
+    motorized: false,
   };
   body.setUserData(entity);
   return entity;
 }
 
-export function createPig(world: World, def: PigDef, id: number): PigEntity {
-  const config = PIGS[def.variant];
+export function createFoe(world: World, def: FoeDef, id: number): FoeEntity {
+  const config = FOES[def.variant];
   const body = world.createBody({
     type: 'dynamic',
     position: { x: def.x, y: def.y },
-    angularDamping: PIG_PHYSICS.angularDamping,
+    angularDamping: FOE_PHYSICS.angularDamping,
+    // A balloonist hangs in the air: its balloon carries the weight until it pops.
+    gravityScale: def.variant === 'floater' ? 0 : 1,
+    linearDamping: def.variant === 'floater' ? 0.4 : 0,
   });
   body.createFixture({
     shape: new CircleShape(config.radius + PHYSICS.circleOutset),
     density: config.density,
-    friction: PIG_PHYSICS.friction,
-    restitution: PIG_PHYSICS.restitution,
-    filterCategoryBits: CATEGORY.pig,
+    friction: FOE_PHYSICS.friction,
+    restitution: FOE_PHYSICS.restitution,
+    filterCategoryBits: CATEGORY.foe,
   });
-  const entity: PigEntity = {
+  const entity: FoeEntity = {
     ...baseEntity(id, body, config.radius),
-    kind: 'pig',
+    kind: 'foe',
     variant: def.variant,
     radius: config.radius,
     hp: config.hp,
@@ -140,6 +150,12 @@ export function createPig(world: World, def: PigDef, id: number): PigEntity {
     armor: config.armor,
     maxArmor: config.armor,
     scoreBank: 0,
+    frozen: false,
+    shockTick: -1,
+    floating: def.variant === 'floater',
+    homeX: def.x,
+    homeY: def.y,
+    patrol: def.variant === 'floater' ? (def.patrol ?? 0) : 0,
   };
   body.setUserData(entity);
   return entity;
@@ -156,12 +172,12 @@ export interface ProjectileSpawn {
 }
 
 export function projectileRadius(type: ProjectileType): number {
-  return type === 'egg' ? ABILITY.egg.radius : BIRDS[type].radius;
+  return BIRDS[type].radius;
 }
 
 export function createProjectile(world: World, spawn: ProjectileSpawn, id: number): BirdEntity {
-  const isEgg = spawn.type === 'egg';
-  const radius = projectileRadius(spawn.type);
+  const config = BIRDS[spawn.type];
+  const radius = config.radius;
   const body = world.createBody({
     type: 'dynamic',
     position: { x: spawn.x, y: spawn.y },
@@ -172,9 +188,9 @@ export function createProjectile(world: World, spawn: ProjectileSpawn, id: numbe
   });
   body.createFixture({
     shape: new CircleShape(radius + PHYSICS.circleOutset),
-    density: isEgg ? ABILITY.egg.density : BIRDS[spawn.type as keyof typeof BIRDS].density,
-    friction: isEgg ? 0.5 : BIRDS[spawn.type as keyof typeof BIRDS].friction,
-    restitution: isEgg ? 0.05 : BIRDS[spawn.type as keyof typeof BIRDS].restitution,
+    density: config.density,
+    friction: config.friction,
+    restitution: config.restitution,
     filterCategoryBits: CATEGORY.bird,
     filterGroupIndex: BIRD_GROUP,
   });
@@ -188,19 +204,23 @@ export function createProjectile(world: World, spawn: ProjectileSpawn, id: numbe
     launchTick: spawn.tick,
     impacted: false,
     impactTick: -1,
+    impactSpeed: 0,
     abilityUsed: false,
     abilityTick: -1,
     restTicks: 0,
     fuseEndTick: -1,
-    detonate: false,
     spawned: spawn.spawned,
+    bounces: 0,
+    slamming: false,
+    wellEndTick: -1,
+    pendingAbility: false,
   };
   body.setUserData(entity);
   return entity;
 }
 
 /** Recomputes cached mass data after a fixture's density changed. */
-export function refreshMass(entity: BirdEntity | BlockEntity | PigEntity): void {
+export function refreshMass(entity: BirdEntity | BlockEntity | FoeEntity): void {
   entity.body.resetMassData();
   const props = massProps(entity.body);
   entity.invMass = props.invMass;

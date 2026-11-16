@@ -46,15 +46,26 @@ interface VoiceOpts {
 
 /** Formants (centre Hz, relative level) that give each bird its voice. */
 const BIRD_VOICE: Record<BirdType, { f0: number; to: number; dur: number; formants: [number, number][]; mid: number; growl: number }> = {
-  red: { f0: 470, to: 360, dur: 0.3, formants: [[800, 1], [1350, 0.7], [2800, 0.25]], mid: 1.45, growl: 0 },
-  chuck: { f0: 760, to: 1250, dur: 0.22, formants: [[650, 0.8], [2300, 1], [3300, 0.3]], mid: 0.9, growl: 22 },
-  bomb: { f0: 190, to: 130, dur: 0.42, formants: [[520, 1], [900, 0.8], [2200, 0.2]], mid: 1.2, growl: 40 },
-  blues: { f0: 1250, to: 1750, dur: 0.14, formants: [[950, 0.8], [3000, 1]], mid: 1.2, growl: 0 },
-  matilda: { f0: 360, to: 250, dur: 0.34, formants: [[700, 1], [1150, 0.8], [2500, 0.2]], mid: 1.3, growl: 14 },
+  // Pip: a bright two-note kingfisher call.
+  pip: { f0: 620, to: 470, dur: 0.26, formants: [[900, 1], [1700, 0.7], [3000, 0.3]], mid: 1.5, growl: 0 },
+  // Zip: a rising screech.
+  zip: { f0: 820, to: 1500, dur: 0.2, formants: [[700, 0.7], [2500, 1], [3600, 0.35]], mid: 0.9, growl: 18 },
+  // Ember: a throaty crackle.
+  ember: { f0: 240, to: 170, dur: 0.4, formants: [[560, 1], [1000, 0.8], [2300, 0.25]], mid: 1.2, growl: 46 },
+  // The Sprigs: a tiny trill.
+  sprig: { f0: 1400, to: 1900, dur: 0.13, formants: [[1000, 0.8], [3200, 1]], mid: 1.2, growl: 0 },
+  // Brawn: a low hoot.
+  brawn: { f0: 210, to: 180, dur: 0.46, formants: [[420, 1], [760, 0.7], [1600, 0.15]], mid: 1.1, growl: 6 },
+  // Rime: a clear, falling whistle.
+  rime: { f0: 1050, to: 700, dur: 0.3, formants: [[1200, 1], [2600, 0.6]], mid: 1.3, growl: 0 },
+  // Jolt: a buzzy chirp.
+  jolt: { f0: 900, to: 1150, dur: 0.18, formants: [[800, 0.9], [2100, 1], [3400, 0.4]], mid: 0.8, growl: 60 },
+  // Nova: a soft churr that bends upwards.
+  nova: { f0: 300, to: 420, dur: 0.44, formants: [[500, 1], [1300, 0.6], [2400, 0.2]], mid: 1.6, growl: 26 },
 };
 
 /** Sounds that must always play, even when the mix is crowded. */
-const PRIORITY = new Set<SfxName>(['explosion', 'level_win', 'level_fail', 'level_start', 'bird_launch', 'sling_release', 'ability_boost', 'ability_split', 'ability_egg', 'bomb_fuse', 'pig_defeat', 'armor_break', 'score_bonus']);
+const PRIORITY = new Set<SfxName>(['explosion', 'level_win', 'level_fail', 'level_start', 'bird_launch', 'sling_release', 'ability_boost', 'ability_split', 'ability_slam', 'ability_freeze', 'ability_shock', 'ability_gravity', 'gravity_release', 'fuse', 'achievement', 'foe_defeat', 'armor_break', 'score_bonus']);
 const MIN_GAP_MS: Partial<Record<SfxName, number>> = {
   ui_click: 30,
   ui_count: 45,
@@ -68,8 +79,8 @@ const MIN_GAP_MS: Partial<Record<SfxName, number>> = {
   stone_break: 90,
   glass_break: 80,
   metal_break: 90,
-  pig_hurt: 120,
-  pig_oink: 220,
+  foe_hurt: 120,
+  foe_grunt: 220,
   armor_hit: 80,
   bird_impact: 90,
   explosion: 120,
@@ -254,7 +265,7 @@ export class AudioManager implements IAudioManager {
     this.emit(gain, [src], t, dur, o.pan, o.wet, rand(0, 1.5));
   }
 
-  /** Sawtooth through a bank of formant filters: birds, pigs. */
+  /** Sawtooth through a bank of formant filters: birds, foes. */
   private voice(f0: number, to: number, dur: number, formants: [number, number][], o: VoiceOpts = {}): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime + (o.delay ?? 0);
@@ -320,7 +331,7 @@ export class AudioManager implements IAudioManager {
     const br = 0.55 + 0.45 * k;
     const pan = opts.pan ?? 0;
     const rate = (opts.rate ?? 1) * rand(0.93, 1.07);
-    const bird: BirdType = opts.bird ?? 'red';
+    const bird: BirdType = opts.bird ?? 'pip';
     const v = this.variant;
 
     switch (name) {
@@ -374,7 +385,7 @@ export class AudioManager implements IAudioManager {
         const b = BIRD_VOICE[bird];
         this.noise(0.4, { freq: 500, to: 3600, q: 0.8, vol: 0.2, attack: 0.05, pan, wet: 0.12 });
         this.voice(b.f0 * rate, b.to * rate, b.dur, b.formants, { vol: 0.22, delay: 0.04, pan, mid: b.mid, growl: b.growl });
-        if (bird === 'chuck' || bird === 'blues') this.voice(b.f0 * rate * 1.1, b.to * rate * 1.1, b.dur * 0.8, b.formants, { vol: 0.14, delay: 0.2, pan, mid: b.mid, growl: b.growl });
+        if (bird === 'zip' || bird === 'sprig' || bird === 'jolt') this.voice(b.f0 * rate * 1.1, b.to * rate * 1.1, b.dur * 0.8, b.formants, { vol: 0.14, delay: 0.2, pan, mid: b.mid, growl: b.growl });
         break;
       }
       case 'bird_ready': {
@@ -408,12 +419,65 @@ export class AudioManager implements IAudioManager {
         });
         this.noise(0.25, { freq: 800, to: 3500, vol: 0.14, pan });
         break;
-      case 'ability_egg':
-        this.tone(640 * rate, 0.22, { type: 'sine', vol: 0.26, to: 170, pan, wet: 0.12 });
-        this.tone(1280 * rate, 0.08, { type: 'triangle', vol: 0.1, to: 520, pan });
-        this.voice(420, 330, 0.12, BIRD_VOICE.matilda.formants, { vol: 0.16, delay: 0.04, pan, mid: 1.3 });
+      case 'ability_slam':
+        this.tone(520 * rate, 0.34, { type: 'sawtooth', vol: 0.2, to: 70, lp: 1800, pan, wet: 0.12 });
+        this.noise(0.3, { freq: 3000, to: 300, vol: 0.2, attack: 0.02, pan });
+        this.voice(200, 120, 0.2, BIRD_VOICE.brawn.formants, { vol: 0.2, delay: 0.02, pan, mid: 1.1 });
         break;
-      case 'bomb_fuse':
+      case 'ability_freeze':
+        this.noise(0.7, { freq: 9000, to: 2500, type: 'highpass', vol: 0.22, attack: 0.02, pan, wet: 0.35 });
+        [0, 0.05, 0.1, 0.16, 0.23].forEach((d, i) => this.chime(1900 + i * 420, 0.5, 0.07, d, pan + (i - 2) * 0.12));
+        this.tone(2400, 0.5, { type: 'sine', vol: 0.06, to: 5200, pan, wet: 0.3 });
+        break;
+      case 'ability_shock': {
+        const s = clamp01(opts.intensity ?? 0.6);
+        this.noise(0.09, { freq: 7000, type: 'highpass', vol: 0.5, attack: 0.001, pan });
+        for (let i = 0; i < 5 + Math.round(s * 6); i++) {
+          const d = i * 0.035 + Math.random() * 0.02;
+          this.tone(1800 + Math.random() * 2600, 0.035, { type: 'square', vol: 0.09, delay: d, to: 300 + Math.random() * 500, pan: pan + (Math.random() - 0.5) * 0.5 });
+          this.noise(0.03, { freq: 4500 + Math.random() * 3000, q: 4, vol: 0.14, delay: d, pan });
+        }
+        this.tone(110, 0.5 + s * 0.3, { type: 'sawtooth', vol: 0.16, to: 55, lp: 700, pan, wet: 0.2 });
+        this.duck(0.25);
+        break;
+      }
+      case 'ability_gravity':
+        this.tone(520, 1.5, { type: 'sine', vol: 0.22, to: 60, pan, wet: 0.35, attack: 0.05 });
+        this.tone(780, 1.5, { type: 'triangle', vol: 0.08, to: 90, pan, wet: 0.35, attack: 0.05 });
+        this.noise(1.5, { freq: 3000, to: 200, q: 2, vol: 0.12, attack: 0.3, pan, wet: 0.3 });
+        this.duck(0.4);
+        break;
+      case 'gravity_release':
+        this.tone(70, 0.5, { type: 'sine', vol: 0.5, to: 240, pan, wet: 0.25, attack: 0.004 });
+        this.noise(0.4, { freq: 300, to: 5000, vol: 0.3, pan, wet: 0.25 });
+        this.chime(1300, 0.6, 0.08, 0.02, pan);
+        break;
+      case 'bounce':
+        this.tone(170 * rate, 0.22, { type: 'sine', vol: 0.34, to: 520 * rate, pan });
+        this.tone(340 * rate, 0.14, { type: 'triangle', vol: 0.1, to: 900 * rate, pan });
+        break;
+      case 'crystal_ring':
+        [0, 0.03, 0.07].forEach((d, i) => this.chime((2100 + i * 530) * rate, 0.9, 0.09, d, pan));
+        this.noise(0.12, { freq: 6000, type: 'highpass', vol: 0.2, pan });
+        this.tone(1050 * rate, 0.8, { type: 'sine', vol: 0.07, pan, wet: 0.4 });
+        break;
+      case 'ice_crack':
+        for (let i = 0; i < 4; i++) this.noise(0.03, { freq: 3500 + Math.random() * 3000, q: 5, vol: 0.2, delay: i * 0.03 + Math.random() * 0.02, pan });
+        this.tone(2600 * rate, 0.06, { type: 'triangle', vol: 0.08, to: 900, pan });
+        break;
+      case 'balloon_pop':
+        this.noise(0.05, { freq: 1800, q: 0.7, vol: 0.6, attack: 0.001, pan });
+        this.tone(900, 0.07, { type: 'square', vol: 0.12, to: 200, pan });
+        break;
+      case 'rope_snap':
+        this.tone(900 * rate, 0.09, { type: 'sawtooth', vol: 0.2, to: 2400, lp: 4000, pan });
+        this.noise(0.05, { freq: 3000, q: 2, vol: 0.25, attack: 0.001, pan });
+        this.tone(160, 0.18, { type: 'triangle', vol: 0.14, to: 90, delay: 0.02, pan });
+        break;
+      case 'achievement':
+        [0, 0.09, 0.18, 0.3].forEach((d, i) => this.chime([1047, 1319, 1568, 2093][i] as number, 0.7, 0.11, d, 0));
+        break;
+      case 'fuse':
         for (let i = 0; i < 7; i++) this.noise(0.06, { freq: 6500 + Math.random() * 2500, type: 'highpass', vol: 0.06 + Math.random() * 0.05, delay: i * 0.075, pan });
         this.tone(1400, 0.5, { type: 'sine', vol: 0.025, to: 2400, pan });
         break;
@@ -501,21 +565,21 @@ export class AudioManager implements IAudioManager {
         this.noise(0.12, { freq: 220 * br + 60, type: 'lowpass', vol: 0.3 * lv, pan });
         break;
 
-      // ---------------------------------------------------------- pigs
-      case 'pig_hurt': {
+      // ---------------------------------------------------------- foes
+      case 'foe_hurt': {
         const f = rand(520, 820) * rate;
         this.voice(f, f * 0.55, 0.2, [[700, 1], [2000, 0.8], [3300, 0.2]], { vol: 0.17, mid: 1.5, pan, growl: 18 });
         this.noise(0.06, { freq: 1500, q: 2, vol: 0.06, pan });
         break;
       }
-      case 'pig_defeat': {
+      case 'foe_defeat': {
         const f = rand(760, 1050) * rate;
         this.voice(f, 170, 0.42, [[650, 1], [1900, 0.9], [3200, 0.25]], { vol: 0.2, mid: 1.25, pan, growl: 24 });
         this.tone(420, 0.18, { type: 'sine', vol: 0.18, to: 110, delay: 0.3, pan });
         this.noise(0.24, { freq: 2500, to: 600, vol: 0.2, delay: 0.32, pan, wet: 0.15 });
         break;
       }
-      case 'pig_oink': {
+      case 'foe_grunt': {
         const n = 1 + Math.floor(Math.random() * 3);
         for (let i = 0; i < n; i++) {
           const f = rand(125, 175) * rate;

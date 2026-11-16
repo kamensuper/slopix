@@ -1,5 +1,6 @@
 /**
- * Bird artwork. Every bird faces right and is built around the collision circle of radius
+ * The flock: eight original birds, each a different species with its own silhouette, palette and
+ * markings. Every bird faces right and is built around the collision circle of radius
  * CHARACTER_RADIUS; crests, tails and beaks may reach out to CHARACTER_EXTENT.
  *
  * A bird is a static design (outline, plumage, face) posed every frame by a small rig that is
@@ -9,7 +10,6 @@ import { DEG, TAU, clamp01, lerp } from '../../core/math';
 import { BIRD_COLORS, INK } from '../../core/palette';
 import type { BirdType } from '../../core/types';
 import {
-  DETAIL_LINE,
   FEATURE_LINE,
   beginBody,
   blobPolar,
@@ -53,8 +53,15 @@ interface Patch {
   ry: number;
 }
 
+/** Extra artwork of one species. `under` is painted inside the body clip, `over` on top of the face. */
+type MarkPainter = (ctx: CanvasRenderingContext2D, pose: BirdPose, tones: BirdTones) => void;
+
 interface BirdDesign {
   body: Blob;
+  /** Painted behind the body (after the plumes). */
+  behind?: MarkPainter;
+  under?: MarkPainter;
+  over?: MarkPainter;
   tail: readonly Plume[];
   crest: readonly Plume[];
   belly: Patch | null;
@@ -94,429 +101,587 @@ const FACE_TONES = {
 } as const;
 
 const BEAK_YELLOW = { beak: '#f7b125', beakDark: '#de870f', beakLight: '#ffd96e' } as const;
+const BEAK_SLATE = { beak: '#454c5a', beakDark: '#262b35', beakLight: '#7d8696' } as const;
+const BEAK_HORN = { beak: '#f1d6bd', beakDark: '#c69f84', beakLight: '#fff4e8' } as const;
 
-// ---------------------------------------------------------------- Red
+/** Rounded outline through [angle in degrees, radius] pairs, clockwise from straight up. */
+function outline(points: readonly (readonly [number, number])[]): Blob {
+  return blobThrough(points.map(([angle, radius]): [number, number] => [Math.cos(angle * DEG) * radius, Math.sin(angle * DEG) * radius]));
+}
 
-const RED_TONES: BirdTones = {
+function ellipse(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, rot: number, fill: string): void {
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, rot, 0, TAU);
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
+function dots(ctx: CanvasRenderingContext2D, spots: readonly (readonly [number, number, number])[], fill: string): void {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  for (const [x, y, r] of spots) {
+    ctx.moveTo(x + r, y);
+    ctx.arc(x, y, r, 0, TAU);
+  }
+  ctx.fill();
+}
+
+/** Four-pointed twinkle. */
+function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const w = size * 0.28;
+  ctx.moveTo(x, y - size);
+  ctx.quadraticCurveTo(x + w, y - w, x + size, y);
+  ctx.quadraticCurveTo(x + w, y + w, x, y + size);
+  ctx.quadraticCurveTo(x - w, y + w, x - size, y);
+  ctx.quadraticCurveTo(x - w, y - w, x, y - size);
+}
+
+// ---------------------------------------------------------------- Pip, the kingfisher (Striker)
+
+const PIP_TONES: BirdTones = {
   ...FACE_TONES,
-  ...BEAK_YELLOW,
-  hi: '#f5563f',
-  body: BIRD_COLORS.red.body,
-  lo: '#c82b27',
-  shade: '#a81f2299',
-  rim: '#ff7a5c85',
-  belly: '#f2d9b6',
-  lid: '#c92e29',
-  brow: '#2b1a12',
-  crest: '#d1332b',
-  tail: '#3b2725',
+  ...BEAK_SLATE,
+  hi: '#58dbe4',
+  body: BIRD_COLORS.pip.body,
+  lo: '#0f7c96',
+  shade: '#0a5c7899',
+  rim: '#b4f6f985',
+  belly: '#f2903f',
+  lid: '#1b95a8',
+  brow: '#0f6a82',
+  crest: '#158aa3',
+  tail: '#0e6c88',
 };
 
-const RED: BirdDesign = {
-  body: blobPolar([93, 94, 95, 95, 96, 95, 93, 95, 96, 95, 94, 93]),
-  tail: [plume(-84, 10, 200, 186, 48, 25, -4, 0.35, 0, 14), plume(-86, 30, 168, 178, 43, 23, 4, 0.35, 1.7, -12)],
-  crest: [plume(-12, -84, -114, -168, 58, 29, -9, 0.3, 0.6, -22), plume(4, -86, -76, -152, 45, 25, -7, 0.3, 2.1, 20)],
-  belly: { x: 12, y: 72, rx: 64, ry: 44 },
-  gloss: { x: -50, y: -54, size: 15 },
-  near: { x: 14, y: -15, rx: 25, ry: 27, pupil: 10 },
-  far: { x: 60, y: -13, rx: 20, ry: 25, pupil: 9 },
-  nearBrow: { outerX: -16, outerY: -46, outerW: 12, innerX: 38, innerY: -29, innerW: 17 },
-  farBrow: { outerX: 88, outerY: -43, outerW: 11, innerX: 40, innerY: -28, innerW: 16 },
-  beak: { x: 38, y: 27, length: 70, upper: 23, lower: 16, jaw: 54, hook: 6, gape: 0.62 },
-  lidBias: 0,
-  angerBias: 0,
-};
-
-// ---------------------------------------------------------------- Chuck
-
-const CHUCK_TONES: BirdTones = {
-  ...FACE_TONES,
-  hi: '#ffe452',
-  body: BIRD_COLORS.chuck.body,
-  lo: '#efb616',
-  shade: '#d9960b8c',
-  rim: '#fff9a890',
-  belly: '#fff3c2',
-  beak: '#f08a1c',
-  beakDark: '#d2670f',
-  beakLight: '#ffb95e',
-  lid: '#e9b815',
-  brow: '#33200f',
-  crest: '#3a2a1e',
-  tail: '#3a2a1e',
-};
-
-/** Rounded triangle leaning back: [angle in degrees, radius], clockwise from the apex. */
-const CHUCK_OUTLINE: readonly (readonly [number, number])[] = [
-  [-97, 108],
-  [-72, 93],
-  [-46, 86],
-  [-20, 87],
-  [5, 96],
-  [27, 109],
-  [48, 97],
-  [69, 87],
-  [90, 84],
-  [111, 87],
-  [132, 97],
-  [153, 109],
-  [175, 96],
-  [200, 87],
-  [226, 86],
-  [250, 93],
-];
-
-const CHUCK: BirdDesign = {
-  body: blobThrough(CHUCK_OUTLINE.map(([angle, radius]): [number, number] => [Math.cos(angle * DEG) * radius, Math.sin(angle * DEG) * radius])),
-  tail: [plume(-90, 48, 190, 184, 46, 15, -2, 0.9, 0.9, 14), plume(-88, 60, 164, 176, 40, 14, 3, 0.9, 2.2, -14)],
+const PIP: BirdDesign = {
+  body: blobPolar([96, 95, 96, 97, 96, 94, 92, 92, 94, 96, 96, 95]),
+  tail: [plume(-86, 20, 190, 184, 40, 22, -2, 0.5, 0.4, 12), plume(-84, 38, 165, 176, 34, 20, 3, 0.5, 1.8, -12)],
+  // A shaggy, spiky crest swept back over the crown.
   crest: [
-    plume(-18, -94, -162, -180, 46, 15, -3, 0.9, 0.3, -20),
-    plume(-14, -99, -138, -173, 60, 17, -5, 0.9, 1.4, 6),
-    plume(-9, -100, -112, -165, 50, 16, -5, 0.9, 2.6, 26),
+    plume(-32, -78, -152, -176, 46, 17, -4, 0.85, 0.2, -18),
+    plume(-16, -87, -128, -169, 60, 18, -5, 0.85, 1.1, -6),
+    plume(0, -90, -103, -161, 54, 17, -5, 0.85, 2.0, 10),
+    plume(15, -86, -80, -152, 38, 15, -4, 0.85, 2.9, 24),
   ],
-  belly: { x: 8, y: 70, rx: 62, ry: 34 },
-  gloss: { x: -44, y: -40, size: 13 },
-  near: { x: 6, y: -12, rx: 24, ry: 22, pupil: 9 },
-  far: { x: 50, y: -10, rx: 19, ry: 20, pupil: 8 },
-  nearBrow: { outerX: -22, outerY: -40, outerW: 8, innerX: 30, innerY: -27, innerW: 13 },
-  farBrow: { outerX: 74, outerY: -40, outerW: 8, innerX: 32, innerY: -26, innerW: 12 },
-  beak: { x: 32, y: 21, length: 94, upper: 17, lower: 11, jaw: 70, hook: 2, gape: 0.5 },
-  lidBias: 0.16,
-  angerBias: 0.1,
+  belly: { x: 6, y: 74, rx: 70, ry: 46 },
+  gloss: { x: -52, y: -52, size: 14 },
+  near: { x: 12, y: -18, rx: 23, ry: 25, pupil: 10.5 },
+  far: { x: 56, y: -16, rx: 18, ry: 22, pupil: 9 },
+  nearBrow: { outerX: -14, outerY: -47, outerW: 3.5, innerX: 34, innerY: -37, innerW: 5 },
+  farBrow: { outerX: 82, outerY: -43, outerW: 3.5, innerX: 42, innerY: -36, innerW: 5 },
+  beak: { x: 40, y: 22, length: 104, upper: 15, lower: 11, jaw: 92, hook: 1, gape: 0.42 },
+  lidBias: -0.02,
+  angerBias: -0.1,
+  under(ctx) {
+    // White throat and a pale spot behind the bill, as on a real kingfisher.
+    ellipse(ctx, 40, 38, 34, 20, -0.1, '#f7fcff');
+    ellipse(ctx, -44, -4, 15, 10, 0.5, '#f7fcff');
+    dots(ctx, [[-30, -56, 4], [-46, -40, 3.5], [-12, -66, 3.5], [-60, -22, 3], [-70, 6, 3.5]], '#7fe8ee');
+  },
 };
 
-// ---------------------------------------------------------------- Bomb
+// ---------------------------------------------------------------- Zip, the swift (Dasher)
 
-interface BombTones extends BirdTones {
-  collar: string;
-  collarDark: string;
-  collarLight: string;
-  fuse: string;
-  spark: string;
-  sparkHot: string;
-  sparkEdge: string;
-  halo: string;
+const ZIP_TONES: BirdTones = {
+  ...FACE_TONES,
+  ...BEAK_SLATE,
+  hi: '#f587cb',
+  body: BIRD_COLORS.zip.body,
+  lo: '#9c2378',
+  shade: '#74165a99',
+  rim: '#ffc8ea85',
+  belly: '#ffe6f3',
+  lid: '#b8308a',
+  brow: '#5c1147',
+  crest: '#a82a82',
+  tail: '#7a1a60',
+};
+
+const ZIP: BirdDesign = {
+  // A teardrop: blunt at the nose, drawn out to a point at the back.
+  body: outline([
+    [-90, 80],
+    [-60, 84],
+    [-30, 93],
+    [0, 100],
+    [30, 95],
+    [60, 85],
+    [90, 79],
+    [120, 83],
+    [150, 96],
+    [180, 109],
+    [210, 96],
+    [240, 84],
+  ]),
+  // Long forked tail streamers.
+  tail: [plume(-98, -6, 197, 188, 80, 15, -6, 0.95, 0.3, 16), plume(-98, 10, 163, 172, 80, 15, 6, 0.95, 1.6, -16)],
+  crest: [plume(-12, -77, -166, -181, 44, 16, -3, 0.9, 0.5, -14), plume(-2, -79, -150, -176, 32, 14, -3, 0.9, 1.6, 10)],
+  belly: { x: 44, y: 54, rx: 46, ry: 26 },
+  gloss: { x: -40, y: -44, size: 12 },
+  near: { x: 22, y: -14, rx: 21, ry: 20, pupil: 9 },
+  far: { x: 62, y: -12, rx: 16, ry: 18, pupil: 8 },
+  nearBrow: { outerX: -6, outerY: -38, outerW: 3.5, innerX: 42, innerY: -30, innerW: 5 },
+  farBrow: { outerX: 84, outerY: -36, outerW: 3.5, innerX: 50, innerY: -29, innerW: 5 },
+  beak: { x: 56, y: 22, length: 42, upper: 12, lower: 8, jaw: 33, hook: 3, gape: 0.6 },
+  lidBias: 0.2,
+  angerBias: -0.05,
+  under(ctx, _pose, t) {
+    // Racing mask through the eyes and a sickle wing along the flank.
+    ctx.fillStyle = t.tail;
+    ctx.beginPath();
+    ctx.moveTo(96, -22);
+    ctx.quadraticCurveTo(40, -44, -30, -24);
+    ctx.quadraticCurveTo(20, -8, 96, -2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(14, 8);
+    ctx.quadraticCurveTo(-50, 4, -112, 30);
+    ctx.quadraticCurveTo(-56, 50, 2, 40);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ffc8ea';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(-4, 22);
+    ctx.quadraticCurveTo(-50, 22, -92, 32);
+    ctx.stroke();
+  },
+};
+
+// ---------------------------------------------------------------- Ember, the firefinch (Bomber)
+
+interface EmberTones extends BirdTones {
   glowCore: string;
   glowMid: string;
   glowEdge: string;
+  fleck: string;
 }
 
-const BOMB_TONES: BombTones = {
+const EMBER_TONES: EmberTones = {
   ...FACE_TONES,
-  ...BEAK_YELLOW,
-  hi: '#565663',
-  body: BIRD_COLORS.bomb.body,
-  lo: '#24242b',
-  shade: '#101014a6',
-  rim: '#8a8a9a80',
-  belly: '#8e8e9c',
-  lid: '#55555f',
-  brow: '#a9a9b8',
-  crest: '#2c2c33',
-  tail: '#2c2c33',
-  collar: '#8e8e9c',
-  collarDark: '#5b5b68',
-  collarLight: '#cfcfda',
-  fuse: '#dbb684',
-  spark: '#ffb629',
-  sparkHot: '#fff5c4',
-  sparkEdge: '#e2681a',
-  halo: '#ffc94a55',
-  glowCore: '#ffd54f',
-  glowMid: '#ff6a1f',
-  glowEdge: '#8f1212',
-};
-
-const BOMB: BirdDesign = {
-  body: blobPolar([94, 94, 95, 94, 95, 95, 94, 95, 95, 94, 94, 94]),
-  tail: [plume(-86, 14, 200, 188, 36, 23, -3, 0.25, 0.4, 12), plume(-88, 33, 168, 178, 34, 22, 3, 0.25, 1.6, -12)],
-  crest: [],
-  belly: { x: 14, y: 76, rx: 54, ry: 36 },
-  gloss: { x: -50, y: -52, size: 16 },
-  near: { x: 12, y: -10, rx: 23, ry: 24, pupil: 8.5 },
-  far: { x: 57, y: -8, rx: 18, ry: 22, pupil: 7.5 },
-  nearBrow: { outerX: -18, outerY: -42, outerW: 13, innerX: 36, innerY: -31, innerW: 17 },
-  farBrow: { outerX: 84, outerY: -40, outerW: 12, innerX: 38, innerY: -30, innerW: 16 },
-  beak: { x: 36, y: 29, length: 66, upper: 21, lower: 13, jaw: 46, hook: 9, gape: 0.55 },
-  lidBias: 0.24,
-  angerBias: 0.15,
+  ...BEAK_HORN,
+  hi: '#ff9c4c',
+  body: BIRD_COLORS.ember.body,
+  lo: '#c2361b',
+  shade: '#8f1f1299',
+  rim: '#ffd9a085',
+  belly: '#ffd45e',
+  lid: '#d9501f',
+  brow: '#a3300f',
+  crest: '#ffb42e',
+  tail: '#b32f17',
+  glowCore: '#fff0a8',
+  glowMid: '#ff8a1f',
+  glowEdge: '#c21a12',
+  fleck: '#fff3d0',
 };
 
 /** Number of heat pulses over a whole fuse; they are spaced quadratically, so the rhythm accelerates. */
 const HEAT_PULSES = 9;
 /** Slow pulse that keeps a held fuse value alive, in Hz. */
 const HEAT_IDLE_HZ = 1.3;
-/** Fraction of the fuse cord that is left when the fuse has burnt down. */
-const FUSE_STUB = 0.35;
-const SPARK_RAYS = 6;
 
-function paintBombFuse(ctx: CanvasRenderingContext2D, pose: BirdPose, sweep: number, t: BombTones): void {
-  ctx.lineWidth = FEATURE_LINE;
-  ctx.strokeStyle = t.ink;
-  ctx.fillStyle = t.collar;
-  ctx.beginPath();
-  ctx.moveTo(-18, -88);
-  ctx.lineTo(-15, -107);
-  ctx.quadraticCurveTo(0, -113, 15, -107);
-  ctx.lineTo(18, -88);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = t.collarDark;
-  ctx.beginPath();
-  ctx.ellipse(0, -107, 12, 3.6, 0, 0, TAU);
-  ctx.fill();
-  ctx.strokeStyle = t.collarLight;
-  ctx.lineWidth = DETAIL_LINE;
-  ctx.beginPath();
-  ctx.moveTo(-9, -103);
-  ctx.lineTo(-10.5, -94);
-  ctx.stroke();
-
-  // The cord burns down with the fuse: only the first part of the curve is drawn.
-  const fuse = clamp01(pose.fuse ?? 0);
-  const part = lerp(1, FUSE_STUB, fuse);
-  const back = clamp01(sweep);
-  const sway = Math.sin(pose.time * 2.6) * 2.5;
-  const midX = lerp(3, -8, back);
-  const midY = lerp(-130, -126, back);
-  const endX = lerp(-15, -36, back) + sway;
-  const endY = lerp(-141, -127, back);
-  const ctrlX = lerp(0, midX, part);
-  const ctrlY = lerp(-106, midY, part);
-  const tipX = lerp(lerp(0, midX, part), lerp(midX, endX, part), part);
-  const tipY = lerp(lerp(-106, midY, part), lerp(midY, endY, part), part);
-  ctx.beginPath();
-  ctx.moveTo(0, -106);
-  ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
-  ctx.lineWidth = 11;
-  ctx.strokeStyle = t.ink;
-  ctx.stroke();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = t.fuse;
-  ctx.stroke();
-  paintSpark(ctx, tipX, tipY, 12 + 7 * fuse, pose.time, t);
-}
-
-function paintSpark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, time: number, t: BombTones): void {
-  const flicker = 0.85 + 0.15 * Math.sin(time * 37);
-  ctx.fillStyle = t.halo;
-  ctx.beginPath();
-  ctx.arc(x, y, size * 1.6 * flicker, 0, TAU);
-  ctx.fill();
-
-  const spin = time * 3.1;
-  ctx.beginPath();
-  for (let i = 0; i < SPARK_RAYS * 2; i++) {
-    const angle = spin + (i / (SPARK_RAYS * 2)) * TAU;
-    const ray = size * (0.62 + 0.38 * Math.abs(Math.sin(time * 29 + i * 1.9)));
-    const radius = i % 2 === 0 ? ray : size * 0.4;
-    ctx.lineTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-  }
-  ctx.closePath();
-  ctx.fillStyle = t.spark;
-  ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = t.sparkEdge;
-  ctx.stroke();
-  ctx.fillStyle = t.sparkHot;
-  ctx.beginPath();
-  ctx.arc(x, y, size * 0.34 * flicker, 0, TAU);
-  ctx.fill();
-}
-
-/** The body heats up with the fuse: a glow from the core that pulses faster and faster. Drawn inside the body clip. */
-function paintBombHeat(ctx: CanvasRenderingContext2D, pose: BirdPose, t: BombTones): void {
-  const fuse = clamp01(pose.fuse ?? 0);
-  if (fuse <= 0) return;
-  const beat = 0.5 + 0.5 * Math.sin(TAU * (HEAT_PULSES * fuse * fuse + pose.time * HEAT_IDLE_HZ));
-  const glow = ctx.createRadialGradient(6, 24, 4, 0, 6, 110);
-  glow.addColorStop(0, t.glowCore);
-  glow.addColorStop(0.42, t.glowMid);
-  glow.addColorStop(1, t.glowEdge);
-  const alpha = ctx.globalAlpha;
-  ctx.globalAlpha = alpha * (0.2 + 0.52 * fuse) * (0.58 + 0.42 * beat);
-  ctx.fillStyle = glow;
-  ctx.fillRect(-120, -120, 240, 240);
-  ctx.globalAlpha = alpha;
-}
-
-// ---------------------------------------------------------------- The Blues
-
-const BLUES_TONES: BirdTones = {
-  ...FACE_TONES,
-  ...BEAK_YELLOW,
-  hi: '#84d0f8',
-  body: BIRD_COLORS.blues.body,
-  lo: '#3f9fe0',
-  shade: '#2b7fc480',
-  rim: '#c4ecff90',
-  belly: '#e8f7ff',
-  lid: '#49a5e2',
-  brow: '#1c477d',
-  crest: '#3d9be0',
-  tail: '#2b7fc4',
-};
-
-const BLUES: BirdDesign = {
-  body: blobPolar([94, 95, 94, 94, 95, 95, 94, 95, 95, 94, 94, 94]),
-  tail: [plume(-86, 16, 198, 186, 32, 19, -3, 0.4, 0.5, 14), plume(-87, 31, 168, 178, 30, 18, 3, 0.4, 1.9, -14)],
+const EMBER: BirdDesign = {
+  body: blobPolar([94, 94, 95, 94, 95, 96, 95, 96, 95, 94, 94, 94]),
+  tail: [plume(-86, 14, 200, 188, 38, 22, -3, 0.5, 0.4, 12), plume(-88, 33, 168, 178, 36, 21, 3, 0.5, 1.6, -12)],
+  // Flame-shaped crest.
   crest: [
-    plume(-16, -85, -130, -166, 26, 15, -3, 0.45, 0.2, -24),
-    plume(-6, -88, -101, -158, 35, 16, -4, 0.45, 1.3, 4),
-    plume(4, -87, -72, -150, 25, 14, -3, 0.45, 2.5, 26),
+    plume(-38, -72, -140, -168, 44, 24, -8, 0.8, 0.3, -18),
+    plume(-22, -82, -118, -160, 62, 27, -10, 0.8, 0.9, -8),
+    plume(-4, -88, -96, -150, 84, 30, -13, 0.8, 1.5, 0),
+    plume(14, -84, -74, -140, 56, 24, -9, 0.8, 2.3, 16),
   ],
-  belly: { x: 14, y: 72, rx: 60, ry: 40 },
+  belly: { x: 12, y: 74, rx: 58, ry: 40 },
   gloss: { x: -50, y: -52, size: 15 },
-  near: { x: 8, y: -12, rx: 29, ry: 31, pupil: 13.5 },
-  far: { x: 60, y: -10, rx: 23, ry: 28, pupil: 12 },
-  nearBrow: { outerX: -16, outerY: -49, outerW: 7, innerX: 26, innerY: -43, innerW: 9 },
-  farBrow: { outerX: 82, outerY: -44, outerW: 7, innerX: 48, innerY: -41, innerW: 9 },
-  beak: { x: 44, y: 27, length: 54, upper: 16, lower: 10, jaw: 40, hook: 3, gape: 0.6 },
-  lidBias: -0.08,
-  angerBias: -0.12,
+  near: { x: 12, y: -12, rx: 24, ry: 25, pupil: 9.5 },
+  far: { x: 57, y: -10, rx: 19, ry: 23, pupil: 8.5 },
+  nearBrow: { outerX: -16, outerY: -44, outerW: 4, innerX: 36, innerY: -34, innerW: 6.5 },
+  farBrow: { outerX: 84, outerY: -41, outerW: 4, innerX: 40, innerY: -33, innerW: 6.5 },
+  beak: { x: 38, y: 25, length: 58, upper: 23, lower: 16, jaw: 44, hook: 4, gape: 0.6 },
+  lidBias: 0.1,
+  angerBias: 0.05,
+  under(ctx, pose, tones) {
+    const t = tones as EmberTones;
+    // Golden face mask fading into the crown, like banked coals.
+    ellipse(ctx, 40, -18, 62, 40, -0.15, '#ffc247');
+    // The white flecks of a firefinch along the flank.
+    dots(ctx, [[-52, 20, 4.5], [-66, 40, 4], [-38, 44, 4], [-56, 60, 3.5], [-28, 64, 3.5], [-74, 14, 3]], t.fleck);
+    // The body heats up with the fuse: a glow from the core that pulses faster and faster.
+    const fuse = clamp01(pose.fuse ?? 0);
+    if (fuse <= 0) return;
+    const beat = 0.5 + 0.5 * Math.sin(TAU * (HEAT_PULSES * fuse * fuse + pose.time * HEAT_IDLE_HZ));
+    const glow = ctx.createRadialGradient(6, 24, 4, 0, 6, 110);
+    glow.addColorStop(0, t.glowCore);
+    glow.addColorStop(0.42, t.glowMid);
+    glow.addColorStop(1, t.glowEdge);
+    const alpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha * (0.25 + 0.55 * fuse) * (0.58 + 0.42 * beat);
+    ctx.fillStyle = glow;
+    ctx.fillRect(-120, -120, 240, 240);
+    ctx.globalAlpha = alpha;
+  },
 };
 
-// ---------------------------------------------------------------- Matilda
+// ---------------------------------------------------------------- The Sprigs, three wrens (Splitter)
 
-interface MatildaTones extends BirdTones {
-  cheek: string;
-  cheekHot: string;
-  crease: string;
+const SPRIG_TONES: BirdTones = {
+  ...FACE_TONES,
+  beak: '#c79552',
+  beakDark: '#96692f',
+  beakLight: '#ecc98f',
+  hi: '#cdee80',
+  body: BIRD_COLORS.sprig.body,
+  lo: '#5f9a22',
+  shade: '#3f7a1a80',
+  rim: '#eeffc492',
+  belly: '#fff4d2',
+  lid: '#7ab52f',
+  brow: '#3b6a16',
+  crest: '#6fae28',
+  tail: '#4f8a1e',
+};
+
+const SPRIG: BirdDesign = {
+  body: blobPolar([94, 95, 94, 94, 95, 95, 94, 95, 95, 94, 94, 94]),
+  // The cocked-up tail of a wren.
+  tail: [plume(-66, -44, -126, -150, 54, 19, -3, 0.5, 0.4, -10), plume(-76, -26, -146, -162, 48, 18, 2, 0.5, 1.5, 10)],
+  crest: [plume(-2, -88, -96, -150, 22, 12, -2, 0.6, 1, 10)],
+  belly: { x: 16, y: 70, rx: 64, ry: 44 },
+  gloss: { x: -50, y: -52, size: 15 },
+  near: { x: 10, y: -8, rx: 28, ry: 30, pupil: 14 },
+  far: { x: 60, y: -6, rx: 22, ry: 27, pupil: 12 },
+  nearBrow: { outerX: -18, outerY: -46, outerW: 3, innerX: 26, innerY: -42, innerW: 4 },
+  farBrow: { outerX: 82, outerY: -41, outerW: 3, innerX: 50, innerY: -39, innerW: 4 },
+  beak: { x: 50, y: 24, length: 50, upper: 10, lower: 7, jaw: 42, hook: 2, gape: 0.7 },
+  lidBias: -0.08,
+  angerBias: -0.15,
+  under(ctx, _pose, t) {
+    // Pale eyebrow stripe and barred wing.
+    ctx.strokeStyle = '#fff4d2';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(-50, -34);
+    ctx.quadraticCurveTo(10, -62, 86, -40);
+    ctx.stroke();
+    ctx.strokeStyle = t.tail;
+    ctx.lineWidth = 5;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-84 + i * 12, 14 + i * 4);
+      ctx.lineTo(-62 + i * 12, 34 + i * 4);
+      ctx.stroke();
+    }
+  },
+};
+
+// ---------------------------------------------------------------- Brawn, the owl (Crusher)
+
+interface BrawnTones extends BirdTones {
+  disc: string;
+  discRim: string;
+  chevron: string;
 }
 
-const MATILDA_TONES: MatildaTones = {
+const BRAWN_TONES: BrawnTones = {
+  ...FACE_TONES,
+  beak: '#e2a23a',
+  beakDark: '#b0721c',
+  beakLight: '#f6cf7c',
+  hi: '#b98f66',
+  body: BIRD_COLORS.brawn.body,
+  lo: '#5c432c',
+  shade: '#3a281899',
+  rim: '#ecd0aa80',
+  belly: '#ead5b0',
+  lid: '#7a5c40',
+  brow: '#39281a',
+  crest: '#6e5238',
+  tail: '#4e3a28',
+  disc: '#f1dfc0',
+  discRim: '#a8825a',
+  chevron: '#8a6a4a',
+};
+
+const BRAWN: BirdDesign = {
+  // Squat and broad-shouldered.
+  body: outline([
+    [-90, 92],
+    [-60, 98],
+    [-30, 104],
+    [0, 105],
+    [30, 103],
+    [60, 98],
+    [90, 94],
+    [120, 98],
+    [150, 103],
+    [180, 105],
+    [210, 104],
+    [240, 98],
+  ]),
+  tail: [plume(-96, 34, 182, 180, 30, 30, 0, 0.3, 0.6, 8)],
+  // Ear tufts on both corners of the head.
+  crest: [plume(-50, -76, -124, -152, 52, 25, -4, 0.72, 0.3, -14), plume(46, -78, -58, -84, 50, 24, 4, 0.72, 1.4, 14)],
+  belly: { x: 4, y: 78, rx: 66, ry: 44 },
+  gloss: { x: -58, y: -50, size: 14 },
+  near: { x: -4, y: -14, rx: 26, ry: 27, pupil: 11 },
+  far: { x: 54, y: -12, rx: 22, ry: 25, pupil: 10 },
+  nearBrow: { outerX: -40, outerY: -44, outerW: 9, innerX: 22, innerY: -30, innerW: 13 },
+  farBrow: { outerX: 88, outerY: -40, outerW: 9, innerX: 30, innerY: -29, innerW: 13 },
+  beak: { x: 28, y: 22, length: 42, upper: 20, lower: 12, jaw: 27, hook: 17, gape: 0.5 },
+  lidBias: 0.3,
+  angerBias: 0.2,
+  under(ctx, _pose, tones) {
+    const t = tones as BrawnTones;
+    // Facial discs around the eyes.
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = t.discRim;
+    for (const [x, y, r] of [[-4, -12, 41], [56, -10, 35]] as const) {
+      ellipse(ctx, x, y, r, r * 1.02, 0, t.disc);
+      ctx.stroke();
+    }
+    // Chest chevrons.
+    ctx.strokeStyle = t.chevron;
+    ctx.lineWidth = 5;
+    for (const [x, y] of [[-28, 54], [4, 60], [36, 54], [-12, 78], [20, 78]] as const) {
+      ctx.beginPath();
+      ctx.moveTo(x - 9, y - 5);
+      ctx.lineTo(x, y + 4);
+      ctx.lineTo(x + 9, y - 5);
+      ctx.stroke();
+    }
+  },
+};
+
+// ---------------------------------------------------------------- Rime, the snow petrel (Frostwing)
+
+const RIME_TONES: BirdTones = {
+  ...FACE_TONES,
+  ...BEAK_SLATE,
+  pupil: '#12324a',
+  hi: '#ffffff',
+  body: BIRD_COLORS.rime.body,
+  lo: '#a6d6f1',
+  shade: '#78b4da80',
+  rim: '#ffffffc8',
+  belly: '#ffffff',
+  lid: '#b6e0f7',
+  brow: '#5b9cc4',
+  crest: '#a5e0fa',
+  tail: '#7cc4ea',
+};
+
+const RIME: BirdDesign = {
+  body: blobPolar([95, 94, 94, 95, 95, 94, 93, 94, 95, 95, 94, 94]),
+  tail: [plume(-88, 10, 196, 186, 46, 18, -3, 0.8, 0.5, 12), plume(-88, 28, 166, 176, 42, 17, 3, 0.8, 1.8, -12)],
+  // Icicle crest.
+  crest: [
+    plume(-22, -80, -128, -165, 40, 14, -2, 1, 0.2, -16),
+    plume(-6, -88, -104, -158, 58, 15, -3, 1, 1.2, 0),
+    plume(10, -86, -82, -150, 42, 14, -2, 1, 2.2, 16),
+  ],
+  belly: null,
+  gloss: { x: -50, y: -52, size: 15 },
+  near: { x: 12, y: -12, rx: 24, ry: 26, pupil: 11 },
+  far: { x: 58, y: -10, rx: 19, ry: 23, pupil: 9.5 },
+  nearBrow: { outerX: -14, outerY: -46, outerW: 3, innerX: 34, innerY: -40, innerW: 4 },
+  farBrow: { outerX: 82, outerY: -42, outerW: 3, innerX: 44, innerY: -38, innerW: 4 },
+  beak: { x: 44, y: 24, length: 52, upper: 14, lower: 9, jaw: 40, hook: 6, gape: 0.55 },
+  lidBias: 0,
+  angerBias: -0.12,
+  under(ctx, pose) {
+    // Pale blue wing and a dusting of frost that glitters.
+    ellipse(ctx, -46, 30, 44, 26, 0.35, '#c4e8fb');
+    ellipse(ctx, 34, 40, 13, 8, 0, '#bfe4f8');
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    const spots = [[-60, 18, 0], [-38, 40, 1.3], [-70, 46, 2.1], [-22, 22, 3.4], [-50, 60, 4.2]] as const;
+    for (const [x, y, phase] of spots) sparkle(ctx, x, y, 5 + 2.5 * Math.sin(pose.time * 3 + phase));
+    ctx.fill();
+  },
+};
+
+// ---------------------------------------------------------------- Jolt, the storm swallow (Voltwing)
+
+const JOLT_TONES: BirdTones = {
   ...FACE_TONES,
   ...BEAK_YELLOW,
-  hi: '#ffffff',
-  body: BIRD_COLORS.matilda.body,
-  lo: '#e4dccb',
-  shade: '#cfc5b3b8',
-  rim: '#ffffffb0',
-  belly: '#fffdf6',
-  lid: '#e2dacb',
-  brow: '#2b1a12',
-  crest: '#4a362e',
-  tail: '#e6decd',
-  cheek: '#f6b7a6',
-  cheekHot: '#ef8f7e',
-  crease: '#b9ad98',
+  hi: '#9498ff',
+  body: BIRD_COLORS.jolt.body,
+  lo: '#3838a6',
+  shade: '#24247899',
+  rim: '#ccceff85',
+  belly: '#ffe24d',
+  lid: '#4a4ec8',
+  brow: '#2e2e9a',
+  crest: '#ffd21f',
+  tail: '#2e2e8c',
 };
 
-const MATILDA: BirdDesign = {
-  body: blobPolar([106, 94, 85, 90, 98, 98, 93, 98, 98, 90, 85, 94]),
-  tail: [
-    plume(-80, 30, 206, 190, 36, 19, -3, 0.3, 0.2, 14),
-    plume(-85, 45, 181, 182, 41, 19, 0, 0.3, 1.2, 0),
-    plume(-80, 60, 156, 174, 35, 18, 3, 0.3, 2.3, -14),
-  ],
-  crest: [plume(-8, -122, -120, -160, 27, 12, -3, 0.6, 0.7, -30), plume(3, -124, -70, -140, 23, 11, 3, 0.6, 2.2, 28)],
+/** Lightning-bolt crest, as [x, y] corners. */
+const JOLT_BOLT: readonly (readonly [number, number])[] = [
+  [-6, -84],
+  [-34, -128],
+  [-12, -124],
+  [-30, -164],
+  [18, -112],
+  [-2, -116],
+  [20, -84],
+];
+
+const JOLT: BirdDesign = {
+  body: blobPolar([95, 94, 95, 95, 95, 94, 93, 94, 95, 95, 95, 94]),
+  tail: [plume(-94, 0, 198, 188, 66, 13, -5, 1, 0.3, 16), plume(-94, 18, 162, 172, 66, 13, 5, 1, 1.6, -16)],
+  crest: [],
   belly: null,
-  gloss: { x: -40, y: -66, size: 13 },
-  near: { x: 16, y: -26, rx: 21, ry: 24, pupil: 8.5 },
-  far: { x: 57, y: -24, rx: 17, ry: 22, pupil: 7.5 },
-  nearBrow: { outerX: -12, outerY: -57, outerW: 6, innerX: 35, innerY: -44, innerW: 10 },
-  farBrow: { outerX: 80, outerY: -53, outerW: 6, innerX: 38, innerY: -43, innerW: 10 },
-  beak: { x: 37, y: 13, length: 66, upper: 18, lower: 12, jaw: 49, hook: 5, gape: 0.58 },
+  gloss: { x: -50, y: -52, size: 14 },
+  near: { x: 14, y: -14, rx: 23, ry: 24, pupil: 10 },
+  far: { x: 58, y: -12, rx: 18, ry: 22, pupil: 9 },
+  nearBrow: { outerX: -14, outerY: -44, outerW: 4, innerX: 36, innerY: -32, innerW: 6 },
+  farBrow: { outerX: 84, outerY: -40, outerW: 4, innerX: 42, innerY: -31, innerW: 6 },
+  beak: { x: 46, y: 22, length: 60, upper: 14, lower: 9, jaw: 48, hook: 2, gape: 0.6 },
   lidBias: 0.05,
-  angerBias: 0.08,
+  angerBias: 0.05,
+  behind(ctx, pose, t) {
+    // The crest is a bolt of lightning; it leans back in flight and flickers when the charge is spent.
+    const lean = pose.state === 'flying' || pose.state === 'ability' ? -0.32 : 0;
+    const flicker = pose.state === 'ability' ? 0.75 + 0.25 * Math.sin(pose.time * 60) : 1;
+    ctx.save();
+    ctx.translate(4, -84);
+    ctx.rotate(lean + 0.04 * Math.sin(pose.time * 5));
+    ctx.translate(-4, 84);
+    ctx.beginPath();
+    JOLT_BOLT.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+    ctx.closePath();
+    ctx.lineWidth = FEATURE_LINE;
+    ctx.strokeStyle = t.ink;
+    ctx.globalAlpha *= flicker;
+    ctx.fillStyle = pose.abilityUsed ? '#fff3b0' : t.crest;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  },
+  under(ctx, _pose, t) {
+    // A jagged yellow flash across the chest.
+    ctx.fillStyle = t.belly;
+    ctx.beginPath();
+    ctx.moveTo(-70, 40);
+    ctx.lineTo(-30, 28);
+    ctx.lineTo(-40, 50);
+    ctx.lineTo(8, 36);
+    ctx.lineTo(-2, 58);
+    ctx.lineTo(60, 40);
+    ctx.lineTo(80, 100);
+    ctx.lineTo(-90, 100);
+    ctx.closePath();
+    ctx.fill();
+  },
 };
 
-/** After laying her egg: a slimmer, crumpled sack with a pinched waist and a sagging bottom. */
-const MATILDA_SPENT: BirdDesign = {
-  ...MATILDA,
-  body: blobThrough([
-    [0, -100],
-    [30, -88],
-    [50, -58],
-    [57, -24],
-    [51, 6],
-    [62, 34],
-    [70, 62],
-    [50, 86],
-    [0, 93],
-    [-50, 86],
-    [-70, 62],
-    [-62, 34],
-    [-51, 6],
-    [-57, -24],
-    [-50, -58],
-    [-30, -88],
+// ---------------------------------------------------------------- Nova, the nightjar (Gravity bird)
+
+interface NovaTones extends BirdTones {
+  star: string;
+  halo: string;
+}
+
+const NOVA_TONES: NovaTones = {
+  ...FACE_TONES,
+  beak: '#3a2a5c',
+  beakDark: '#22163c',
+  beakLight: '#6a56a0',
+  eyeWhite: '#fff4c2',
+  hi: '#ab80f2',
+  body: BIRD_COLORS.nova.body,
+  lo: '#472890',
+  shade: '#2a156299',
+  rim: '#e0ccff85',
+  belly: '#b79af0',
+  lid: '#6a3cc0',
+  brow: '#27135a',
+  crest: '#5a34ac',
+  tail: '#3d2180',
+  star: '#ffe9a3',
+  halo: '#c9a8ff',
+};
+
+const NOVA_STARS: readonly (readonly [number, number, number, number])[] = [
+  [-58, -34, 7, 0],
+  [-70, 8, 5, 1.7],
+  [-40, 38, 8, 3.1],
+  [-14, 62, 5, 4.4],
+  [-76, 44, 4, 2.4],
+  [-26, -62, 5, 5.2],
+  [40, 66, 4, 0.9],
+];
+
+const NOVA: BirdDesign = {
+  // Wide, flat-crowned head: all eyes.
+  body: outline([
+    [-90, 86],
+    [-60, 92],
+    [-30, 100],
+    [0, 104],
+    [30, 100],
+    [60, 94],
+    [90, 90],
+    [120, 94],
+    [150, 100],
+    [180, 104],
+    [210, 100],
+    [240, 92],
   ]),
-  tail: [plume(-62, 44, 200, 190, 30, 15, -3, 0.3, 0.2, 18), plume(-64, 58, 164, 176, 28, 14, 3, 0.3, 2.3, -18)],
-  crest: [plume(-8, -116, -128, -160, 27, 11, -3, 0.6, 0.7, -30), plume(3, -118, -62, -140, 23, 10, 3, 0.6, 2.2, 28)],
-  gloss: { x: -26, y: -66, size: 9 },
-  near: { x: 2, y: -28, rx: 21, ry: 24, pupil: 8.5 },
-  far: { x: 43, y: -26, rx: 17, ry: 22, pupil: 7.5 },
-  nearBrow: { outerX: -26, outerY: -59, outerW: 6, innerX: 21, innerY: -48, innerW: 9 },
-  farBrow: { outerX: 66, outerY: -55, outerW: 6, innerX: 24, innerY: -47, innerW: 9 },
-  beak: { x: 24, y: 11, length: 60, upper: 16, lower: 11, jaw: 45, hook: 5, gape: 0.58 },
+  tail: [plume(-92, 6, 200, 190, 44, 22, -3, 0.35, 0.3, 14), plume(-94, 24, 180, 180, 46, 22, 0, 0.35, 1.2, 0), plume(-90, 42, 160, 172, 40, 20, 3, 0.35, 2.1, -14)],
+  crest: [plume(-30, -74, -160, -178, 40, 20, -3, 0.4, 0.4, -12), plume(-14, -80, -140, -170, 34, 18, -3, 0.4, 1.5, 10)],
+  belly: { x: 10, y: 80, rx: 56, ry: 34 },
+  gloss: { x: -52, y: -46, size: 13 },
+  near: { x: 4, y: -10, rx: 30, ry: 32, pupil: 15 },
+  far: { x: 60, y: -8, rx: 24, ry: 28, pupil: 13 },
+  nearBrow: { outerX: -30, outerY: -48, outerW: 3, innerX: 22, innerY: -46, innerW: 4 },
+  farBrow: { outerX: 86, outerY: -42, outerW: 3, innerX: 50, innerY: -42, innerW: 4 },
+  beak: { x: 54, y: 30, length: 32, upper: 10, lower: 7, jaw: 25, hook: 5, gape: 0.9 },
+  lidBias: 0.12,
+  angerBias: -0.2,
+  behind(ctx, pose, tones) {
+    // While the well is open a ring of light turns behind the bird.
+    if (pose.state !== 'ability') return;
+    const t = tones as NovaTones;
+    ctx.save();
+    ctx.rotate(pose.time * 4);
+    ctx.strokeStyle = t.halo;
+    ctx.lineWidth = 7;
+    ctx.setLineDash([26, 18]);
+    ctx.beginPath();
+    ctx.arc(0, 0, 132, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  },
+  under(ctx, pose, tones) {
+    const t = tones as NovaTones;
+    // A sky full of stars across the back.
+    ctx.fillStyle = t.star;
+    ctx.beginPath();
+    for (const [x, y, size, phase] of NOVA_STARS) sparkle(ctx, x, y, size * (0.75 + 0.25 * Math.sin(pose.time * 2.4 + phase)));
+    ctx.fill();
+    // Crescent on the chest.
+    ctx.strokeStyle = '#e9dcff';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(14, 56, 26, 0.25, Math.PI - 0.25);
+    ctx.stroke();
+  },
+  over(ctx, _pose, t) {
+    // Bristles at the corner of the mouth.
+    ctx.strokeStyle = t.ink;
+    ctx.lineWidth = 3;
+    for (const dy of [-6, 2, 10]) {
+      ctx.beginPath();
+      ctx.moveTo(48, 32 + dy * 0.4);
+      ctx.lineTo(26, 36 + dy);
+      ctx.stroke();
+    }
+  },
 };
-
-/** Top-knot: a neat dark bun; its two sprigs are the crest plumes. */
-function paintMatildaBun(ctx: CanvasRenderingContext2D, spent: boolean, t: MatildaTones): void {
-  const y = spent ? -106 : -112;
-  const radius = spent ? 11 : 15;
-  ctx.beginPath();
-  ctx.arc(-2, y, radius, 0, TAU);
-  ctx.fillStyle = t.crest;
-  ctx.fill();
-  ctx.lineWidth = FEATURE_LINE;
-  ctx.strokeStyle = t.ink;
-  ctx.stroke();
-}
-
-function paintMatildaMarks(ctx: CanvasRenderingContext2D, design: BirdDesign, spent: boolean, strain: number, t: MatildaTones): void {
-  const near = design.near;
-  const grow = 1 + 0.3 * strain;
-  ctx.fillStyle = strain > 0.5 ? t.cheekHot : t.cheek;
-  if (!spent) {
-    ctx.beginPath();
-    ctx.ellipse(near.x - 20, near.y + 40, 17 * grow, 11 * grow, 0.15, 0, TAU);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(design.far.x + 26, design.far.y + 34, 12 * grow, 10 * grow, 0, 0, TAU);
-    ctx.fill();
-  }
-  ctx.lineWidth = DETAIL_LINE;
-  ctx.strokeStyle = t.crease;
-  ctx.beginPath();
-  if (spent) {
-    ctx.moveTo(-44, 20);
-    ctx.quadraticCurveTo(-30, 30, -40, 46);
-    ctx.moveTo(40, 18);
-    ctx.quadraticCurveTo(28, 30, 38, 44);
-    ctx.moveTo(-18, 62);
-    ctx.quadraticCurveTo(0, 72, 20, 62);
-    ctx.moveTo(near.x - 16, near.y + 30);
-    ctx.quadraticCurveTo(near.x, near.y + 38, near.x + 14, near.y + 31);
-  } else {
-    ctx.moveTo(-62, 26);
-    ctx.quadraticCurveTo(-30, 50, -66, 66);
-    ctx.moveTo(-50, 36);
-    ctx.quadraticCurveTo(-36, 46, -52, 56);
-  }
-  ctx.stroke();
-}
-
-const LASH_LENGTH = 10;
-
-/** Three lashes fanning out from the outer upper corner of an eye (`outer`: +1 right, -1 left). */
-function paintLashes(ctx: CanvasRenderingContext2D, eye: EyeShape, outer: 1 | -1, size: number, ink: string): void {
-  ctx.lineWidth = DETAIL_LINE;
-  ctx.strokeStyle = ink;
-  ctx.beginPath();
-  for (let i = 0; i < 3; i++) {
-    const lean = (22 + i * 24) * DEG;
-    const dx = outer * Math.cos(lean);
-    const dy = -Math.sin(lean);
-    const fromX = eye.x + dx * eye.rx * size;
-    const fromY = eye.y + dy * eye.ry * size;
-    ctx.moveTo(fromX, fromY);
-    ctx.lineTo(fromX + dx * LASH_LENGTH, fromY + dy * LASH_LENGTH);
-  }
-  ctx.stroke();
-}
 
 // ---------------------------------------------------------------- rig
 
@@ -610,17 +775,23 @@ function stateRig(pose: BirdPose): Rig {
   }
 }
 
-/** What "special ability active" looks like for each bird; Red keeps the generic battle cry. */
+/** What "special ability active" looks like for each bird; Pip keeps the generic battle cry. */
 function abilityRig(type: BirdType, rig: Rig): Rig {
   switch (type) {
-    case 'chuck':
+    case 'zip':
       return { ...rig, top: 0.5, bottom: 0.32, eye: 1, pupil: 0.9, open: 0, clench: 0.4, sweep: 1.12, flutter: 0.05, speed: 44, lookX: 0.6 };
-    case 'bomb':
+    case 'ember':
       return { ...rig, anger: 0, lift: 1, top: 0, eye: 1.28, pupil: 0.55, open: 0, clench: 1, sweep: 0.2, flutter: 0.09, speed: 34, lookX: 0.1 };
-    case 'blues':
+    case 'sprig':
       return { ...rig, anger: 0, lift: 0.8, top: 0, eye: 1.1, pupil: 1.1, open: 0.85, sweep: 0.7, flutter: 0.14, speed: 24 };
-    case 'matilda':
-      return { ...rig, anger: 0.9, top: 0.4, bottom: 0.36, eye: 1, pupil: 1, open: 0, clench: 1, sweep: 0.3, flutter: 0.03, speed: 40, lookX: 0.1 };
+    case 'brawn':
+      return { ...rig, anger: 1, top: 0.4, bottom: 0.36, eye: 1, pupil: 1, open: 0, clench: 1, sweep: -0.6, flutter: 0.03, speed: 40, lookX: 0.1, lookY: 0.6 };
+    case 'rime':
+      return { ...rig, anger: 0.2, lift: 0.5, top: 0, eye: 1.12, pupil: 0.8, open: 1.1, sweep: 0.5, ruffle: 0.6, flutter: 0.1, speed: 30 };
+    case 'jolt':
+      return { ...rig, anger: 0.6, lift: 0.4, top: 0, eye: 1.2, pupil: 0.5, open: 1.2, sweep: 0.6, ruffle: 1, flutter: 0.3, speed: 70 };
+    case 'nova':
+      return { ...rig, anger: 0, lift: 0.9, top: 0, bottom: 0, eye: 1.18, pupil: 1.25, open: 0.2, sweep: 0, ruffle: 0.3, flutter: 0.12, speed: 9, lookX: 0, lookY: 0 };
     default:
       return rig;
   }
@@ -634,28 +805,20 @@ function buildRig(type: BirdType, design: BirdDesign, pose: BirdPose): Rig {
     rig.anger = clamp01(rig.anger + design.angerBias * (1 - rig.lift));
     if (!rig.squeeze) rig.top = clamp01(rig.top + design.lidBias);
   }
-  if (type === 'bomb') {
+  if (type === 'ember') {
     const fuse = clamp01(pose.fuse ?? 0);
     rig.eye *= 1 + 0.2 * fuse;
     rig.pupil *= 1 - 0.35 * fuse;
     rig.top *= 1 - fuse;
     rig.anger *= 1 - fuse;
     rig.lift = Math.max(rig.lift, fuse * 0.9);
+    // The flame crest flares as the heat builds.
+    rig.flutter += 0.2 * fuse;
+    rig.speed += 30 * fuse;
   }
-  if (pose.abilityUsed) {
-    if (type === 'matilda') {
-      rig.eye *= 1.22;
-      rig.pupil *= 0.62;
-      rig.top = Math.min(rig.top, 0.02);
-      rig.bottom = 0;
-      rig.anger = 0;
-      rig.lift = 1;
-      rig.open = Math.max(rig.open, 0.4);
-      rig.ruffle = Math.max(rig.ruffle, 0.8);
-    } else if (type === 'chuck') {
-      rig.sweep = Math.max(rig.sweep, 0.85);
-      rig.ruffle = Math.max(rig.ruffle, 0.35);
-    }
+  if (pose.abilityUsed && type === 'zip') {
+    rig.sweep = Math.max(rig.sweep, 0.85);
+    rig.ruffle = Math.max(rig.ruffle, 0.35);
   }
   if (pose.lookX !== undefined) rig.lookX = pose.lookX;
   if (pose.lookY !== undefined) rig.lookY = pose.lookY;
@@ -722,18 +885,20 @@ function paintFace(ctx: CanvasRenderingContext2D, design: BirdDesign, rig: Rig, 
 
 // ---------------------------------------------------------------- painters
 
-const DESIGNS: Record<BirdType, BirdDesign> = { red: RED, chuck: CHUCK, bomb: BOMB, blues: BLUES, matilda: MATILDA };
+const DESIGNS: Record<BirdType, BirdDesign> = { pip: PIP, zip: ZIP, ember: EMBER, sprig: SPRIG, brawn: BRAWN, rime: RIME, jolt: JOLT, nova: NOVA };
 const TONES: Record<BirdType, BirdTones> = {
-  red: RED_TONES,
-  chuck: CHUCK_TONES,
-  bomb: BOMB_TONES,
-  blues: BLUES_TONES,
-  matilda: MATILDA_TONES,
+  pip: PIP_TONES,
+  zip: ZIP_TONES,
+  ember: EMBER_TONES,
+  sprig: SPRIG_TONES,
+  brawn: BRAWN_TONES,
+  rime: RIME_TONES,
+  jolt: JOLT_TONES,
+  nova: NOVA_TONES,
 };
 
 export function paintBird(ctx: CanvasRenderingContext2D, type: BirdType, pose: BirdPose): void {
-  const spent = type === 'matilda' && pose.abilityUsed === true;
-  const design = spent ? MATILDA_SPENT : DESIGNS[type];
+  const design = DESIGNS[type];
   const flash = pose.flash ?? 0;
   const tones = flashTones(TONES[type], flash);
   const rig = buildRig(type, design, pose);
@@ -744,8 +909,7 @@ export function paintBird(ctx: CanvasRenderingContext2D, type: BirdType, pose: B
   ctx.lineCap = 'round';
   paintPlumes(ctx, design.tail, plumes, tones.tail, tones.ink);
   paintPlumes(ctx, design.crest, plumes, tones.crest, tones.ink);
-  if (type === 'bomb') paintBombFuse(ctx, pose, rig.sweep, flashTones(BOMB_TONES, flash));
-  if (type === 'matilda') paintMatildaBun(ctx, spent, flashTones(MATILDA_TONES, flash));
+  design.behind?.(ctx, pose, tones);
 
   beginBody(ctx, design.body, tones);
   if (design.belly) {
@@ -754,80 +918,17 @@ export function paintBird(ctx: CanvasRenderingContext2D, type: BirdType, pose: B
     ctx.fillStyle = tones.belly;
     ctx.fill();
   }
-  if (type === 'matilda') {
-    const strain = pose.state === 'ability' && !spent ? 1 : 0;
-    paintMatildaMarks(ctx, design, spent, strain, flashTones(MATILDA_TONES, flash));
-  }
+  design.under?.(ctx, pose, tones);
   shadeBody(ctx, design.body, tones);
-  if (type === 'bomb') paintBombHeat(ctx, pose, flashTones(BOMB_TONES, flash));
   paintGloss(ctx, design.gloss.x, design.gloss.y, design.gloss.size, tones.gloss);
   endBody(ctx);
 
   paintFace(ctx, design, rig, pose, tones);
-  if (type === 'matilda' && !rig.squeeze) {
-    paintLashes(ctx, design.near, -1, rig.eye, tones.ink);
-    paintLashes(ctx, design.far, 1, rig.eye, tones.ink);
-  }
-  ctx.restore();
-}
-
-// ---------------------------------------------------------------- egg
-
-const EGG_TONES = {
-  ink: INK,
-  hi: '#ffffff',
-  body: '#fffaea',
-  lo: '#efe4cc',
-  shade: '#d8c9a8a8',
-  rim: '#ffffffc0',
-  gloss: '#ffffffe6',
-  speckle: '#c9a877',
-  sheen: '#ffffff73',
-} as const;
-
-const EGG_BODY = blobPolar([101, 92, 85, 84, 89, 94, 96, 94, 89, 84, 85, 92]);
-/** Speckles as [x, y, radius]. */
-const EGG_SPECKLES: readonly (readonly [number, number, number])[] = [
-  [-30, -40, 5],
-  [22, -58, 3.5],
-  [44, -8, 4.5],
-  [-52, 14, 4],
-  [6, 30, 5.5],
-  [-20, 62, 4],
-  [38, 52, 3.5],
-  [-4, -12, 3],
-];
-/** Seconds between two passes of the sheen that slides across the shell. */
-const EGG_SHEEN_PERIOD = 2.2;
-const EGG_WOBBLE = 0.045;
-
-export function paintEgg(ctx: CanvasRenderingContext2D, time: number): void {
-  const t = EGG_TONES;
-  ctx.save();
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.rotate(Math.sin(time * 9) * EGG_WOBBLE);
-  beginBody(ctx, EGG_BODY, t);
-  ctx.fillStyle = t.speckle;
-  for (const [x, y, radius] of EGG_SPECKLES) {
-    ctx.beginPath();
-    ctx.ellipse(x, y, radius, radius * 0.8, 0.5, 0, TAU);
-    ctx.fill();
-  }
-  shadeBody(ctx, EGG_BODY, t);
-
-  const slide = ((time / EGG_SHEEN_PERIOD) % 1) * 2 - 1;
-  ctx.save();
-  ctx.rotate(-0.5);
-  ctx.fillStyle = t.sheen;
-  ctx.fillRect(slide * 190 - 9, -140, 18, 280);
-  ctx.restore();
-  paintGloss(ctx, -34, -52, 17, t.gloss);
-  endBody(ctx);
+  design.over?.(ctx, pose, tones);
   ctx.restore();
 }
 
 /** Outline of a bird's body for tools that need the silhouette (collision-fit overlays, tests). */
-export function traceBirdBody(ctx: CanvasRenderingContext2D, type: BirdType, spent = false): void {
-  traceBlob(ctx, type === 'matilda' && spent ? MATILDA_SPENT.body : DESIGNS[type].body);
+export function traceBirdBody(ctx: CanvasRenderingContext2D, type: BirdType): void {
+  traceBlob(ctx, DESIGNS[type].body);
 }

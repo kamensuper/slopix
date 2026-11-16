@@ -1,10 +1,10 @@
 /** Runtime entities of the simulation: plain data records attached to physics bodies. */
 import type { Body, Joint } from 'planck';
-import type { BirdType, BlockMaterial, BlockShape, PigVariant } from '../core/types';
+import type { BirdType, BlockMaterial, BlockShape, FoeVariant } from '../core/types';
 import type { Point } from './geometry';
 
-/** Everything that flies: the five birds plus Matilda's egg. */
-export type ProjectileType = BirdType | 'egg';
+/** Everything that flies. */
+export type ProjectileType = BirdType;
 
 interface BodyEntity {
   readonly id: number;
@@ -47,18 +47,32 @@ export interface BlockEntity extends BodyEntity {
   seed: number;
   /** Fractional score not yet paid out for damage. */
   scoreBank: number;
+  /** Frozen by Rime: brittle and slippery until it breaks. */
+  frozen: boolean;
+  /** Tick at which lightning last ran through the piece; -1 if never. */
+  shockTick: number;
+  /** Turned by a motorised hinge (never counts as "the world is still moving"). */
+  motorized: boolean;
 }
 
-export interface PigEntity extends BodyEntity {
-  readonly kind: 'pig';
-  variant: PigVariant;
+export interface FoeEntity extends BodyEntity {
+  readonly kind: 'foe';
+  variant: FoeVariant;
   radius: number;
   hp: number;
   maxHp: number;
-  /** Remaining helmet / armour hit points (0 once broken or for unarmoured pigs). */
+  /** Remaining helmet / armour hit points (0 once broken or for unarmoured foes). */
   armor: number;
   maxArmor: number;
   scoreBank: number;
+  frozen: boolean;
+  shockTick: number;
+  /** Balloonists: still hanging under the balloon. */
+  floating: boolean;
+  /** Balloonists: the post the balloon holds, and how far it drifts sideways. */
+  homeX: number;
+  homeY: number;
+  patrol: number;
 }
 
 export interface BirdEntity extends BodyEntity {
@@ -69,16 +83,24 @@ export interface BirdEntity extends BodyEntity {
   /** Has touched something solid since launch. */
   impacted: boolean;
   impactTick: number;
+  /** Speed at the moment of the first impact. */
+  impactSpeed: number;
   abilityUsed: boolean;
   abilityTick: number;
   /** Consecutive ticks spent (almost) motionless after the first impact. */
   restTicks: number;
-  /** Bomb: tick at which the lit fuse runs out, -1 while unlit. */
+  /** Ember: tick at which the lit fuse runs out, -1 while unlit. */
   fuseEndTick: number;
-  /** Egg: set by the contact listener, the egg explodes right after the physics step. */
-  detonate: boolean;
-  /** Extra projectile created by an ability (split clone, egg) rather than launched from the sling. */
+  /** Extra projectile created by an ability (split clone) rather than launched from the sling. */
   spawned: boolean;
+  /** Times the bird has sprung off rubber without that counting as its impact. */
+  bounces: number;
+  /** Brawn: diving after the tap; the next impact shakes the ground. */
+  slamming: boolean;
+  /** Nova: tick at which the open gravity well closes, -1 while closed. */
+  wellEndTick: number;
+  /** Set by the contact listener: the ability fires right after the physics step (Rime on impact, Brawn's quake). */
+  pendingAbility: boolean;
 }
 
 export interface TerrainEntity {
@@ -91,7 +113,14 @@ export interface TerrainEntity {
   boundRadius: 0;
 }
 
-export type DynamicEntity = BlockEntity | PigEntity | BirdEntity;
+/** Attached to terrain fixtures that are not plain ground. */
+export interface SurfaceTag {
+  surface: 'ice' | 'bouncy' | 'conveyor';
+  /** Belt speed in m/s (conveyors only). */
+  speed: number;
+}
+
+export type DynamicEntity = BlockEntity | FoeEntity | BirdEntity;
 export type Entity = DynamicEntity | TerrainEntity;
 
 export interface JointEntity {
@@ -103,4 +132,6 @@ export interface JointEntity {
   a: BlockEntity;
   /** null = fixed to the world. */
   b: BlockEntity | null;
+  /** Driven hinge. */
+  motor: boolean;
 }

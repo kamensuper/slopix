@@ -41,6 +41,24 @@ const STYLES: Record<ThemeId, Style> = {
     stone: ['#3e4663', '#9aa5c3', '#ccd4ea'],
     cap: { thick: 30, shade: '#b9cdee', base: '#eef4ff', light: '#ffffff', drip: 12 },
   },
+  storm: {
+    light: '#8a9a8c', base: '#5f6f66', dark: '#38453f',
+    strata: ['rgba(40,52,48,0.5)', 'rgba(170,190,175,0.3)'],
+    stone: ['#2f3a36', '#8fa096', '#c2d0c6'],
+    cap: { thick: 20, shade: '#4c8a4a', base: '#73b85a', light: '#a9e07a', drip: 9 },
+  },
+  ironworks: {
+    light: '#8d7f86', base: '#5e5158', dark: '#352b31',
+    strata: ['rgba(30,22,26,0.55)', 'rgba(200,150,110,0.25)'],
+    stone: ['#2a2126', '#8a7a80', '#b9a8ae'],
+    cap: { thick: 12, shade: '#55606c', base: '#8d9bab', light: '#dfe7ef', drip: 0 },
+  },
+  celestial: {
+    light: '#b9a6e6', base: '#8a76c4', dark: '#4f3f8a',
+    strata: ['rgba(60,40,120,0.45)', 'rgba(230,215,255,0.3)'],
+    stone: ['#3d2f72', '#a896dc', '#dccfff'],
+    cap: { thick: 14, shade: '#c9a54a', base: '#f0d274', light: '#fff1b8', drip: 4 },
+  },
 };
 
 type Pt = [number, number];

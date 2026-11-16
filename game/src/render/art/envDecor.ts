@@ -1167,7 +1167,7 @@ const snowman: Painter = (ctx, rng) => {
   ctx.lineTo(70, -150);
   ctx.stroke();
   ball(0, -166, 28);
-  // Pig face: ears, snout, pebble eyes and a grin.
+  // Foe face: ears, snout, pebble eyes and a grin.
   ctx.fillStyle = '#eef4ff';
   for (const s of [-1, 1]) {
     ctx.beginPath();

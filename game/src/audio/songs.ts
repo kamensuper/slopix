@@ -85,6 +85,48 @@ export const SONGS: Record<SongId, Song> = {
     drums: { kick: [0, 10], snare: [], hat: [], perc: [], shaker: [4, 12], kit: 'soft' },
     bells: { every: 4, vol: 0.05 },
   },
+  // Wind and sea spray: F# dorian in a rolling 6-feel, restless arpeggios over a galloping kick.
+  storm: {
+    bpm: 132,
+    swing: 0.12,
+    root: 54,
+    chords: [[0, 3, 7], [5, 9, 12], [10, 14, 17], [0, 3, 7], [3, 7, 10], [5, 9, 12], [7, 10, 14], [0, 3, 7]],
+    melody: ['19 . 22 . 24 . 22 19', '21 . 17 . 21 . 24 .', '26 . 22 . 17 . 22 26', '24 . 22 . 19 . 15 .', '15 . 19 . 22 . 27 22', '24 . 21 . 17 . 21 24', '26 . 22 . 19 . 22 26', '24 . 19 . 15 . 12 .'],
+    lead: { wave: 'sawtooth', cutoff: 2400, vol: 0.1, vibrato: 0.006 },
+    pad: { wave: 'sawtooth', cutoff: 600, vol: 0.04 },
+    arp: { pattern: [0, 1, 2, 1, 2, 1, 0, 2], every: 1, wave: 'triangle', cutoff: 2600, vol: 0.04, octave: 12 },
+    bass: { pattern: [0, null, 0, null, null, 0, null, 0, 2, null, 0, null, null, 0, 1, null], wave: 'triangle', vol: 0.24 },
+    drums: { kick: [0, 3, 8, 11], snare: [4, 12], hat: [2, 6, 10, 14], perc: [], shaker: [1, 5, 9, 13], kit: 'pop' },
+    bells: null,
+  },
+  // Hammers and gears: C minor, square-wave stabs over a mechanical, clanking pattern.
+  ironworks: {
+    bpm: 96,
+    swing: 0.02,
+    root: 48,
+    chords: [[0, 7, 15], [0, 7, 15], [8, 12, 15], [10, 14, 17], [0, 7, 15], [5, 8, 12], [7, 11, 14], [0, 7, 12]],
+    melody: ['24 . - 24 27 . 24 .', '22 . - 22 19 . - .', '20 . - 24 27 . 31 .', '29 . 26 . 22 . - .', '24 . - 24 27 . 31 .', '32 . 29 . 24 . 20 .', '31 . 26 . 23 . 19 .', '24 . . . - . - .'],
+    lead: { wave: 'square', cutoff: 1500, vol: 0.075, vibrato: 0 },
+    pad: { wave: 'sawtooth', cutoff: 420, vol: 0.045 },
+    arp: { pattern: [0, null, 0, 2, null, 0, 1, null], every: 2, wave: 'square', cutoff: 900, vol: 0.04, octave: 0 },
+    bass: { pattern: [0, null, null, 0, null, null, 0, null, 0, null, null, 0, null, 2, null, 0], wave: 'sawtooth', vol: 0.2 },
+    drums: { kick: [0, 6, 8], snare: [4, 12], hat: [2, 10], perc: [3, 7, 11, 14, 15], shaker: [], kit: 'hand' },
+    bells: { every: 8, vol: 0.035 },
+  },
+  // Weightless: G lydian, slow bells and a wide pad that never quite resolves.
+  celestial: {
+    bpm: 76,
+    swing: 0,
+    root: 55,
+    chords: [[0, 4, 7], [2, 6, 9], [0, 4, 11], [9, 12, 16], [0, 4, 7], [2, 6, 9], [4, 7, 11], [0, 6, 11]],
+    melody: ['23 . . . 18 . 19 .', '21 . . . 26 . . .', '28 . 23 . 18 . . .', '24 . 21 . 16 . . .', '23 . . . 26 . 30 .', '28 . . . 21 . 26 .', '23 . 19 . 16 . 11 .', '18 . . . . . . .'],
+    lead: { wave: 'sine', cutoff: 3400, vol: 0.11, vibrato: 0.004 },
+    pad: { wave: 'triangle', cutoff: 1300, vol: 0.08 },
+    arp: { pattern: [0, 2, 1, 2, 0, 2, 1, null], every: 2, wave: 'sine', cutoff: 4000, vol: 0.045, octave: 24 },
+    bass: { pattern: [0, null, null, null, null, null, null, null, null, null, 2, null, null, null, null, null], wave: 'sine', vol: 0.24 },
+    drums: { kick: [0], snare: [], hat: [], perc: [], shaker: [8], kit: 'soft' },
+    bells: { every: 2, vol: 0.05 },
+  },
 };
 
 export interface MelodyNote {

@@ -1,9 +1,11 @@
 /**
- * Hand-built inline SVG illustrations for the menus: slingshot, feathers, bird and pig portraits,
+ * Hand-built inline SVG illustrations for the menus: slingshot, feathers, bird and foe portraits,
  * miniature world scenes and the how-to-play diagrams. Gradients come from the shared sprite.
  */
 import { BIRDS } from '../core/config';
-import type { BirdType, ThemeId } from '../core/types';
+import type { BirdType, FoeVariant, ThemeId } from '../core/types';
+import { paintBird } from '../render/art/birds';
+import { paintFoe } from '../render/art/foes';
 import { fromHtml } from './dom';
 
 const INK = '#2b1a12';
@@ -30,72 +32,33 @@ export function featherArt(color: string, cls = ''): SVGElement {
   </svg>`);
 }
 
-interface BirdPalette {
-  body: string;
-  shade: string;
-  belly: string;
-  beak: string;
-}
-const BIRD_PALETTE: Record<BirdType, BirdPalette> = {
-  red: { body: '#e23b2e', shade: '#a81f22', belly: '#f2d9b6', beak: '#f7b125' },
-  chuck: { body: '#f8cf1c', shade: '#d9960b', belly: '#fff3c2', beak: '#f08a1c' },
-  bomb: { body: '#34343d', shade: '#17171c', belly: '#8e8e9c', beak: '#f7b125' },
-  blues: { body: '#58b7ee', shade: '#2b7fc4', belly: '#e8f7ff', beak: '#f7b125' },
-  matilda: { body: '#f5f0e6', shade: '#cfc5b3', belly: '#ffffff', beak: '#f7b125' },
-};
-
-/** Round bird portrait, tinted per bird type, with a type-specific crest. */
-export function birdFace(type: BirdType, cls = ''): SVGElement {
-  const p = BIRD_PALETTE[type];
-  const crest =
-    type === 'bomb'
-      ? `<path d="M32 12q2-7 8-7" fill="none" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/><circle cx="41" cy="5" r="3.4" fill="#ffb629" stroke="${INK}" stroke-width="1.8"/>`
-      : type === 'chuck'
-        ? `<path d="M22 14l10-12 10 12z" fill="${p.body}" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>`
-        : type === 'matilda'
-          ? `<path d="M24 13q8-10 16 0" fill="${p.body}" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>`
-          : `<path d="M25 13q-2-9 5-9M33 11q1-9 7-8M38 14q5-6 10-3" fill="none" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/>`;
-  const cheeks = type === 'matilda' ? `<circle cx="18" cy="42" r="4" fill="#f6b7a6"/><circle cx="46" cy="42" r="4" fill="#f6b7a6"/>` : '';
-  const brow = type === 'matilda' ? '' : `<path d="M17 21l12 5M47 21l-12 5" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>`;
-  return svg(`<svg class="art-bird art-bird-${type} ${cls}" viewBox="0 0 64 64" aria-hidden="true">
-    ${crest}
-    <circle cx="32" cy="35" r="25" fill="${p.body}" stroke="${INK}" stroke-width="3.4"/>
-    <path d="M10 42a25 25 0 0 0 44 0c-6 9-38 9-44 0z" fill="${p.shade}" opacity=".55"/>
-    <ellipse cx="32" cy="49" rx="14" ry="9" fill="${p.belly}"/>
-    ${cheeks}
-    <circle cx="23" cy="32" r="7" fill="#fff" stroke="${INK}" stroke-width="2.4"/>
-    <circle cx="41" cy="32" r="7" fill="#fff" stroke="${INK}" stroke-width="2.4"/>
-    <circle cx="25" cy="33" r="3" fill="${INK}"/><circle cx="39" cy="33" r="3" fill="${INK}"/>
-    <circle cx="26" cy="32" r="1" fill="#fff"/><circle cx="40" cy="32" r="1" fill="#fff"/>
-    ${brow}
-    <path d="M25 41l7-3 7 3-7 8z" fill="${p.beak}" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round"/>
-    <path d="M13 22q4-8 12-11" stroke="#fff" stroke-opacity=".45" stroke-width="3" fill="none" stroke-linecap="round"/>
-  </svg>`);
+/** Square canvas holding a piece of character art, drawn with the same painters as the game. */
+function portrait(cls: string, extent: number, paint: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  const size = 192;
+  canvas.width = size;
+  canvas.height = size;
+  canvas.className = cls;
+  canvas.setAttribute('aria-hidden', 'true');
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.translate(size / 2, size / 2 + size * 0.04);
+    ctx.scale(size / (extent * 2), size / (extent * 2));
+    paint(ctx);
+  }
+  return canvas;
 }
 
-/** Pig portrait. `smug` = half-lidded eyes and a smirk (used on the fail screen). */
-export function pigFace(smug = false, cls = ''): SVGElement {
-  const eyes = smug
-    ? `<ellipse cx="29" cy="34" rx="7" ry="6.4" fill="#fff" stroke="${INK}" stroke-width="2.4"/><ellipse cx="51" cy="34" rx="7" ry="6.4" fill="#fff" stroke="${INK}" stroke-width="2.4"/>
-       <circle cx="31" cy="36" r="2.8" fill="${INK}"/><circle cx="49" cy="36" r="2.8" fill="${INK}"/>
-       <path d="M21 33.5h16M43 33.5h16" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
-       <path d="M22 28q7-3 14 0" fill="#5fae2e" stroke="${INK}" stroke-width="2" /><path d="M44 28q7-3 14 0" fill="#5fae2e" stroke="${INK}" stroke-width="2"/>
-       <path d="M42 23l17 -3" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>`
-    : `<circle cx="29" cy="33" r="7" fill="#fff" stroke="${INK}" stroke-width="2.4"/><circle cx="51" cy="33" r="7" fill="#fff" stroke="${INK}" stroke-width="2.4"/>
-       <circle cx="30" cy="34" r="3" fill="${INK}"/><circle cx="50" cy="34" r="3" fill="${INK}"/>`;
-  const mouth = smug
-    ? `<path d="M30 61q12 6 24-4" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round"/><path d="M52 56l4-3" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>`
-    : '';
-  return svg(`<svg class="art-pig ${smug ? 'art-pig-smug' : ''} ${cls}" viewBox="0 0 80 76" aria-hidden="true">
-    <path d="M14 26L9 6l20 10zM66 26l5-20-20 10z" fill="#6fbd38" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round"/>
-    <ellipse cx="40" cy="42" rx="33" ry="29" fill="#8fd14f" stroke="${INK}" stroke-width="3.6"/>
-    <path d="M10 50c6 18 54 18 60 0-4 22-56 22-60 0z" fill="#5fae2e" opacity=".6"/>
-    <path d="M16 28q6-12 20-14" stroke="#c3ee8b" stroke-width="4" fill="none" stroke-linecap="round" opacity=".8"/>
-    ${eyes}
-    <ellipse cx="40" cy="50" rx="13" ry="9.5" fill="#a6e36a" stroke="${INK}" stroke-width="3"/>
-    <ellipse cx="35" cy="50" rx="2.6" ry="3.6" fill="#2f6b1b"/><ellipse cx="45" cy="50" rx="2.6" ry="3.6" fill="#2f6b1b"/>
-    ${mouth}
-  </svg>`);
+/** Bird portrait, the bird's real in-game artwork. */
+export function birdFace(type: BirdType, cls = ''): HTMLElement {
+  return portrait(`art-bird art-bird-${type} ${cls}`, 172, (ctx) => paintBird(ctx, type, { time: 0.6, state: 'idle', blink: 0, lookX: 0.3, lookY: 0 }));
+}
+
+/** Foe portrait. `smug` = laughing (used on the fail screen). */
+export function foeFace(smug = false, cls = '', variant: FoeVariant = 'medium'): HTMLElement {
+  return portrait(`art-foe ${smug ? 'art-foe-smug' : ''} ${cls}`, 150, (ctx) =>
+    paintFoe(ctx, variant, { time: 0.4, expression: smug ? 'laugh' : 'idle', blink: 0, damage: 0, armorOn: true }),
+  );
 }
 
 // ------------------------------------------------------------------ world scenes
@@ -143,6 +106,35 @@ const SCENES: Record<ThemeId, string> = {
     <path d="M96 132h60l8 8H88z" fill="#9fd3ee" opacity=".75"/>
     <rect x="120" y="106" width="8" height="12" rx="2" fill="#3a2d3f"/><rect x="121" y="108" width="6" height="7" fill="#ffc45a"/><circle cx="124" cy="112" r="14" fill="#ffc45a" opacity=".25"/>
     <g fill="#fff"><circle cx="30" cy="30" r="1.6"/><circle cx="78" cy="18" r="1.4"/><circle cx="108" cy="58" r="1.6"/><circle cx="160" cy="40" r="1.4"/><circle cx="220" cy="80" r="1.6"/><circle cx="14" cy="76" r="1.4"/></g>`,
+  storm: `
+    <defs><linearGradient id="ffs-storm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3f63"/><stop offset=".6" stop-color="#6f86a8"/><stop offset="1" stop-color="#c6d6e4"/></linearGradient></defs>
+    <rect width="240" height="150" fill="url(#ffs-storm)"/>
+    ${cloud(60, 34, 1.5, '#3a4868', 0.95)}${cloud(150, 26, 1.8, '#465678', 0.95)}${cloud(205, 50, 1.1, '#56688a', 0.9)}
+    <path d="M150 40l-10 22h9l-8 20 20-28h-9l7-14z" fill="#ffe24d" stroke="#fff7c2" stroke-width="1.2"/>
+    <path d="M-5 118Q30 104 60 118T120 116 180 120 245 112V150H-5z" fill="#3e6f8f"/>
+    <path d="M-5 128Q40 118 80 130T160 128 245 126V150H-5z" fill="#2f5a78"/>
+    <path d="M30 96h56l-10 22H40z" fill="#5b6a56" stroke="#2b1a12" stroke-width="2"/><path d="M28 96h60" stroke="#8fc45a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M150 84h60l-12 26h-36z" fill="#5b6a56" stroke="#2b1a12" stroke-width="2"/><path d="M148 84h64" stroke="#8fc45a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M10 70l34-8M70 52l40-9M170 66l44-10" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>`,
+  ironworks: `
+    <defs><linearGradient id="ffs-iron" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2a34"/><stop offset=".55" stop-color="#a0523a"/><stop offset="1" stop-color="#f0a856"/></linearGradient></defs>
+    <rect width="240" height="150" fill="url(#ffs-iron)"/>
+    <path d="M20 150V70h18v80zM60 150V48h14v102zM150 150V60h20v90zM200 150V84h16v66z" fill="#2a2028"/>
+    ${cloud(66, 40, 1.0, '#6a5560', 0.8)}${cloud(160, 50, 1.2, '#6a5560', 0.75)}${cloud(46, 60, 0.7, '#7d6670', 0.7)}
+    <path d="M-5 110h250v40H-5z" fill="#3b2c30"/>
+    <circle cx="110" cy="104" r="26" fill="#6f7a86" stroke="#2b1a12" stroke-width="3"/><circle cx="110" cy="104" r="9" fill="#2b1a12"/>
+    <path d="M110 74v-8M110 142v-8M80 104h-8M148 104h-8M89 83l-6-6M137 131l-6-6M131 83l6-6M83 131l6-6" stroke="#2b1a12" stroke-width="7" stroke-linecap="round"/>
+    <path d="M-5 124h250" stroke="#f0a856" stroke-width="3" stroke-dasharray="10 8" opacity=".8"/>
+    <path d="M-5 132h250v18H-5z" fill="#241a1e"/>`,
+  celestial: `
+    <defs><linearGradient id="ffs-cel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#140f3a"/><stop offset=".6" stop-color="#4a2f8f"/><stop offset="1" stop-color="#c58cf2"/></linearGradient></defs>
+    <rect width="240" height="150" fill="url(#ffs-cel)"/>
+    <circle cx="186" cy="38" r="24" fill="#f6e6ff" opacity=".95"/><circle cx="176" cy="32" r="22" fill="#2a1a66" opacity=".55"/>
+    <g fill="#fff"><circle cx="30" cy="24" r="1.6"/><circle cx="70" cy="44" r="1.2"/><circle cx="110" cy="18" r="1.8"/><circle cx="140" cy="60" r="1.2"/><circle cx="46" cy="70" r="1.4"/><circle cx="220" cy="80" r="1.4"/><circle cx="96" cy="64" r="1"/></g>
+    <path d="M40 92h44l-8 18H50z" fill="#8f7fc0" stroke="#2b1a12" stroke-width="2"/><path d="M52 92V70h6v22M68 92V64h6v28" stroke="#d9ccf5" stroke-width="5"/>
+    <path d="M150 104h56l-10 22h-34z" fill="#8f7fc0" stroke="#2b1a12" stroke-width="2"/><path d="M160 104q18-34 36 0" fill="none" stroke="#d9ccf5" stroke-width="6"/>
+    <path d="M118 96l8 14-8 14-8-14z" fill="#f0dcff" stroke="#8a4fc4" stroke-width="2"/>
+    <path d="M-5 138Q60 126 120 138T245 134V150H-5z" fill="#2a1a66"/>`,
 };
 
 export function worldScene(theme: ThemeId, cls = ''): SVGElement {

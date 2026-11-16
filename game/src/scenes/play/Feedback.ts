@@ -7,7 +7,7 @@
  * pool load keep a chain reaction from flooding the particle pool.
  */
 import type { IAudioManager, SfxName } from '../../audio/types';
-import { BIRDS, PIGS } from '../../core/config';
+import { BIRDS, FOES } from '../../core/config';
 import type { SimEvent, SimEventOf, SurfaceKind } from '../../core/events';
 import { clamp, clamp01 } from '../../core/math';
 import { BIRD_COLORS, DUST_COLORS, MATERIAL_COLORS, SCORE_COLORS } from '../../core/palette';
@@ -35,11 +35,40 @@ const MATERIAL_DUST: Record<BlockMaterial, string> = {
   glass: '#e4f6ff',
   stone: '#cfcac0',
   metal: '#8a8f96',
+  ice: '#f2fbff',
+  ironwood: '#b08a66',
+  crystal: '#ecd6ff',
+  rubber: '#4a505c',
   tnt: '#6a5a50',
 };
 /** How hard each material shakes the camera when it breaks. */
-const MATERIAL_WEIGHT: Record<BlockMaterial, number> = { wood: 1, glass: 0.55, stone: 1.5, metal: 1.7, tnt: 1 };
-const PIG_POOF = '#e7ffd0';
+const MATERIAL_WEIGHT: Record<BlockMaterial, number> = { wood: 1, glass: 0.55, stone: 1.5, metal: 1.7, ice: 0.6, ironwood: 1.3, crystal: 0.8, rubber: 0.9, tnt: 1 };
+/** The debris recipe and impact sound each material borrows. */
+type Family = 'wood' | 'glass' | 'stone' | 'metal' | 'tnt';
+const FAMILY: Record<BlockMaterial, Family> = { wood: 'wood', ironwood: 'wood', glass: 'glass', ice: 'glass', crystal: 'glass', stone: 'stone', rubber: 'stone', metal: 'metal', tnt: 'tnt' };
+/** Tint of the borrowed debris, where the material is not the family's own colour. */
+const DEBRIS_TINT: Partial<Record<BlockMaterial, string>> = { ice: '#dff6ff', crystal: '#d9a8ff', rubber: '#3a404c', ironwood: '#7a4e2c' };
+const FOE_POOF = '#e9eef6';
+const FROST = '#dff6ff';
+const VOLT = '#fff27a';
+const NOVA = '#c9a8ff';
+
+/** A lightning bolt or gravity well that is drawn directly, on top of the particles. */
+interface Bolt {
+  /** x0, y0, x1, y1 per arc, world metres. */
+  arcs: number[];
+  until: number;
+  seed: number;
+}
+interface Well {
+  x: number;
+  y: number;
+  radius: number;
+  since: number;
+  /** Set when the well closes. */
+  until: number;
+}
+const BOLT_LIFE = 0.34;
 const SMOKE_GREY = '#5b5652';
 
 function rnd(lo: number, hi: number): number {
@@ -91,6 +120,8 @@ export class Feedback {
   private readonly recentBreaks: number[] = [];
   private budgetStamp = Number.NaN;
   private budgetUsed = 0;
+  private readonly bolts: Bolt[] = [];
+  private readonly wells: Well[] = [];
 
   constructor(private readonly deps: FeedbackDeps) {}
 
@@ -270,11 +301,11 @@ export class Feedback {
       const v = s * rnd(0.45, 1.1);
       return [vx * 0.45 + Math.cos(a) * v, vy * 0.45 + Math.sin(a) * v + 1.8 * (0.5 + f)];
     };
-    switch (material) {
+    switch (FAMILY[material]) {
       case 'wood':
       case 'tnt': {
-        const tint = material === 'tnt' ? MATERIAL_COLORS.tnt.base : undefined;
-        const chipTint = material === 'tnt' ? MATERIAL_COLORS.tnt.dark : undefined;
+        const tint = material === 'tnt' ? MATERIAL_COLORS.tnt.base : DEBRIS_TINT[material];
+        const chipTint = material === 'tnt' ? MATERIAL_COLORS.tnt.dark : DEBRIS_TINT[material];
         const splinters = this.quota((big ? 5 : 1) + f * (big ? 9 : 4), 1);
         for (let i = 0; i < splinters; i++) {
           const [px, py] = at();
@@ -303,7 +334,7 @@ export class Feedback {
         for (let i = 0; i < stones; i++) {
           const [px, py] = at();
           const [svx, svy] = launch(speed * 0.9);
-          this.emit('rock', px, py, { vx: svx, vy: svy, size: rnd(0.1, 0.26), life: rnd(1, 1.7), bounce: 0.22, spin: 9, gravity: 1.1 });
+          this.emit('rock', px, py, { vx: svx, vy: svy, size: rnd(0.1, 0.26), life: rnd(1, 1.7), bounce: material === 'rubber' ? 0.7 : 0.22, spin: 9, gravity: 1.1, color: DEBRIS_TINT[material] });
         }
         break;
       }
@@ -312,7 +343,7 @@ export class Feedback {
         for (let i = 0; i < shards; i++) {
           const [px, py] = at();
           const [svx, svy] = launch(speed * 1.2);
-          this.emit('shard', px, py, { vx: svx, vy: svy, size: rnd(0.18, 0.44) * (i % 3 === 0 ? 0.5 : 1), life: rnd(0.7, 1.3), bounce: 0.38, spin: 14 });
+          this.emit('shard', px, py, { vx: svx, vy: svy, size: rnd(0.18, 0.44) * (i % 3 === 0 ? 0.5 : 1), life: rnd(0.7, 1.3), bounce: 0.38, spin: 14, color: DEBRIS_TINT[material] });
         }
         break;
       }
@@ -352,17 +383,17 @@ export class Feedback {
       case 'blockDestroyed':
         this.onBlockDestroyed(event);
         break;
-      case 'pigDamaged':
+      case 'foeDamaged':
         this.deps.actors.hit(event.id, this.deps.now());
         this.stars(event.x, event.y, event.armored ? 3 : 2, 3.5);
-        if (event.armored) this.sparks(event.x, event.y + PIGS[event.variant].radius * 0.6, 3 + Math.round(event.damage / 30), 5, 0, 1, 0.3);
-        this.sound(event.armored ? 'armor_hit' : 'pig_hurt', event.x, 0.5 + event.damage / 80);
+        if (event.armored) this.sparks(event.x, event.y + FOES[event.variant].radius * 0.6, 3 + Math.round(event.damage / 30), 5, 0, 1, 0.3);
+        this.sound(event.armored ? 'armor_hit' : 'foe_hurt', event.x, 0.5 + event.damage / 80);
         break;
       case 'armorBroken':
         this.onArmorBroken(event);
         break;
-      case 'pigDefeated':
-        this.onPigDefeated(event);
+      case 'foeDefeated':
+        this.onFoeDefeated(event);
         break;
       case 'score':
         this.onScore(event);
@@ -376,19 +407,58 @@ export class Feedback {
       case 'birdExpired':
         if (event.reason === 'rest' || event.reason === 'timeout' || event.reason === 'resolved') {
           this.puffs(event.x, event.y, 5, '#ffffff', 0.8);
-          if (event.bird !== 'egg') this.feathers(event.x, event.y, 3, this.featherColor(event.bird));
+          this.feathers(event.x, event.y, 3, this.featherColor(event.bird));
           this.sound('bird_poof', event.x, 0.5);
         }
+        break;
+      case 'freeze':
+        this.onFreeze(event);
+        break;
+      case 'shock':
+        this.onShock(event);
+        break;
+      case 'gravityWell':
+        this.onWell(event);
+        break;
+      case 'resonance':
+        this.onResonance(event);
+        break;
+      case 'bounce':
+        this.deps.particles.ring(event.x, event.y, 0.1, 0.9, 0.22, '#ffb86b', 0.14);
+        this.stars(event.x, event.y, 2, 3);
+        this.deps.audio.play('bounce', { intensity: clamp01(event.speed / 20), rate: 0.85 + Math.random() * 0.3, pan: this.pan(event.x) });
+        break;
+      case 'balloonPopped':
+        this.flash(event.x, event.y, 1.1, 0.7, 0.1);
+        this.deps.particles.ring(event.x, event.y, 0.1, 0.9, 0.2, '#ffffff', 0.12);
+        this.confetti(event.x, event.y, 8, '#ff5d73');
+        this.sound('balloon_pop', event.x, 1);
+        break;
+      case 'iceCrack':
+        this.glints(event.x, event.y, 2, 0.3);
+        this.sound('ice_crack', event.x, 0.7);
+        break;
+      case 'jointBroken':
+        this.sound(event.kind === 'rope' ? 'rope_snap' : 'metal_hit', event.x, 0.9);
+        this.puffs(event.x, event.y, 2, '#ecd1a0', 0.4);
+        if (event.cut) this.stars(event.x, event.y, 3, 3);
         break;
       default:
         break;
     }
   }
 
-  private featherColor(bird: keyof typeof BIRDS | 'egg'): string {
-    if (bird === 'egg' || bird === 'matilda') return '#ffffff';
-    if (bird === 'bomb') return '#5a5a66';
+  private featherColor(bird: keyof typeof BIRDS): string {
     return BIRD_COLORS[bird].body;
+  }
+
+  /** Scraps of something flimsy fluttering down (a popped balloon). */
+  private confetti(x: number, y: number, count: number, color: string): void {
+    const n = this.quota(count);
+    for (let i = 0; i < n; i++) {
+      const angle = rnd(0, Math.PI * 2);
+      this.emit('feather', x, y, { vx: Math.cos(angle) * rnd(2, 6), vy: Math.sin(angle) * rnd(2, 6) + 2, size: rnd(0.16, 0.3), life: rnd(0.7, 1.2), gravity: 0.5, drag: 2.5, spin: 12, color });
+    }
   }
 
   private onLaunch(event: SimEventOf<'birdLaunched'>): void {
@@ -406,8 +476,8 @@ export class Feedback {
     this.feathers(event.x, event.y, Math.round(2 + strength * 5), this.featherColor(event.bird));
     this.stars(event.x, event.y, 2 + Math.round(strength * 2));
     if (event.first && strength > 0.35) this.flash(event.x, event.y, 0.8 + strength * 1.2, 0.5 + strength * 0.4);
-    if (event.bird !== 'egg') this.deps.audio.play('bird_impact', { bird: event.bird, intensity: 0.4 + strength * 0.6, pan: this.pan(event.x) });
-    if (event.bird === 'bomb') this.sound('bomb_fuse', event.x, 0.8);
+    this.deps.audio.play('bird_impact', { bird: event.bird, intensity: 0.4 + strength * 0.6, pan: this.pan(event.x) });
+    if (event.bird === 'ember') this.sound('fuse', event.x, 0.8);
     this.deps.camera.shake(0.06 + strength * 0.14);
   }
 
@@ -416,7 +486,7 @@ export class Feedback {
     const a = this.materialOf(event.a);
     const b = this.materialOf(event.b);
     const material = a ?? b;
-    if (material) this.sound(`${material === 'tnt' ? 'wood' : material}_hit` as SfxName, event.x, 0.2 + strength * 0.8);
+    if (material) this.sound(`${FAMILY[material] === 'tnt' ? 'wood' : FAMILY[material]}_hit` as SfxName, event.x, 0.2 + strength * 0.8);
     if (event.a === 'ground' || event.b === 'ground') {
       if (!material) this.sound('ground_hit', event.x, 0.2 + strength * 0.8);
       if (event.speed > 2.5 && event.y < 0.6) {
@@ -435,19 +505,19 @@ export class Feedback {
     const len = Math.hypot(event.nx, event.ny) || 1;
     const nx = event.nx / len;
     const ny = event.ny / len;
-    switch (material) {
+    switch (FAMILY[material]) {
       case 'metal':
         // Steel answers with a hot white flash and a fan of sparks skidding along the surface.
         this.sparks(x, y, 2 + strength * 12, 5 + strength * 9, nx, ny, 0.45);
         if (strength > 0.2) this.flash(x, y, 0.5 + strength * 0.9, 0.65 + strength * 0.3, 0.1);
         break;
       case 'glass':
-        this.debris('glass', x, y, strength * 0.7, 0, 0, 0.15, false);
+        this.debris(material, x, y, strength * 0.7, 0, 0, 0.15, false);
         this.glints(x, y, 1 + strength * 3, 0.25);
         break;
       case 'stone':
-        this.debris('stone', x, y, strength * 0.8, 0, 0, 0.15, false);
-        this.puffs(x, y, 1 + strength * 3, MATERIAL_DUST.stone, 0.5 + strength * 0.5);
+        this.debris(material, x, y, strength * 0.8, 0, 0, 0.15, false);
+        this.puffs(x, y, 1 + strength * 3, MATERIAL_DUST[material], 0.5 + strength * 0.5);
         if (strength > 0.4) this.flash(x, y, 0.6 + strength * 0.6, 0.35, 0.12);
         break;
       default:
@@ -458,7 +528,7 @@ export class Feedback {
   }
 
   private materialOf(surface: SurfaceKind): BlockMaterial | null {
-    return surface === 'wood' || surface === 'glass' || surface === 'stone' || surface === 'metal' || surface === 'tnt' ? surface : null;
+    return surface === 'foe' || surface === 'bird' || surface === 'ground' ? null : surface;
   }
 
   private onBlockDestroyed(event: SimEventOf<'blockDestroyed'>): void {
@@ -471,10 +541,11 @@ export class Feedback {
     const { x, y, material } = event;
     this.debris(material, x, y, force, event.vx, event.vy, spread, true);
 
-    switch (material) {
+    switch (FAMILY[material]) {
       case 'glass':
         this.glints(x, y, 2 + force * 4, spread);
-        this.deps.particles.ring(x, y, 0.1, 0.5 + size * 0.6, 0.25, '#e6f8ff', 0.1);
+        this.deps.particles.ring(x, y, 0.1, 0.5 + size * 0.6, 0.25, material === 'crystal' ? '#e2b8ff' : '#e6f8ff', 0.1);
+        if (material === 'ice') this.puffs(x, y, 2 + Math.round(force * 3), FROST, size * 0.9);
         break;
       case 'stone': {
         // Heavy, lingering dust that rolls out low.
@@ -491,7 +562,7 @@ export class Feedback {
             drag: 2.2,
             alpha: 0.7,
             spin: 1,
-            color: MATERIAL_DUST.stone,
+            color: MATERIAL_DUST[material],
             fadeFrom: 0.25,
           });
         }
@@ -506,7 +577,8 @@ export class Feedback {
         this.puffs(x, y, 2 + Math.round(force * 2), MATERIAL_DUST[material], size);
         break;
     }
-    if (material !== 'tnt') this.sound(`${material}_break` as SfxName, x, 0.4 + force * 0.6);
+    if (material !== 'tnt') this.sound(`${FAMILY[material]}_break` as SfxName, x, 0.4 + force * 0.6);
+    if (material === 'rubber') this.deps.audio.play('bounce', { intensity: 0.8, rate: 0.6, pan: this.pan(x) });
     const weight = MATERIAL_WEIGHT[material];
     this.deps.camera.shake((0.04 + size * 0.06) * weight * (0.6 + force * 0.6));
     if (weight > 1.2 && speed > 4) this.deps.camera.kick(clamp(event.vx * 0.04, -0.6, 0.6), -0.4 * weight * force);
@@ -523,9 +595,9 @@ export class Feedback {
   }
 
   private onArmorBroken(event: SimEventOf<'armorBroken'>): void {
-    const radius = PIGS[event.variant].radius;
-    const sprite = this.deps.renderer.accessorySprite(event.variant === 'helmet' ? 'helmet' : 'armor');
-    // The accessory sprite covers the whole character space, so scale it with the pig.
+    const radius = FOES[event.variant].radius;
+    const sprite = this.deps.renderer.accessorySprite(event.variant === 'helmet' ? 'helmet' : event.variant === 'shield' ? 'shield' : 'armor');
+    // The accessory sprite covers the whole character space, so scale it with the foe.
     this.deps.particles.spawn({
       sprite,
       designSize: ACCESSORY_DESIGN,
@@ -547,9 +619,9 @@ export class Feedback {
     this.deps.camera.shake(0.17);
   }
 
-  private onPigDefeated(event: SimEventOf<'pigDefeated'>): void {
-    const radius = PIGS[event.variant].radius;
-    this.deps.actors.popPig(event, radius, 0);
+  private onFoeDefeated(event: SimEventOf<'foeDefeated'>): void {
+    const radius = FOES[event.variant].radius;
+    this.deps.actors.popFoe(event, radius, 0);
     // A round green-white poof that bursts outwards, then drifts up.
     const n = this.quota(7, 4);
     for (let i = 0; i < n; i++) {
@@ -565,7 +637,7 @@ export class Feedback {
         drag: 5,
         alpha: 0.85,
         spin: 2,
-        color: PIG_POOF,
+        color: FOE_POOF,
         fadeFrom: 0.3,
       });
     }
@@ -588,15 +660,15 @@ export class Feedback {
       });
       this.glints(event.x, event.y + radius, 4, radius);
     }
-    this.sound('pig_defeat', event.x, 0.6 + radius * 0.4);
+    this.sound('foe_defeat', event.x, 0.6 + radius * 0.4);
     this.deps.camera.shake(0.16 + radius * 0.12);
     if (event.remaining === 0) this.deps.slowMotion(0.7);
   }
 
   private onScore(event: SimEventOf<'score'>): void {
     const text = `+${event.points.toLocaleString('en-US')}`;
-    if (event.reason === 'pig') {
-      this.deps.texts.spawn(text, event.x, event.y + 0.6, SCORE_COLORS.pig, 30, 1.3, 1.8);
+    if (event.reason === 'foe') {
+      this.deps.texts.spawn(text, event.x, event.y + 0.6, SCORE_COLORS.foe, 30, 1.3, 1.8);
       this.sound('score_tick', event.x, 0.9);
     } else if (event.reason === 'block') {
       this.deps.texts.spawn(text, event.x, event.y + 0.3, SCORE_COLORS.block, 17, 0.9, 1.2);
@@ -631,13 +703,18 @@ export class Feedback {
         particles.ring(x, y, 0.15, 1.3, 0.28, '#d6f1ff', 0.18);
         this.flash(x, y, 1.1, 0.5, 0.12);
         this.puffs(x, y, 4, '#e8f7ff', 0.7);
-        this.feathers(x, y, 5, BIRD_COLORS.blues.body);
+        this.feathers(x, y, 5, BIRD_COLORS.sprig.body);
         this.sound('ability_split', x, 1);
         break;
-      case 'egg':
-        this.feathers(x, y, 5, '#ffffff');
-        this.puffs(x, y - 0.3, 3, '#ffffff', 0.7);
-        this.sound('ability_egg', x, 1);
+      case 'slam':
+        particles.ring(x, y, 0.3, 1.5, 0.25, '#f1dfc0', 0.22);
+        this.feathers(x, y, 4, BIRD_COLORS.brawn.body);
+        this.puffs(x, y + 0.4, 3, '#ffffff', 0.7);
+        this.sound('ability_slam', x, 1);
+        break;
+      case 'gravity':
+        this.sound('ability_gravity', x, 1);
+        this.flash(x, y, 2.4, 0.6, 0.25);
         break;
       default:
         break;
@@ -646,7 +723,15 @@ export class Feedback {
 
   private onExplosion(event: SimEventOf<'explosion'>): void {
     const { x, y, radius } = event;
-    const scale = event.source === 'bomb' ? 1 : event.source === 'tnt' ? 0.85 : 0.7;
+    const scale = event.source === 'ember' ? 1 : event.source === 'tnt' ? 0.85 : event.source === 'quake' ? 0.55 : 0.7;
+    if (event.source === 'quake') {
+      this.onQuake(x, y, radius);
+      return;
+    }
+    if (event.source === 'nova') {
+      this.onNovaBurst(x, y, radius);
+      return;
+    }
     const particles = this.deps.particles;
     // 1. White-hot core flash.
     this.flash(x, y, radius * 2.2, 1, 0.2);
@@ -749,10 +834,190 @@ export class Feedback {
     this.sound('explosion', x, scale);
     this.deps.camera.shake(0.55 * scale + 0.25);
     this.deps.camera.kick(rnd(-1.2, 1.2), 2.2 * scale);
-    if (event.source === 'bomb') this.deps.slowMotion(0.3);
+    if (event.source === 'ember') this.deps.slowMotion(0.3);
   }
 
-  /** Speed streaks behind a boosting Chuck; call once per frame while it applies. */
+  /** Brawn's landing: a low ring of dust and flying grit, no fire. */
+  private onQuake(x: number, y: number, radius: number): void {
+    const particles = this.deps.particles;
+    particles.ring(x, y, radius * 0.1, radius, 0.3, '#ffffff', 0.34);
+    particles.ring(x, y, radius * 0.05, radius * 0.6, 0.42, '#e6cc9c', 0.22);
+    const dust = DUST_COLORS[this.deps.theme];
+    const n = this.quota(12, 5);
+    for (let i = 0; i < n; i++) {
+      const dir = i % 2 === 0 ? 1 : -1;
+      const size = rnd(0.7, 1.2);
+      this.emit('dust', x + dir * rnd(0, 0.5), Math.max(0.1, y - 0.2), { vx: dir * rnd(3, 9), vy: rnd(0.3, 2.2), size, sizeEnd: size * 2.3, life: rnd(0.7, 1.2), gravity: -0.02, drag: 2.4, alpha: 0.7, spin: 1, color: dust, fadeFrom: 0.2 });
+    }
+    this.debris('stone', x, y, 0.8, 0, 3, 0.6, false);
+    this.stars(x, y, 5, 6);
+    this.sound('explosion', x, 0.45);
+    this.sound('stone_break', x, 1);
+    this.deps.camera.shake(0.6);
+    this.deps.camera.kick(0, -1.6);
+  }
+
+  /** The gravity well lets go: a violet flash and a ring of stars, no smoke. */
+  private onNovaBurst(x: number, y: number, radius: number): void {
+    const particles = this.deps.particles;
+    this.flash(x, y, radius * 1.8, 0.9, 0.18);
+    particles.ring(x, y, radius * 0.1, radius * 1.1, 0.36, NOVA, 0.36);
+    particles.ring(x, y, radius * 0.05, radius * 0.7, 0.5, '#ffffff', 0.2);
+    this.glints(x, y, 10, radius * 0.6);
+    this.stars(x, y, 8, 8);
+    this.feathers(x, y, 5, BIRD_COLORS.nova.body);
+    this.sound('gravity_release', x, 1);
+    this.deps.camera.shake(0.4);
+  }
+
+  private onFreeze(event: SimEventOf<'freeze'>): void {
+    const { x, y, radius } = event;
+    const particles = this.deps.particles;
+    this.flash(x, y, radius * 1.6, 0.75, 0.2);
+    particles.ring(x, y, radius * 0.1, radius, 0.4, '#ffffff', 0.3);
+    particles.ring(x, y, radius * 0.05, radius * 0.75, 0.55, '#9fdcf8', 0.2);
+    this.glints(x, y, 10 + event.count * 2, radius * 0.7);
+    const n = this.quota(14, 6);
+    for (let i = 0; i < n; i++) {
+      const a = rnd(0, Math.PI * 2);
+      const d = rnd(0.2, 1) * radius;
+      const size = rnd(0.4, 0.8);
+      this.emit('dust', x + Math.cos(a) * d, y + Math.sin(a) * d, { vx: Math.cos(a) * rnd(0.5, 2), vy: rnd(-0.6, 0.4), size, sizeEnd: size * 1.8, life: rnd(0.8, 1.4), gravity: 0.03, drag: 2, alpha: 0.55, spin: 1, color: FROST, fadeFrom: 0.3 });
+    }
+    this.feathers(x, y, 4, BIRD_COLORS.rime.dark);
+    this.sound('ability_freeze', x, 1);
+    this.deps.camera.shake(0.12);
+  }
+
+  private onShock(event: SimEventOf<'shock'>): void {
+    const now = this.deps.now();
+    this.bolts.push({ arcs: event.arcs, until: now + BOLT_LIFE, seed: Math.random() * 1000 });
+    this.flash(event.x, event.y, 2.2, 0.9, 0.12);
+    for (let i = 0; i < event.arcs.length; i += 4) {
+      const ex = event.arcs[i + 2] as number;
+      const ey = event.arcs[i + 3] as number;
+      this.sparks(ex, ey, 3, 7, 0, 1, 0.35);
+      if (i % 8 === 0) this.flash(ex, ey, 1.1, 0.7, 0.1);
+    }
+    this.deps.audio.play('ability_shock', { intensity: clamp01(event.hits / 8), pan: this.pan(event.x) });
+    this.deps.camera.shake(0.18 + Math.min(0.3, event.hits * 0.03));
+    if (event.hits >= 6) this.deps.slowMotion(0.25);
+  }
+
+  private onWell(event: SimEventOf<'gravityWell'>): void {
+    const now = this.deps.now();
+    if (event.active) this.wells.push({ x: event.x, y: event.y, radius: event.radius, since: now, until: Infinity });
+    else for (const well of this.wells) if (well.until === Infinity) well.until = now + 0.25;
+  }
+
+  private onResonance(event: SimEventOf<'resonance'>): void {
+    const { x, y, radius } = event;
+    const particles = this.deps.particles;
+    particles.ring(x, y, 0.2, radius, 0.45, '#e2b8ff', 0.2);
+    particles.ring(x, y, 0.1, radius * 0.7, 0.6, '#ffffff', 0.12);
+    this.flash(x, y, radius * 1.2, 0.6, 0.16);
+    this.glints(x, y, 8, radius * 0.5);
+    this.deps.audio.play('crystal_ring', { rate: 0.85 + Math.random() * 0.4, pan: this.pan(x) });
+  }
+
+  /** Dust streaming into an open gravity well; call once per frame. */
+  wellDust(): void {
+    for (const well of this.wells) {
+      if (well.until !== Infinity || this.quota(2) < 2) continue;
+      for (let i = 0; i < 2; i++) {
+        const a = rnd(0, Math.PI * 2);
+        const d = well.radius * rnd(0.5, 1);
+        this.emit('glint', well.x + Math.cos(a) * d, well.y + Math.sin(a) * d, { vx: -Math.cos(a) * d * 2.2 - Math.sin(a) * 2, vy: -Math.sin(a) * d * 2.2 + Math.cos(a) * 2, size: rnd(0.2, 0.4), sizeEnd: 0.05, life: 0.42, gravity: 0, additive: true, color: NOVA });
+      }
+    }
+  }
+
+  /** Lightning bolts and gravity wells, drawn in screen space over the particles. */
+  drawOverlays(ctx: CanvasRenderingContext2D, cam: Camera): void {
+    const now = this.deps.now();
+    const z = cam.zoom;
+    for (let i = this.wells.length - 1; i >= 0; i--) {
+      const well = this.wells[i] as Well;
+      if (now > well.until) {
+        this.wells.splice(i, 1);
+        continue;
+      }
+      const grow = clamp01((now - well.since) / 0.25);
+      const fade = well.until === Infinity ? 1 : clamp01((well.until - now) / 0.25);
+      const sx = cam.toScreenX(well.x);
+      const sy = cam.toScreenY(well.y);
+      const r = well.radius * z * grow;
+      const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+      glow.addColorStop(0, `rgba(40, 10, 90, ${0.55 * fade})`);
+      glow.addColorStop(0.35, `rgba(125, 75, 209, ${0.28 * fade})`);
+      glow.addColorStop(1, 'rgba(125, 75, 209, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineCap = 'round';
+      for (let k = 0; k < 3; k++) {
+        // Rings that shrink into the centre over and over.
+        const phase = ((now - well.since) * 0.9 + k / 3) % 1;
+        const rr = r * (1 - phase);
+        ctx.globalAlpha = fade * phase * 0.8;
+        ctx.strokeStyle = k === 1 ? '#ffffff' : NOVA;
+        ctx.lineWidth = Math.max(1.5, 0.07 * z);
+        ctx.setLineDash([rr * 0.5, rr * 0.35]);
+        ctx.lineDashOffset = -(now * 60 + k * 40);
+        ctx.beginPath();
+        ctx.arc(sx, sy, Math.max(1, rr), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+    if (this.bolts.length === 0) return;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const bolt = this.bolts[i] as Bolt;
+      if (now > bolt.until) {
+        this.bolts.splice(i, 1);
+        continue;
+      }
+      const life = (bolt.until - now) / BOLT_LIFE;
+      // The bolt re-forks a few times while it lasts.
+      const flicker = Math.floor(now * 40);
+      ctx.beginPath();
+      for (let a = 0; a < bolt.arcs.length; a += 4) {
+        const x0 = cam.toScreenX(bolt.arcs[a] as number);
+        const y0 = cam.toScreenY(bolt.arcs[a + 1] as number);
+        const x1 = cam.toScreenX(bolt.arcs[a + 2] as number);
+        const y1 = cam.toScreenY(bolt.arcs[a + 3] as number);
+        const len = Math.hypot(x1 - x0, y1 - y0);
+        const steps = Math.max(2, Math.round(len / 18));
+        const nx = -(y1 - y0) / (len || 1);
+        const ny = (x1 - x0) / (len || 1);
+        ctx.moveTo(x0, y0);
+        for (let k = 1; k < steps; k++) {
+          const t = k / steps;
+          const jitter = Math.sin(bolt.seed + a * 3.1 + k * 12.9898 + flicker * 78.233) * 43758.5453;
+          const off = ((jitter - Math.floor(jitter)) - 0.5) * Math.min(26, len * 0.3);
+          ctx.lineTo(x0 + (x1 - x0) * t + nx * off, y0 + (y1 - y0) * t + ny * off);
+        }
+        ctx.lineTo(x1, y1);
+      }
+      ctx.globalAlpha = Math.min(1, life * 1.6);
+      ctx.strokeStyle = '#5b5fe0';
+      ctx.lineWidth = Math.max(6, 0.3 * z) * (0.5 + life * 0.5);
+      ctx.stroke();
+      ctx.strokeStyle = VOLT;
+      ctx.lineWidth = Math.max(3, 0.14 * z) * (0.5 + life * 0.5);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(1.2, 0.05 * z);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /** Speed streaks behind a dashing Zip or a diving Brawn; call once per frame while it applies. */
   boostTrail(x: number, y: number, vx: number, vy: number): void {
     if (this.quota(2) < 2) return;
     this.emit('spark', x + rnd(-0.15, 0.15), y + rnd(-0.15, 0.15), {
@@ -766,7 +1031,7 @@ export class Feedback {
       align: true,
       spin: 0,
     });
-    this.emit('dust', x, y, { vx: -vx * 0.05, vy: -vy * 0.05, size: 0.5, sizeEnd: 0.15, life: 0.3, gravity: 0, alpha: 0.35, color: BIRD_COLORS.chuck.light, spin: 0.5 });
+    this.emit('dust', x, y, { vx: -vx * 0.05, vy: -vy * 0.05, size: 0.5, sizeEnd: 0.15, life: 0.3, gravity: 0, alpha: 0.35, color: BIRD_COLORS.zip.light, spin: 0.5 });
   }
 
   /** Smoke and sparks from a lit fuse. */

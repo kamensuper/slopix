@@ -6,12 +6,12 @@
  */
 import { RENDER } from '../core/config';
 import { DEG } from '../core/math';
-import type { BirdType, BlockMaterial, BlockShape, DecorDef, PigVariant, TerrainDef, ThemeId } from '../core/types';
+import type { BlockMaterial, BlockShape, DecorDef, FoeVariant, TerrainDef, ThemeId } from '../core/types';
 import type { ProjectileType } from '../sim/entities';
-import { paintBird, paintEgg } from './art/birds';
+import { paintBird } from './art/birds';
 import { paintBlock } from './art/blocks';
 import { DECOR, paintDecor, paintDecorGlow, paintForeground, paintGround, paintSky, paintTerrain } from './art/environment';
-import { paintPig, paintPigAccessory } from './art/pigs';
+import { paintFoe, paintFoeAccessory } from './art/foes';
 import { paintParticle, paintSlingshotBack, paintSlingshotFront } from './art/props';
 import {
   ART_UNITS_PER_METER,
@@ -23,8 +23,8 @@ import {
   type DamageStage,
   type EnvView,
   type ParticleKind,
-  type PigAccessory,
-  type PigPose,
+  type FoeAccessory,
+  type FoePose,
   type TerrainSpec,
 } from './art/types';
 import type { Camera } from './Camera';
@@ -213,23 +213,22 @@ export class WorldRenderer {
     if (!this.cam.sees(x, y, radius * 2)) return;
     this.characterSpace(x, y, angle, radius, scaleX, scaleY);
     this.ctx.globalAlpha = alpha;
-    if (type === 'egg') paintEgg(this.ctx, pose.time);
-    else paintBird(this.ctx, type as BirdType, pose);
+    paintBird(this.ctx, type, pose);
     this.ctx.globalAlpha = 1;
   }
 
-  drawPig(variant: PigVariant, x: number, y: number, angle: number, radius: number, pose: PigPose, scaleX = 1, scaleY = 1, alpha = 1): void {
+  drawFoe(variant: FoeVariant, x: number, y: number, angle: number, radius: number, pose: FoePose, scaleX = 1, scaleY = 1, alpha = 1): void {
     if (!this.cam.sees(x, y, radius * 2)) return;
     this.characterSpace(x, y, angle, radius, scaleX, scaleY);
     this.ctx.globalAlpha = alpha;
-    paintPig(this.ctx, variant, pose);
+    paintFoe(this.ctx, variant, pose);
     this.ctx.globalAlpha = 1;
   }
 
   /** Detached helmet / armour / crown as a sprite (it tumbles away as debris). */
-  accessorySprite(kind: PigAccessory): Sprite {
+  accessorySprite(kind: FoeAccessory): Sprite {
     const extent = CHARACTER_EXTENT + 10;
-    return this.sprites.get(`accessory|${kind}`, -extent, -extent, extent * 2, extent * 2, 0.6, (c) => paintPigAccessory(c, kind));
+    return this.sprites.get(`accessory|${kind}`, -extent, -extent, extent * 2, extent * 2, 0.6, (c) => paintFoeAccessory(c, kind));
   }
 
   /** Sets the transform so that painting happens in the 100-unit character space. */

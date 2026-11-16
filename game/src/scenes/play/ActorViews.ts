@@ -1,22 +1,22 @@
 /**
  * Cosmetic state of the characters: blinking, gaze, expressions, squash and stretch, hit flashes
- * and the short "pop" animations of defeated pigs. Nothing here feeds back into the simulation,
+ * and the short "pop" animations of defeated foes. Nothing here feeds back into the simulation,
  * and bodies are always drawn at their interpolated physics transform: animation only scales the
  * artwork about its centre (by a few percent at rest, more during impacts).
  *
- * Pig behaviour, from highest priority down:
+ * Foe behaviour, from highest priority down:
  *   hurt      just got hit (wince)               stunned   for a while after a hit (dizzy)
- *   surprised a bird is about to hit / a block    laugh     a shot missed (staggered per pig)
+ *   surprised a bird is about to hit / a block    laugh     a shot missed (staggered per foe)
  *             right next to it broke             worried   a bird is coming (builds up with fear)
  *   idle      smug; breathes, blinks and looks around (slingshot, neighbours, the player)
  */
 import { ABILITY, PHYSICS } from '../../core/config';
 import type { SimEventOf } from '../../core/events';
 import { clamp, clamp01, ease } from '../../core/math';
-import type { PigVariant } from '../../core/types';
-import type { BirdPose, PigExpression, PigPose } from '../../render/art/types';
+import type { FoeVariant } from '../../core/types';
+import type { BirdPose, FoeExpression, FoePose } from '../../render/art/types';
 import type { WorldRenderer } from '../../render/WorldRenderer';
-import type { BirdEntity, BlockEntity, PigEntity } from '../../sim/entities';
+import type { BirdEntity, BlockEntity, FoeEntity } from '../../sim/entities';
 import type { GameSim } from '../../sim/GameSim';
 
 interface ActorView {
@@ -39,17 +39,17 @@ interface ActorView {
   gazeX: number;
   gazeY: number;
   gazeUntil: number;
-  /** Breathing phase offset and rate, so a group of pigs never breathes in sync. */
+  /** Breathing phase offset and rate, so a group of foes never breathes in sync. */
   phase: number;
   rate: number;
   seen: number;
 }
 
-/** 0 = the slingshot, 1 = a fixed direction, 2 = the nearest other pig, 3 = straight at the player. */
+/** 0 = the slingshot, 1 = a fixed direction, 2 = the nearest other foe, 3 = straight at the player. */
 type Gaze = 0 | 1 | 2 | 3;
 
-interface PigGhost {
-  variant: PigVariant;
+interface FoeGhost {
+  variant: FoeVariant;
   x: number;
   y: number;
   vx: number;
@@ -70,7 +70,7 @@ const BLINK_TIME = 0.16;
 const HIT_FLASH_TICKS = 7;
 const IMPACT_FLASH_TICKS = 6;
 const GHOST_LIFE = 0.36;
-const FUSE_TICKS = ABILITY.bomb.fuse * PHYSICS.hz;
+const FUSE_TICKS = ABILITY.explode.fuse * PHYSICS.hz;
 /** Squash spring stiffness and damping (a quick, slightly bouncy wobble). */
 const SPRING_K = 240;
 const SPRING_D = 13;
@@ -91,18 +91,18 @@ function smooth(current: number, target: number, rate: number, dt: number): numb
 }
 
 export class ActorViews {
-  /** While `time` is below this, every pig laughs (missed shot, lost level). */
+  /** While `time` is below this, every foe laughs (missed shot, lost level). */
   laughUntil = 0;
   private laughSeen = 0;
   private laughStart = 0;
   private readonly views = new Map<number, ActorView>();
-  private readonly ghosts: PigGhost[] = [];
+  private readonly ghosts: FoeGhost[] = [];
   private readonly shocks: Shock[] = [];
   private lastBlocks: readonly BlockEntity[] | null = null;
   private lastSim: GameSim | null = null;
   private frame = 0;
   private dt = 1 / 60;
-  private readonly pigPose: PigPose = {
+  private readonly foePose: FoePose = {
     time: 0,
     expression: 'idle',
     blink: 0,
@@ -156,7 +156,7 @@ export class ActorViews {
     return 1 - Math.abs(t * 2 - 1);
   }
 
-  /** A character got hit: wince, squash, then (pigs) see stars for a moment. */
+  /** A character got hit: wince, squash, then (foes) see stars for a moment. */
   hit(id: number, time: number, strength = 1): void {
     const view = this.view(id, time);
     view.squashVel += 7 * clamp(strength, 0.3, 1.6);
@@ -164,8 +164,8 @@ export class ActorViews {
     view.stunUntil = time + HURT_TIME + STUN_TIME * clamp(strength, 0.5, 1.3);
   }
 
-  /** Starts the short pop animation of a defeated pig; its neighbours flinch. */
-  popPig(event: SimEventOf<'pigDefeated'>, radius: number, angle: number): void {
+  /** Starts the short pop animation of a defeated foe; its neighbours flinch. */
+  popFoe(event: SimEventOf<'foeDefeated'>, radius: number, angle: number): void {
     this.ghosts.push({
       variant: event.variant,
       x: event.x,
@@ -199,7 +199,7 @@ export class ActorViews {
       view.squash = clamp(view.squash + view.squashVel * step, -0.6, 1);
     }
     for (let i = this.ghosts.length - 1; i >= 0; i--) {
-      const ghost = this.ghosts[i] as PigGhost;
+      const ghost = this.ghosts[i] as FoeGhost;
       ghost.age += dt;
       ghost.x += ghost.vx * dt;
       ghost.y += ghost.vy * dt;
@@ -213,7 +213,7 @@ export class ActorViews {
     }
   }
 
-  /** Blocks that broke since the last frame startle the pigs next to them. */
+  /** Blocks that broke since the last frame startle the foes next to them. */
   private collectShocks(sim: GameSim): void {
     if (this.lastSim !== sim) {
       this.lastSim = sim;
@@ -228,22 +228,22 @@ export class ActorViews {
     this.lastBlocks = sim.blocks;
   }
 
-  drawPigs(r: WorldRenderer, sim: GameSim, alpha: number, time: number): void {
+  drawFoes(r: WorldRenderer, sim: GameSim, alpha: number, time: number): void {
     this.collectShocks(sim);
     if (this.laughUntil !== this.laughSeen) {
       this.laughSeen = this.laughUntil;
       this.laughStart = time;
     }
-    const pose = this.pigPose;
+    const pose = this.foePose;
     const bird = sim.activeBird;
     const threat = bird && bird.alive && !bird.impacted ? bird : null;
     const calm = r.reducedMotion ? 0.4 : 1;
     const dt = this.dt;
-    for (const pig of sim.pigs) {
-      const x = pig.px + (pig.x - pig.px) * alpha;
-      const y = pig.py + (pig.y - pig.py) * alpha;
-      const angle = pig.pangle + (pig.angle - pig.pangle) * alpha;
-      const view = this.view(pig.id, time);
+    for (const foe of sim.foes) {
+      const x = foe.px + (foe.x - foe.px) * alpha;
+      const y = foe.py + (foe.y - foe.py) * alpha;
+      const angle = foe.pangle + (foe.angle - foe.pangle) * alpha;
+      const view = this.view(foe.id, time);
       for (const shock of this.shocks) {
         const d = Math.hypot(shock.x - x, shock.y - y);
         if (d < shock.radius && time >= view.hurtUntil) view.surpriseUntil = Math.max(view.surpriseUntil, time + SURPRISE_TIME * (1 - d / (shock.radius * 2)));
@@ -256,19 +256,19 @@ export class ActorViews {
         const dx = threat.x - x;
         const dy = threat.y - y;
         const dist = Math.hypot(dx, dy) || 1;
-        const closing = -(dx * (threat.vx - pig.vx) + dy * (threat.vy - pig.vy)) / dist;
+        const closing = -(dx * (threat.vx - foe.vx) + dy * (threat.vy - foe.vy)) / dist;
         if (closing > 0.5) {
-          const ttc = (dist - pig.radius - threat.radius) / closing;
+          const ttc = (dist - foe.radius - threat.radius) / closing;
           fearTarget = Math.max(clamp01((FEAR_RANGE - dist) / (FEAR_RANGE * 0.7)), clamp01(1 - ttc / 1.4));
           imminent = ttc < 0.3 && dist < 6;
         }
       }
-      if (pig.vx * pig.vx + pig.vy * pig.vy > 9) fearTarget = Math.max(fearTarget, 0.75);
+      if (foe.vx * foe.vx + foe.vy * foe.vy > 9) fearTarget = Math.max(fearTarget, 0.75);
       view.fear = smooth(view.fear, fearTarget, fearTarget > view.fear ? 9 : 1.8, dt);
       if (imminent) view.surpriseUntil = Math.max(view.surpriseUntil, time + 0.25);
 
-      this.fillPigPose(pose, pig, view, sim, time);
-      this.aimGaze(pose, pig, view, sim, threat, x, y, angle, time);
+      this.fillFoePose(pose, foe, view, sim, time);
+      this.aimGaze(pose, foe, view, sim, threat, x, y, angle, time);
 
       // Squash spring + breathing (+ belly laugh), applied as a scale about the centre.
       const s = view.squash * calm;
@@ -288,16 +288,16 @@ export class ActorViews {
         sx *= 1 - jolt;
         sy *= 1 + jolt;
       }
-      r.drawPig(pig.variant, x, y, angle, pig.radius, pose, sx, sy);
+      r.drawFoe(foe.variant, x, y, angle, foe.radius, pose, sx, sy);
     }
     this.shocks.length = 0;
   }
 
-  private fillPigPose(pose: PigPose, pig: PigEntity, view: ActorView, sim: GameSim, time: number): void {
-    const health = pig.hp / pig.maxHp;
-    // Pigs burst out laughing one after another rather than in unison.
-    const laughDelay = ((pig.id * 0.137) % 1) * 0.35;
-    let expression: PigExpression = 'idle';
+  private fillFoePose(pose: FoePose, foe: FoeEntity, view: ActorView, sim: GameSim, time: number): void {
+    const health = foe.hp / foe.maxHp;
+    // Foes burst out laughing one after another rather than in unison.
+    const laughDelay = ((foe.id * 0.137) % 1) * 0.35;
+    let expression: FoeExpression = 'idle';
     let intensity = 1;
     if (time < view.hurtUntil) expression = 'hurt';
     else if (time < view.surpriseUntil) expression = 'surprised';
@@ -307,20 +307,20 @@ export class ActorViews {
       expression = 'worried';
       intensity = clamp01(view.fear * 1.25);
     }
-    pose.time = time + pig.id * 0.7;
+    pose.time = time + foe.id * 0.7;
     pose.expression = expression;
     pose.intensity = intensity;
     const blink = this.blink(view, time);
     pose.blink = expression === 'idle' || expression === 'worried' ? blink : 0;
     pose.damage = health > 0.66 ? 0 : health > 0.33 ? 1 : 2;
-    pose.armorOn = pig.armor > 0;
-    const armor = pig.maxArmor > 0 ? pig.armor / pig.maxArmor : 1;
+    pose.armorOn = foe.armor > 0;
+    const armor = foe.maxArmor > 0 ? foe.armor / foe.maxArmor : 1;
     pose.armorDamage = armor > 0.66 ? 0 : armor > 0.33 ? 1 : 2;
-    pose.flash = pig.hitTick >= 0 ? clamp01(1 - (sim.tick - pig.hitTick) / HIT_FLASH_TICKS) : 0;
+    pose.flash = foe.hitTick >= 0 ? clamp01(1 - (sim.tick - foe.hitTick) / HIT_FLASH_TICKS) : 0;
   }
 
-  /** Points the pupils: at the incoming bird, otherwise wherever the pig's idle curiosity leads. */
-  private aimGaze(pose: PigPose, pig: PigEntity, view: ActorView, sim: GameSim, threat: BirdEntity | null, x: number, y: number, angle: number, time: number): void {
+  /** Points the pupils: at the incoming bird, otherwise wherever the foe's idle curiosity leads. */
+  private aimGaze(pose: FoePose, foe: FoeEntity, view: ActorView, sim: GameSim, threat: BirdEntity | null, x: number, y: number, angle: number, time: number): void {
     let tx: number;
     let ty: number;
     let reach = 0.8;
@@ -334,10 +334,10 @@ export class ActorViews {
         tx = sim.anchor.x - x;
         ty = sim.anchor.y - y;
       } else if (view.gaze === 2) {
-        let best: PigEntity | null = null;
+        let best: FoeEntity | null = null;
         let bestD = Infinity;
-        for (const other of sim.pigs) {
-          if (other === pig) continue;
+        for (const other of sim.foes) {
+          if (other === foe) continue;
           const d = (other.x - x) ** 2 + (other.y - y) ** 2;
           if (d < bestD) {
             bestD = d;
@@ -360,7 +360,7 @@ export class ActorViews {
     // Quick saccade-like eye movement.
     view.lookX = smooth(view.lookX, gx, 16, this.dt);
     view.lookY = smooth(view.lookY, gy, 16, this.dt);
-    // Pupils are drawn in the pig's rotated frame (y down), so rotate the gaze back into it.
+    // Pupils are drawn in the foe's rotated frame (y down), so rotate the gaze back into it.
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     pose.lookX = view.lookX * cos + view.lookY * sin;
@@ -442,18 +442,18 @@ export class ActorViews {
       pose.lookY = 0;
     }
     if (!bird.impacted) {
-      const boosting = bird.type === 'chuck' && bird.abilityUsed;
+      const boosting = (bird.type === 'zip' && bird.abilityUsed) || bird.slamming;
       pose.state = boosting || (bird.abilityUsed && sim.tick - bird.abilityTick < 24) ? 'ability' : 'flying';
-    } else if (bird.fuseEndTick >= 0) {
+    } else if (bird.fuseEndTick >= 0 || bird.wellEndTick >= 0) {
       pose.state = 'ability';
     } else {
       pose.state = sim.tick - bird.impactTick < 10 ? 'hit' : 'dazed';
     }
   }
 
-  /** Defeated pigs puff up, then squash flat and spin away in a white flash. */
+  /** Defeated foes puff up, then squash flat and spin away in a white flash. */
   drawGhosts(r: WorldRenderer, time: number): void {
-    const pose = this.pigPose;
+    const pose = this.foePose;
     const calm = r.reducedMotion ? 0.4 : 1;
     for (const ghost of this.ghosts) {
       const t = ghost.age / GHOST_LIFE;
@@ -483,7 +483,7 @@ export class ActorViews {
         spin = ghost.spin * 1.3 * k * calm;
       }
       const alphaOut = t < 0.55 ? 1 : 1 - ease.inCubic((t - 0.55) / 0.45);
-      r.drawPig(ghost.variant, ghost.x, ghost.y, ghost.angle + spin, ghost.radius, pose, 1 + (sx - 1) * calm, Math.max(0.2, 1 + (sy - 1) * calm), alphaOut);
+      r.drawFoe(ghost.variant, ghost.x, ghost.y, ghost.angle + spin, ghost.radius, pose, 1 + (sx - 1) * calm, Math.max(0.2, 1 + (sy - 1) * calm), alphaOut);
     }
   }
 }

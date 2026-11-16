@@ -4,7 +4,7 @@
  */
 import type { BirdType, GameSettings } from '../core/types';
 
-export type MusicTrack = 'menu' | 'grasslands' | 'desert' | 'snowlands' | 'none';
+export type MusicTrack = 'menu' | 'grasslands' | 'desert' | 'snowlands' | 'storm' | 'ironworks' | 'celestial' | 'none';
 
 export type SfxName =
   // interface
@@ -30,10 +30,26 @@ export type SfxName =
   // abilities
   | 'ability_boost'
   | 'ability_split'
-  | 'ability_egg'
-  /** Short sizzle when Bomb's fuse is lit by the first impact. */
-  | 'bomb_fuse'
-  /** opts.intensity scales size (bomb = 1, egg / TNT about 0.7). */
+  /** Brawn tips over into the anvil drop. */
+  | 'ability_slam'
+  /** Rime's frost burst: a glassy rush. */
+  | 'ability_freeze'
+  /** Jolt's lightning: opts.intensity grows with the number of things it ran through. */
+  | 'ability_shock'
+  /** Nova's gravity well opening (a falling drone) ... */
+  | 'ability_gravity'
+  /** ... and snapping shut. */
+  | 'gravity_release'
+  /** Short sizzle when Ember's fuse is lit by the first impact. */
+  | 'fuse'
+  /** A bird springs off rubber. */
+  | 'bounce'
+  /** A crystal rings out as it shatters. */
+  | 'crystal_ring'
+  | 'ice_crack'
+  | 'balloon_pop'
+  | 'rope_snap'
+  /** opts.intensity scales size (Ember = 1, crates about 0.85, quakes about 0.6). */
   | 'explosion'
   // materials: opts.intensity 0..1 scales loudness and brightness
   | 'wood_hit'
@@ -46,11 +62,11 @@ export type SfxName =
   | 'metal_break'
   /** Dull thump of something landing on the ground. */
   | 'ground_hit'
-  // pigs
-  | 'pig_hurt'
-  | 'pig_defeat'
-  /** Idle oink / snicker; also used when the pigs laugh at a failed level. */
-  | 'pig_oink'
+  // foes
+  | 'foe_hurt'
+  | 'foe_defeat'
+  /** Idle grunt / snicker; also used when the foes laugh at a failed level. */
+  | 'foe_grunt'
   /** Clank of a hit on a helmet or armour. */
   | 'armor_hit'
   | 'armor_break'
@@ -61,7 +77,9 @@ export type SfxName =
   | 'score_bonus'
   | 'level_start'
   | 'level_win'
-  | 'level_fail';
+  | 'level_fail'
+  /** An achievement unlocked. */
+  | 'achievement';
 
 export interface SfxOptions {
   /** 0..1, default 1. Multiplied with the effects volume. */

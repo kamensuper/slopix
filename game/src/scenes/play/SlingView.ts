@@ -16,6 +16,8 @@ import { canLaunch, constrainPull, launchVelocity, predictTrajectory, pullFromAi
 const HOP_TIME = 0.5;
 const HOP_HEIGHT = 1.3;
 const PREVIEW_POINTS = 80;
+/** With aim assist the preview is this many times longer. */
+const ASSIST_FACTOR = 4;
 /** Sub-steps between preview dots (6 sub-steps at 120 Hz = 0.05 s). */
 const PREVIEW_STRIDE = 6;
 /** Preview dots drift along the path at this many samples per second. */
@@ -72,7 +74,12 @@ export class SlingView {
   private readonly hopFrom: Vec = { x: 0, y: 0 };
   private springVx = 0;
   private springVy = 0;
-  private readonly preview = new Float32Array(PREVIEW_POINTS * 2);
+  private readonly preview = new Float32Array(PREVIEW_POINTS * ASSIST_FACTOR * 2);
+  /** Level physics the preview has to match. */
+  gravityScale = 1;
+  wind = 0;
+  /** Aim assist: the preview shows the whole flight instead of its first stretch. */
+  assist = false;
   private previewCount = 0;
   private readonly velocity: Vec = { x: 0, y: 0 };
   private idleHopIndex = -1;
@@ -231,16 +238,18 @@ export class SlingView {
     }
     this.previewCount = 0;
     if (this.aiming && canLaunch(this.pull.x, this.pull.y)) {
-      launchVelocity(this.pull.x, this.pull.y, this.velocity);
+      launchVelocity(this.pull.x, this.pull.y, this.velocity, this.loaded ? BIRDS[this.loaded].launch : 1);
       this.previewCount = predictTrajectory(
         this.anchorX + this.pull.x,
         this.anchorY + this.pull.y,
         this.velocity.x,
         this.velocity.y,
         this.preview,
-        PREVIEW_POINTS,
+        this.assist ? PREVIEW_POINTS * ASSIST_FACTOR : PREVIEW_POINTS,
         PREVIEW_STRIDE,
-        0,
+        this.baseY,
+        this.gravityScale,
+        this.wind,
       );
     }
     // Now and then a waiting bird hops on the spot.
@@ -554,7 +563,7 @@ export class SlingView {
       const wx = ax + ((this.preview[i * 2 + 2] as number) - ax) * drift;
       const wy = ay + ((this.preview[i * 2 + 3] as number) - ay) * drift;
       if (Math.hypot(wx - x0, wy - y0) < skip) continue;
-      const t = (i + drift) / PREVIEW_POINTS;
+      const t = (i + drift) / (this.assist ? PREVIEW_POINTS * ASSIST_FACTOR : PREVIEW_POINTS);
       // The first dots fade in so the path grows out of the bird instead of starting abruptly.
       const intro = Math.min(1, (shown + drift) / 2.5);
       shown++;

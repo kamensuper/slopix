@@ -174,10 +174,10 @@
   animation: next-pulse 1.6s 2.6s ease-in-out infinite;
 }
 
-.result-pig {
+.result-foe {
   width: 104px;
   margin-top: -2px;
-  animation: pig-smirk 2.6s ease-in-out infinite;
+  animation: foe-smirk 2.6s ease-in-out infinite;
 }
 .fail-line {
   max-width: 30ch;
@@ -270,7 +270,7 @@
     transform: scale(1.07);
   }
 }
-@keyframes pig-smirk {
+@keyframes foe-smirk {
   0%,
   100% {
     transform: rotate(-4deg) translateY(0);
@@ -347,7 +347,7 @@
     grid-column: 2;
     grid-row: 5;
   }
-  .panel-lose > .result-pig {
+  .panel-lose > .result-foe {
     grid-column: 1;
     grid-row: 2 / span 3;
   }
@@ -405,7 +405,7 @@
   .result-target {
     display: none;
   }
-  .result-pig {
+  .result-foe {
     width: 70px;
   }
   .fail-line {
@@ -470,7 +470,7 @@
   .result-target {
     display: none;
   }
-  .result-pig {
+  .result-foe {
     width: 80px;
   }
   .panel-win,

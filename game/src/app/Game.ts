@@ -148,6 +148,7 @@ export class Game {
       onPauseRequest: () => !backdrop && this.actions.requestPause(),
       onRestartRequest: () => !backdrop && this.actions.restart(),
       reducedMotion: () => this.save.getSettings().reducedMotion,
+      aimAssist: () => this.save.getSettings().aimAssist,
     };
   }
 
@@ -174,8 +175,8 @@ export class Game {
       previousBest,
       best: outcome?.best ?? previousBest,
       isNewBest: outcome?.isNewBest ?? false,
-      pigsDefeated: sim?.pigsDefeated ?? 0,
-      pigsTotal: sim?.pigsTotal ?? 0,
+      foesDefeated: sim?.foesDefeated ?? 0,
+      foesTotal: sim?.foesTotal ?? 0,
       birdsUsed: sim?.birdsUsed ?? 0,
       hasNext,
       nextUnlocked: hasNext && this.save.isLevelUnlocked(index + 1),

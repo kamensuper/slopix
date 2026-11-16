@@ -53,8 +53,8 @@ try {
   // Fire a strong shot into the structure and measure the collapse.
   await page.evaluate(() => {
     const scene = window.__game.playScene;
-    const pig = [...scene.sim.pigs].sort((a, b) => a.x - b.x)[0];
-    const pull = scene.aimPull(pig.x, pig.y, 1);
+    const foe = [...scene.sim.foes].sort((a, b) => a.x - b.x)[0];
+    const pull = scene.aimPull(foe.x, foe.y, 1);
     scene.sim.launch(pull.x, pull.y);
   });
   console.log(await measure('impact'));

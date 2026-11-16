@@ -5,20 +5,28 @@ import type { BirdType, BlockMaterial, ThemeId } from './types';
 export const INK = '#2b1a12';
 
 export const BIRD_COLORS: Record<BirdType, { body: string; dark: string; light: string }> = {
-  red: { body: '#e23b2e', dark: '#a81f22', light: '#ff7a5c' },
-  chuck: { body: '#f8cf1c', dark: '#d9960b', light: '#fff07a' },
-  bomb: { body: '#34343d', dark: '#17171c', light: '#6b6b7a' },
-  blues: { body: '#58b7ee', dark: '#2b7fc4', light: '#a8e1ff' },
-  matilda: { body: '#f5f0e6', dark: '#cfc5b3', light: '#ffffff' },
+  pip: { body: '#1fa7b8', dark: '#0f7c96', light: '#7fe8ee' },
+  zip: { body: '#d6409f', dark: '#9c2378', light: '#ffc8ea' },
+  ember: { body: '#f2672a', dark: '#c2361b', light: '#ffd45e' },
+  sprig: { body: '#8fc93a', dark: '#5f9a22', light: '#eeffc4' },
+  brawn: { body: '#8a6a4a', dark: '#5c432c', light: '#ead5b0' },
+  rime: { body: '#e6f6ff', dark: '#a6d6f1', light: '#ffffff' },
+  jolt: { body: '#5b5fe0', dark: '#3838a6', light: '#ffe24d' },
+  nova: { body: '#7d4bd1', dark: '#472890', light: '#ffe9a3' },
 };
 
-export const PIG_COLORS = { body: '#8fd14f', dark: '#5fae2e', light: '#c3ee8b', snout: '#a6e36a', nostril: '#2f6b1b' } as const;
+/** The Burrowers: slate-grey fur, pink noses. */
+export const FOE_COLORS = { body: '#7b8ba3', dark: '#55647c', light: '#b3c2d6', snout: '#f7b3bf', nostril: '#8a3550' } as const;
 
 export const MATERIAL_COLORS: Record<BlockMaterial, { base: string; dark: string; light: string }> = {
   wood: { base: '#d9a05b', dark: '#a8682f', light: '#f2c98a' },
   glass: { base: '#aee3f5', dark: '#6fb9d8', light: '#f1fcff' },
   stone: { base: '#9aa0a6', dark: '#6c727a', light: '#c9ced3' },
   metal: { base: '#8d9bab', dark: '#55616f', light: '#dfe7ef' },
+  ice: { base: '#bfe9fb', dark: '#7fc4e6', light: '#f3fcff' },
+  ironwood: { base: '#8a5a34', dark: '#573620', light: '#c08a56' },
+  crystal: { base: '#c58cf2', dark: '#8a4fc4', light: '#f0dcff' },
+  rubber: { base: '#3f4654', dark: '#252a34', light: '#6f7a8c' },
   tnt: { base: '#c0392b', dark: '#8c2318', light: '#f2e2b0' },
 };
 
@@ -27,12 +35,15 @@ export const DUST_COLORS: Record<ThemeId, string> = {
   grasslands: '#d8c9a3',
   desert: '#ecc98b',
   snowlands: '#ffffff',
+  storm: '#b9c4d6',
+  ironworks: '#b7a394',
+  celestial: '#d9ccf5',
 };
 
 export const SCORE_COLORS = {
   block: '#fff6d6',
   damage: '#ffffff',
-  pig: '#b6f36a',
+  foe: '#ffb3c4',
   bird: '#ffd84a',
   clear: '#ffd84a',
 } as const;

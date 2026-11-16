@@ -46,15 +46,18 @@ export function canLaunch(px: number, py: number): boolean {
   return Math.hypot(px, py) >= SLING.minPull;
 }
 
-/** Launch velocity: exactly opposite to the pull, speed proportional to the pull distance. */
-export function launchVelocity(px: number, py: number, out: Vec): Vec {
+/**
+ * Launch velocity: exactly opposite to the pull, speed proportional to the pull distance.
+ * `scale` is the bird's own launch factor (BIRDS[type].launch).
+ */
+export function launchVelocity(px: number, py: number, out: Vec, scale = 1): Vec {
   const len = Math.hypot(px, py);
   if (len < 1e-6) {
     out.x = 0;
     out.y = 0;
     return out;
   }
-  const speed = (SLING.maxSpeed * Math.min(len, SLING.maxPull)) / SLING.maxPull;
+  const speed = (scale * SLING.maxSpeed * Math.min(len, SLING.maxPull)) / SLING.maxPull;
   out.x = (-px / len) * speed;
   out.y = (-py / len) * speed;
   return out;
@@ -70,7 +73,8 @@ export function pullFromAim(angle: number, power: number, out: Vec): Vec {
 
 /**
  * Predicts a ballistic path with the same integrator and step size as the physics engine
- * (semi-implicit Euler at the sub-step rate, no drag), so the preview matches the real flight.
+ * (semi-implicit Euler at the sub-step rate, no drag), so the preview matches the real flight,
+ * including the level's gravity and wind.
  *
  * Writes interleaved x, y pairs into `out`; point k is the state after k * stride sub-steps.
  * Stops below `minY`. Returns the number of points written.
@@ -84,9 +88,11 @@ export function predictTrajectory(
   maxPoints: number,
   stride = 4,
   minY = 0,
+  gravityScale = 1,
+  wind = 0,
 ): number {
   const capacity = Math.min(maxPoints, out.length >> 1);
-  const g = PHYSICS.gravity;
+  const g = PHYSICS.gravity * gravityScale;
   let count = 0;
   while (count < capacity) {
     out[count * 2] = x;
@@ -95,6 +101,7 @@ export function predictTrajectory(
     if (y < minY) break;
     for (let i = 0; i < stride; i++) {
       vy -= g * SUBSTEP;
+      vx += wind * SUBSTEP;
       x += vx * SUBSTEP;
       y += vy * SUBSTEP;
     }

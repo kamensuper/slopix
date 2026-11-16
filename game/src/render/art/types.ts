@@ -11,7 +11,7 @@
  *   - the function must leave the context state as it found it (wrap work in save()/restore()),
  *   - no allocations of canvases per call unless cached inside the module.
  */
-import type { BirdType, BlockMaterial, BlockShape, PigVariant, ThemeId } from '../../core/types';
+import type { BirdType, BlockMaterial, BlockShape, FoeVariant, ThemeId } from '../../core/types';
 
 /** Blocks, terrain, props and decor are painted in a design space of 100 units per metre. */
 export const ART_UNITS_PER_METER = 100;
@@ -47,15 +47,15 @@ export interface BirdPose {
   /** Pupil direction in the bird's local space (x = forward / right, y = down), each in -1..1. */
   lookX?: number;
   lookY?: number;
-  /** The special ability has been used (Matilda: deflated after laying her egg; Chuck: wind-swept). */
+  /** The special ability has been used (Zip: wind-swept; Jolt: crest burnt out). */
   abilityUsed?: boolean;
-  /** Bomb only: fuse progress, 0 = cold .. 1 = about to blow (the body heats up and pulses). */
+  /** Ember only: fuse progress, 0 = cold .. 1 = about to blow (the body heats up and pulses). */
   fuse?: number;
   /** White hit-flash overlay strength 0..1, drawn over the whole silhouette. */
   flash?: number;
 }
 
-export type PigExpression =
+export type FoeExpression =
   /** Calm, slightly smug. */
   | 'idle'
   /** Sees a bird coming: wide eyes. */
@@ -71,9 +71,9 @@ export type PigExpression =
   /** Defeat pose used for the short pop animation: dizzy, tongue out. */
   | 'defeated';
 
-export interface PigPose {
+export interface FoePose {
   time: number;
-  expression: PigExpression;
+  expression: FoeExpression;
   /** Eyelid closure, 0 = open .. 1 = closed. */
   blink: number;
   /** Accumulated damage: 0 pristine, 1 bruised (black eye, scuffs), 2 badly beaten (bandage, swollen eye). */
@@ -91,8 +91,8 @@ export interface PigPose {
   intensity?: number;
 }
 
-/** Pieces that fly off a pig; painted centred on the origin at the same scale as the pig that wore them. */
-export type PigAccessory = 'helmet' | 'armor' | 'crown';
+/** Pieces that fly off a foe; painted centred on the origin at the same scale as the foe that wore them. */
+export type FoeAccessory = 'helmet' | 'armor' | 'crown' | 'shield';
 
 // ---------------------------------------------------------------- blocks, props, particles
 
@@ -194,10 +194,8 @@ export interface DecorInfo {
 export interface CharacterArt {
   /** Bird facing right, collision circle of radius CHARACTER_RADIUS centred on the origin. */
   paintBird(ctx: CanvasRenderingContext2D, type: BirdType, pose: BirdPose): void;
-  /** Matilda's egg projectile; collision circle of radius CHARACTER_RADIUS. */
-  paintEgg(ctx: CanvasRenderingContext2D, time: number): void;
-  paintPig(ctx: CanvasRenderingContext2D, variant: PigVariant, pose: PigPose): void;
-  paintPigAccessory(ctx: CanvasRenderingContext2D, kind: PigAccessory): void;
+  paintFoe(ctx: CanvasRenderingContext2D, variant: FoeVariant, pose: FoePose): void;
+  paintFoeAccessory(ctx: CanvasRenderingContext2D, kind: FoeAccessory): void;
 }
 
 export interface BlockArt {

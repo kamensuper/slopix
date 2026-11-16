@@ -236,11 +236,11 @@
   transform: rotate(-14deg);
   animation: peek-bird 4.2s ease-in-out infinite;
 }
-.peek-pig {
+.peek-foe {
   right: clamp(-10px, calc(var(--vw, 1vw) * -0.5), 0px);
   bottom: 6%;
   transform: rotate(8deg);
-  animation: peek-pig 5s ease-in-out infinite;
+  animation: peek-foe 5s ease-in-out infinite;
 }
 .feather {
   position: absolute;
@@ -582,7 +582,7 @@
 .credits-crest .art-sling {
   height: 84px;
 }
-.credits-crest .art-pig {
+.credits-crest .art-foe {
   width: 74px;
   transform: rotate(8deg);
 }
@@ -804,7 +804,7 @@
     transform: rotate(-6deg) translateY(-6px);
   }
 }
-@keyframes peek-pig {
+@keyframes peek-foe {
   0%,
   100% {
     transform: rotate(8deg) translateY(0);

@@ -17,8 +17,8 @@ async function aimPoints(page, targetIndex, power) {
     ([i, p]) => {
       const scene = window.__game.playScene;
       const sim = scene.sim;
-      const pig = sim.pigs.filter((x) => x.alive).sort((a, b) => a.x - b.x)[i] ?? sim.pigs[0];
-      const pull = scene.aimPull(pig.x, pig.y, p);
+      const foe = sim.foes.filter((x) => x.alive).sort((a, b) => a.x - b.x)[i] ?? sim.foes[0];
+      const pull = scene.aimPull(foe.x, foe.y, p);
       const cam = scene.camera;
       return {
         from: { x: cam.toScreenX(sim.anchor.x), y: cam.toScreenY(sim.anchor.y) },
@@ -59,7 +59,7 @@ try {
   let launched = false;
   for (let attempt = 0; attempt < 4; attempt++) {
     const phase = (await info(page)).play.phase;
-    if (phase !== 'aiming' || (await info(page)).play.pigs === 0) break;
+    if (phase !== 'aiming' || (await info(page)).play.foes === 0) break;
     const { from, to, pull } = await aimPoints(page, 0, 0.9);
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();

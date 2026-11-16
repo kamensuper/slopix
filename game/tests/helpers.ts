@@ -5,17 +5,22 @@ import { solveAim } from '../src/sim/aim';
 import { GameSim } from '../src/sim/GameSim';
 import { pullFromAim } from '../src/sim/slingshot';
 
-/** Builds a small test level; `design` adds the pieces. A far-away pig is added when none is placed. */
+/** Builds a small test level; `design` adds the pieces. A far-away foe is added when none is placed. */
 export function makeLevel(birds: BirdType[], design: (b: LevelBuilder) => void, opts: { keepEmpty?: boolean } = {}): LevelDef {
   const b = new LevelBuilder('test', 'Test', 'grasslands', birds);
-  let pigs = 0;
-  const pig = b.pig.bind(b);
-  b.pig = (...args) => {
-    pigs++;
-    return pig(...args);
+  let foes = 0;
+  const foe = b.foe.bind(b);
+  b.foe = (...args) => {
+    foes++;
+    return foe(...args);
+  };
+  const balloon = b.balloon.bind(b);
+  b.balloon = (...args) => {
+    foes++;
+    return balloon(...args);
   };
   design(b);
-  if (pigs === 0 && !opts.keepEmpty) b.pig('king', 42, 0);
+  if (foes === 0 && !opts.keepEmpty) b.foe('king', 42, 0);
   return b.build();
 }
 
@@ -62,6 +67,7 @@ export class Harness {
   }
 
   events<T extends SimEventType>(type: T): SimEventOf<T>[] {
+    this.drain();
     return this.log.filter((e): e is SimEventOf<T> => e.type === type);
   }
 

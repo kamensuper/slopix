@@ -3,11 +3,11 @@
  * results, settings, controls tutorial and credits. Plain DOM + CSS + inline SVG, no images.
  */
 import { BIRDS, GAME_TAGLINE, GAME_TITLE, GAME_VERSION } from '../core/config';
-import type { BirdType, LevelResult, StarThresholds } from '../core/types';
+import { BIRD_TYPES, type BirdType, type LevelResult, type StarThresholds } from '../core/types';
 import { el, fmt, prefersReducedMotion, type Child } from './dom';
 import { confettiBurst, sparkleBurst } from './effects';
 import { SVG_SPRITE, icon } from './icons';
-import { birdFace, featherArt, howToArt, pigFace, slingshotArt, worldScene } from './illustrations';
+import { birdFace, featherArt, howToArt, foeFace, slingshotArt, worldScene } from './illustrations';
 import { arrowNav, focusables, trapTab } from './nav';
 import type { HudInfo, IUIManager, MenuScreen, UIHost } from './types';
 
@@ -25,13 +25,13 @@ interface ButtonOpts {
 
 const SCREEN_DEPTH: Record<MenuScreen, number> = { title: 0, chapters: 1, settings: 1, credits: 1, howto: 1, levels: 2 };
 const BACK_TARGET: Partial<Record<MenuScreen, MenuScreen>> = { chapters: 'title', levels: 'chapters', settings: 'title', credits: 'title' };
-const ROSTER: readonly BirdType[] = ['red', 'chuck', 'bomb', 'blues', 'matilda'];
+const ROSTER: readonly BirdType[] = BIRD_TYPES;
 const FAIL_LINES = [
-  'The pigs are snorting with laughter. Show them who is boss!',
+  'The Burrowers are giggling into their paws. Show them who is boss!',
   'Tip: wood and glass crumble first. Hit the supports, not the top.',
-  'Pig 1, flock 0. Try a different angle or a stronger pull.',
+  'Burrowers 1, flock 0. Try a different angle or a stronger pull.',
   'That smirk will not last. One more try!',
-  'Chuck loves wood, Bomb loves stone. Pick the right tool.',
+  'Zip loves wood, Ember loves stone, Jolt loves metal. Pick the right tool.',
   'Even the best slingshot pilots miss. Go again!',
 ];
 
@@ -349,7 +349,7 @@ export class UIManager implements IUIManager {
           this.panel(
             'Credits',
             [
-              el('div', 'credits-crest', [birdFace('red'), slingshotArt(), pigFace(false)]),
+              el('div', 'credits-crest', [birdFace('pip'), slingshotArt(), foeFace(false)]),
               el('p', 'credits-title', [`${GAME_TITLE} v${GAME_VERSION}`]),
               el('dl', 'credits-list', [
                 el('dt', '', ['Art & animation']),
@@ -403,8 +403,8 @@ export class UIManager implements IUIManager {
     });
     const logoWrap = el('div', 'title-logo', [
       ...feathers,
-      el('div', 'logo-peek peek-bird', [birdFace('red')]),
-      el('div', 'logo-peek peek-pig', [pigFace(true)]),
+      el('div', 'logo-peek peek-bird', [birdFace('pip')]),
+      el('div', 'logo-peek peek-foe', [foeFace(true)]),
       this.logo(),
       el('div', 'logo-tag', [el('span', '', [GAME_TAGLINE])]),
     ]);
@@ -498,7 +498,7 @@ export class UIManager implements IUIManager {
       { action: 'reset-confirm', icon: 'trash' },
     );
     const cancel = this.button('Keep my stars', close, 'green', { action: 'reset-cancel', icon: 'check', sound: 'ui_back', primary: true });
-    const panel = this.panel('Erase progress?', [el('div', 'dialog-art', [pigFace(true)]), el('p', 'dialog-text', ['All stars, best scores and unlocked levels will be lost. This cannot be undone.']), el('div', 'row', [confirm, cancel])], 'panel-dialog', 'red');
+    const panel = this.panel('Erase progress?', [el('div', 'dialog-art', [foeFace(true)]), el('p', 'dialog-text', ['All stars, best scores and unlocked levels will be lost. This cannot be undone.']), el('div', 'row', [confirm, cancel])], 'panel-dialog', 'red');
     panel.setAttribute('role', 'alertdialog');
     this.dialogCancel = (): void => {
       this.host.actions.sfx('ui_back');
@@ -674,7 +674,7 @@ export class UIManager implements IUIManager {
           row(['Level clear'], fmt(result.clearBonus), 1),
           result.unusedBirds > 0 && row([icon('feather', 'row-icon'), `Unused birds × ${result.unusedBirds}`], fmt(result.birdBonus), 2, 'row-bonus'),
         ]
-      : [row(['Pigs left standing'], String(result.pigsTotal - result.pigsDefeated), 0)];
+      : [row(['Foes left standing'], String(result.foesTotal - result.foesDefeated), 0)];
 
     const t = result.starThresholds;
     let target: string | null = null;
@@ -693,8 +693,8 @@ export class UIManager implements IUIManager {
 
     const head = result.won
       ? [el('div', 'result-rays'), el('div', 'result-level', [`${result.levelId}  ${result.levelName}`]), stars, scoreEl]
-      : [el('div', 'result-pig', [pigFace(true)]), el('div', 'result-level', [`${result.levelId}  ${result.levelName}`]), el('p', 'fail-line', [FAIL_LINES[(result.levelIndex + result.birdsUsed) % FAIL_LINES.length]!]), scoreEl];
-    const panel = this.panel(result.won ? 'Level cleared!' : 'The pigs win…', [...head, el('div', 'result-rows', rows), result.won && target && el('div', 'result-target', [icon('star'), el('span', '', [target])]), best, buttons], result.won ? 'panel-win' : 'panel-lose', result.won ? 'green' : 'red');
+      : [el('div', 'result-foe', [foeFace(true)]), el('div', 'result-level', [`${result.levelId}  ${result.levelName}`]), el('p', 'fail-line', [FAIL_LINES[(result.levelIndex + result.birdsUsed) % FAIL_LINES.length]!]), scoreEl];
+    const panel = this.panel(result.won ? 'Level cleared!' : 'The Burrowers win…', [...head, el('div', 'result-rows', rows), result.won && target && el('div', 'result-target', [icon('star'), el('span', '', [target])]), best, buttons], result.won ? 'panel-win' : 'panel-lose', result.won ? 'green' : 'red');
     this.openOverlay('results', panel);
 
     const fx = el('div', 'fx-layer');
@@ -776,7 +776,7 @@ export class UIManager implements IUIManager {
           el('div', 'panel-scroll', [
             el('ol', 'howto-steps', [
               step(1, 'drag', 'Pull back', 'Drag the bird back in the slingshot. The dotted line shows its path.'),
-              step(2, 'release', 'Let go', 'Release to fling. Topple towers and pop every pig.'),
+              step(2, 'release', 'Let go', 'Release to fling. Topple towers and pop every foe.'),
               step(3, 'tap', 'Tap for power', 'Tap or click while a bird is flying to trigger its power.'),
             ]),
             el('h3', 'howto-sub', ['The flock']),

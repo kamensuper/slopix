@@ -1,18 +1,18 @@
 /**
- * Dev gallery: every pig variant in every expression and damage state, plus gameplay-sized pigs
- * and the detached accessories. Served by Vite at /dev/pigs.html. `?still` freezes time.
+ * Dev gallery: every foe variant in every expression and damage state, plus gameplay-sized foes
+ * and the detached accessories. Served by Vite at /dev/foes.html. `?still` freezes time.
  */
-import type { PigVariant } from '../src/core/types';
+import type { FoeVariant } from '../src/core/types';
 import { paintBird } from '../src/render/art/birds';
-import { paintPig, paintPigAccessory } from '../src/render/art/pigs';
-import { CHARACTER_RADIUS, type BirdPose, type PigExpression, type PigPose } from '../src/render/art/types';
+import { paintFoe, paintFoeAccessory } from '../src/render/art/foes';
+import { CHARACTER_RADIUS, type BirdPose, type FoeExpression, type FoePose } from '../src/render/art/types';
 
-const ALL_VARIANTS: PigVariant[] = ['small', 'medium', 'large', 'helmet', 'armored', 'king'];
+const ALL_VARIANTS: FoeVariant[] = ['small', 'medium', 'large', 'helmet', 'armored', 'king'];
 const params = new URLSearchParams(location.search);
 /** `?only=helmet,king` shows just those rows, large. */
 const only = params.get('only')?.split(',');
 const VARIANTS = only ? ALL_VARIANTS.filter((v) => only.includes(v)) : ALL_VARIANTS;
-const EXPRESSIONS: PigExpression[] = ['idle', 'worried', 'surprised', 'hurt', 'stunned', 'laugh', 'defeated'];
+const EXPRESSIONS: FoeExpression[] = ['idle', 'worried', 'surprised', 'hurt', 'stunned', 'laugh', 'defeated'];
 /** Extra columns: [damage, armorDamage, armorOn, label]. */
 const STATES: [0 | 1 | 2, 0 | 1 | 2, boolean, string][] = [
   [1, 1, true, 'damage 1'],
@@ -24,14 +24,14 @@ const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const still = params.has('still');
 
-function pose(expression: PigExpression, time: number, damage: 0 | 1 | 2 = 0, armorDamage: 0 | 1 | 2 = 0, armorOn = true): PigPose {
+function pose(expression: FoeExpression, time: number, damage: 0 | 1 | 2 = 0, armorDamage: 0 | 1 | 2 = 0, armorOn = true): FoePose {
   return { time, expression, blink: 0, damage, armorOn, armorDamage, lookX: -0.6, lookY: 0.1, flash: 0, intensity: 1 };
 }
 
-function drawPig(variant: PigVariant, x: number, y: number, radius: number, p: PigPose, dpr: number): void {
+function drawFoe(variant: FoeVariant, x: number, y: number, radius: number, p: FoePose, dpr: number): void {
   const k = (radius / CHARACTER_RADIUS) * dpr;
   ctx.setTransform(k, 0, 0, k, x * dpr, y * dpr);
-  paintPig(ctx, variant, p);
+  paintFoe(ctx, variant, p);
 }
 
 function label(text: string, x: number, y: number, dpr: number): void {
@@ -57,19 +57,19 @@ function frame(now: number): void {
 
   if (only && only.length === 1 && params.has('big')) {
     // One variant, every state, large: 5 x 2 grid.
-    const variant = VARIANTS[0] as PigVariant;
+    const variant = VARIANTS[0] as FoeVariant;
     const cw = w / 5;
     const ch = h / 2;
     const r = Math.min(cw, ch) * 0.3;
-    const cells: [string, PigPose][] = [
-      ...EXPRESSIONS.map((e, i): [string, PigPose] => [e, pose(e, time + i * 0.37)]),
-      ...STATES.map(([d, wear, on, name], i): [string, PigPose] => [name, pose('idle', time + i, d, wear, on)]),
+    const cells: [string, FoePose][] = [
+      ...EXPRESSIONS.map((e, i): [string, FoePose] => [e, pose(e, time + i * 0.37)]),
+      ...STATES.map(([d, wear, on, name], i): [string, FoePose] => [name, pose('idle', time + i, d, wear, on)]),
     ];
     cells.forEach(([name, p], i) => {
       const cx = cw * (i % 5) + cw / 2;
       const cy = ch * Math.floor(i / 5) + ch * 0.55;
       label(name, cx, ch * Math.floor(i / 5) + 18, dpr);
-      drawPig(variant, cx, cy, r, p, dpr);
+      drawFoe(variant, cx, cy, r, p, dpr);
     });
     if (!still) requestAnimationFrame(frame);
     return;
@@ -85,10 +85,10 @@ function frame(now: number): void {
   VARIANTS.forEach((variant, row) => {
     const cy = top + row * cellH + cellH * 0.62;
     EXPRESSIONS.forEach((expression, col) => {
-      drawPig(variant, left + col * cellW, cy, radius, pose(expression, time + col * 0.37 + row * 0.21), dpr);
+      drawFoe(variant, left + col * cellW, cy, radius, pose(expression, time + col * 0.37 + row * 0.21), dpr);
     });
     STATES.forEach(([damage, wear, on], i) => {
-      drawPig(variant, left + (EXPRESSIONS.length + i) * cellW, cy, radius, pose('idle', time + i, damage, wear, on), dpr);
+      drawFoe(variant, left + (EXPRESSIONS.length + i) * cellW, cy, radius, pose('idle', time + i, damage, wear, on), dpr);
     });
     label(variant, 34, cy + radius + 22, dpr);
   });
@@ -101,27 +101,27 @@ function frame(now: number): void {
   const baseY = top + VARIANTS.length * cellH + 60;
   label('gameplay size (radius 30 / 20 px) | hit flash, blink, half worry | accessories', w / 2, baseY - 40, dpr);
   VARIANTS.forEach((variant, i) => {
-    drawPig(variant, 60 + i * 90, baseY + 20, 30, pose('idle', time + i), dpr);
-    drawPig(variant, 60 + i * 90, baseY + 85, 20, pose(i % 2 ? 'worried' : 'laugh', time + i), dpr);
+    drawFoe(variant, 60 + i * 90, baseY + 20, 30, pose('idle', time + i), dpr);
+    drawFoe(variant, 60 + i * 90, baseY + 85, 20, pose(i % 2 ? 'worried' : 'laugh', time + i), dpr);
   });
   const flashPose = pose('hurt', time);
   flashPose.flash = 0.6;
-  drawPig('medium', 640, baseY + 20, 30, flashPose, dpr);
+  drawFoe('medium', 640, baseY + 20, 30, flashPose, dpr);
   const blinkPose = pose('idle', time);
   blinkPose.blink = 1;
-  drawPig('medium', 720, baseY + 20, 30, blinkPose, dpr);
+  drawFoe('medium', 720, baseY + 20, 30, blinkPose, dpr);
   const fearPose = pose('worried', time);
   fearPose.intensity = 0.5;
-  drawPig('medium', 800, baseY + 20, 30, fearPose, dpr);
+  drawFoe('medium', 800, baseY + 20, 30, fearPose, dpr);
   (['helmet', 'armor', 'crown'] as const).forEach((kind, i) => {
     const k = (40 / CHARACTER_RADIUS) * dpr;
     ctx.setTransform(k, 0, 0, k, (920 + i * 110) * dpr, (baseY + 40) * dpr);
-    paintPigAccessory(ctx, kind);
+    paintFoeAccessory(ctx, kind);
   });
   if (!still) requestAnimationFrame(frame);
 }
 
-/** Paint cost per pig at gameplay size (radius 30 px), averaged over many paints. */
+/** Paint cost per foe at gameplay size (radius 30 px), averaged over many paints. */
 function measure(): void {
   const off = document.createElement('canvas');
   off.width = 400;
@@ -134,14 +134,14 @@ function measure(): void {
     const k = 30 / CHARACTER_RADIUS;
     for (let i = 0; i < 50; i++) {
       c.setTransform(k, 0, 0, k, 200, 200);
-      paintPig(c, variant, p);
+      paintFoe(c, variant, p);
     }
     const n = 400;
     const t0 = performance.now();
     for (let i = 0; i < n; i++) {
       p.time = i * 0.01;
       c.setTransform(k, 0, 0, k, 200, 200);
-      paintPig(c, variant, p);
+      paintFoe(c, variant, p);
     }
     c.getImageData(0, 0, 1, 1); // forces the queued drawing to finish
     const ms = (performance.now() - t0) / n;
@@ -153,19 +153,19 @@ function measure(): void {
   const k = 30 / CHARACTER_RADIUS;
   for (let i = 0; i < 50; i++) {
     c.setTransform(k, 0, 0, k, 200, 200);
-    paintBird(c, 'red', bird);
+    paintBird(c, 'pip', bird);
   }
   const t0 = performance.now();
   for (let i = 0; i < 400; i++) {
     bird.time = i * 0.01;
     c.setTransform(k, 0, 0, k, 200, 200);
-    paintBird(c, 'red', bird);
+    paintBird(c, 'pip', bird);
   }
   c.getImageData(0, 0, 1, 1);
   perf.birdRed = (performance.now() - t0) / 400;
   results.push(`(red bird ${perf.birdRed.toFixed(3)})`);
-  (window as unknown as { __pigPerf: Record<string, number> }).__pigPerf = perf;
-  document.getElementById('perf')!.textContent = `ms / pig @30px: ${results.join(' | ')}`;
+  (window as unknown as { __foePerf: Record<string, number> }).__foePerf = perf;
+  document.getElementById('perf')!.textContent = `ms / foe @30px: ${results.join(' | ')}`;
 }
 
 requestAnimationFrame(frame);

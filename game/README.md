@@ -36,7 +36,7 @@ npm run e2e            # headless Chrome: real mouse + touch play-through (needs
 - Wood, glass, stone and TNT with their own density, friction, durability and damage thresholds. Damage
   is impulse/velocity based with per-pair cooldowns, so resting contacts do no damage.
 - Five birds: Red, Chuck (boost), Bomb (tap or fuse explosion), the Blues (split into three),
-  Matilda (egg drop + upward kick). Six pig types: small, medium, large, helmet, armoured, king.
+  Matilda (egg drop + upward kick). Six foe types: small, medium, large, helmet, armoured, king.
 - 30 hand-built levels across Grasslands, Desert and Snowlands (`src/levels`). Every level is checked
   by `levels:check`: it must not move before it is hit and must be winnable with its own birds.
   Star thresholds were set from the solver's winning scores (two stars ≈ 60 %, three ≈ 90 %).
@@ -65,10 +65,10 @@ npm run e2e            # headless Chrome: real mouse + touch play-through (needs
 ## Known limitations (this build is deliberately "barely finished")
 
 - **No level editor.** The editor module was never built.
-- **Placeholder-grade art for pigs, blocks, props and backgrounds.** The birds are fully drawn, but pigs,
-  blocks, the slingshot, terrain and skies use simple procedural stand-ins (`src/render/art/pigs.ts`,
+- **Placeholder-grade art for foes, blocks, props and backgrounds.** The birds are fully drawn, but foes,
+  blocks, the slingshot, terrain and skies use simple procedural stand-ins (`src/render/art/foes.ts`,
   `blocks.ts`, `props.ts`, `environment.ts`). There are no parallax layers, decor or weather yet.
 - Audio is functional but simple synth sounds and loops.
 - Level solvability is proven by an automated greedy solver, not by hand play-testing every level.
-  A few levels got an extra bird and helmet/armoured pig armour was lowered to make that pass.
+  A few levels got an extra bird and helmet/armoured foe armour was lowered to make that pass.
 - Performance was not profiled on real phones.

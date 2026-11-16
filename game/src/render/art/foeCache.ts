@@ -1,7 +1,7 @@
 /**
- * Resolution-aware layer cache for the static parts of the pigs (shaded body, helmets, crown).
+ * Resolution-aware layer cache for the static parts of the foes (shaded body, helmets, crown).
  *
- * Pigs are painted live because their faces animate, but most of their pixels never change. Those
+ * Foes are painted live because their faces animate, but most of their pixels never change. Those
  * layers are rendered once per screen-scale bucket (a third of an octave apart, always rounded up
  * so the cached copy is only ever downsampled) and blitted under the current transform.
  */
@@ -13,7 +13,7 @@ export interface LayerBounds {
   height: number;
 }
 
-export interface PigLayer {
+export interface FoeLayer {
   canvas: HTMLCanvasElement;
   /** Context with the design-space transform applied; paint into it when `blank`. */
   ctx: CanvasRenderingContext2D;
@@ -29,7 +29,7 @@ const MAX_LAYERS = 192;
 const PAD = 2;
 const MIN_SCALE = 1 / 32;
 const MAX_SCALE = 3;
-const layers = new Map<string, PigLayer>();
+const layers = new Map<string, FoeLayer>();
 let clock = 0;
 const canCache = typeof document !== 'undefined';
 
@@ -61,7 +61,7 @@ function evict(): void {
  * The cached layer `key` for device scale `k`, or null when caching is unavailable (then paint
  * live). A layer returned with `blank` set must be painted by the caller through `layer.ctx`.
  */
-export function pigLayer(key: string, bounds: LayerBounds, k: number): PigLayer | null {
+export function foeLayer(key: string, bounds: LayerBounds, k: number): FoeLayer | null {
   if (!canCache || !(k > 0)) return null;
   const scale = bucket(k);
   const fullKey = `${key}@${scale.toFixed(4)}`;
@@ -88,7 +88,7 @@ export function pigLayer(key: string, bounds: LayerBounds, k: number): PigLayer 
 }
 
 /** Draws a layer so that its design space lines up with the current transform. */
-export function blitLayer(ctx: CanvasRenderingContext2D, layer: PigLayer): void {
+export function blitLayer(ctx: CanvasRenderingContext2D, layer: FoeLayer): void {
   const inv = 1 / layer.scale;
   ctx.drawImage(layer.canvas, -layer.ox * inv, -layer.oy * inv, layer.canvas.width * inv, layer.canvas.height * inv);
 }

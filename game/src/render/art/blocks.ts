@@ -1,8 +1,9 @@
 /**
- * Block artwork. Each material has its own painter (wood, stone, glass, metal, TNT); this module
+ * Block artwork. Each material has its own painter; this module
  * dispatches to them and owns the exact physics silhouette. Pieces are cached as sprites, so the
  * painters can afford detail, but they stay inside the collision shape (outlines spill <= 3 units).
  */
+import { paintCrystal, paintIce, paintIronwood, paintRubber } from './blockExtra';
 import { paintGlass } from './blockGlass';
 import { paintMetal } from './blockMetal';
 import { paintStone } from './blockStone';
@@ -51,6 +52,18 @@ export function paintBlock(ctx: CanvasRenderingContext2D, spec: BlockSpec, stage
       break;
     case 'tnt':
       paintTnt(ctx, geo, stage, seed);
+      break;
+    case 'ice':
+      paintIce(ctx, geo, stage, seed);
+      break;
+    case 'ironwood':
+      paintIronwood(ctx, geo, stage, seed);
+      break;
+    case 'crystal':
+      paintCrystal(ctx, geo, stage, seed);
+      break;
+    case 'rubber':
+      paintRubber(ctx, geo, stage, seed);
       break;
   }
 }

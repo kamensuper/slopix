@@ -13,10 +13,10 @@ export interface AimSolution {
  * Launch angles that hit (targetX, targetY) at the given power (0..1).
  * Accounts for the bird starting from the pulled-back pouch position rather than the anchor.
  */
-export function solveAim(anchor: Vec, targetX: number, targetY: number, power: number): AimSolution {
-  const speed = SLING.maxSpeed * power;
+export function solveAim(anchor: Vec, targetX: number, targetY: number, power: number, launchScale = 1, gravityScale = 1): AimSolution {
+  const speed = SLING.maxSpeed * power * launchScale;
   const pull = SLING.maxPull * power;
-  const g = PHYSICS.gravity;
+  const g = PHYSICS.gravity * gravityScale;
   const solve = (pickHigh: boolean): number | null => {
     let angle = Math.atan2(targetY - anchor.y, targetX - anchor.x);
     for (let i = 0; i < 6; i++) {

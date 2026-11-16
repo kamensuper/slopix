@@ -1,5 +1,5 @@
 /**
- * Pig equipment: the foot soldier's iron kettle helmet, the knight's helm, plume and breastplate,
+ * Foe equipment: the foot soldier's iron kettle helmet, the knight's helm, plume and breastplate,
  * and the king's crown, cape, ermine trim and moustache.
  *
  * Everything is painted in character space at the position where it is worn. Armour pieces take
@@ -7,7 +7,7 @@
  */
 import { DEG, TAU } from '../../core/math';
 import { DETAIL_LINE, FEATURE_LINE, OUTLINE, traceFeather } from './charParts';
-import { cachedGradient, paintRivets, type MetalTones, type RoyalTones } from './pigKit';
+import { cachedGradient, paintRivets, type MetalTones, type RoyalTones } from './foeKit';
 
 type Wear = 0 | 1 | 2;
 
@@ -380,7 +380,7 @@ export function paintBreastplate(ctx: CanvasRenderingContext2D, t: MetalTones, r
   ctx.quadraticCurveTo(-50, 64, -22, 62);
   ctx.stroke();
   paintRivets(ctx, PLATE_RIVETS, t, wear >= 2 ? 0b01 : 0);
-  // Small gold boss with the tusk crest of the pig knights.
+  // Small gold boss with the tusk crest of the foe knights.
   ctx.beginPath();
   ctx.moveTo(0, 70);
   ctx.quadraticCurveTo(14, 72, 14, 82);

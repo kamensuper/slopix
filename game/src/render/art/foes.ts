@@ -1,19 +1,19 @@
 /**
- * Pig artwork: six enemy characters built around the collision circle of radius CHARACTER_RADIUS
+ * Foe artwork: six enemy characters built around the collision circle of radius CHARACTER_RADIUS
  * (helmets, crowns and plumes reach out to CHARACTER_EXTENT).
  *
- *   small    Piglet   - round squeaky youngster: huge eyes, button snout, floppy ears, a hair curl.
- *   medium   Grunt    - the classic smug pig: wide head, pointed ears, half-lidded eyes, smirk.
+ *   small    Pup   - round squeaky youngster: huge eyes, button snout, floppy ears, a hair curl.
+ *   medium   Grunt    - the classic smug foe: wide head, pointed ears, half-lidded eyes, smirk.
  *   large    Brute    - heavy jowly bruiser: low unibrow, small mean eyes, big snout, tusks, scar.
  *   helmet   Corporal - square-jawed foot soldier in a riveted iron kettle helmet with chin strap.
  *   armored  Knight   - helm with a raised visor and plume over a riveted breastplate.
  *   king     King     - pear-shaped monarch: crown, handlebar moustache, cape and ermine trim.
  *
- * Like the birds, each pig is a static design posed every frame by a small rig derived from the
- * PigPose. Pigs are painted live, so gradients are cached (see pigKit) and no shadows are used.
+ * Like the birds, each foe is a static design posed every frame by a small rig derived from the
+ * FoePose. Foes are painted live, so gradients are cached (see foeKit) and no shadows are used.
  */
 import { DEG, TAU, clamp01, lerp } from '../../core/math';
-import type { PigVariant } from '../../core/types';
+import type { FoeVariant } from '../../core/types';
 import {
   DETAIL_LINE,
   FEATURE_LINE,
@@ -29,7 +29,7 @@ import {
   traceFeather,
 } from './charParts';
 import type { Blob, EyeLook, EyeShape } from './charParts';
-import { blitLayer, deviceScale, pigLayer, type LayerBounds } from './pigCache';
+import { blitLayer, deviceScale, foeLayer, type LayerBounds } from './foeCache';
 import {
   crownTransform,
   paintBreastplate,
@@ -41,9 +41,9 @@ import {
   paintMoustache,
   paintPlume,
   paintSoldierHelmet,
-} from './pigGear';
-import { IRON, PIG_TONES, ROYAL, STEEL, beginPigBody, traceStar, type MetalTones, type PigTones, type RoyalTones } from './pigKit';
-import type { PigAccessory, PigExpression, PigPose } from './types';
+} from './foeGear';
+import { IRON, FOE_TONES, ROYAL, STEEL, beginFoeBody, traceStar, type MetalTones, type FoeTones, type RoyalTones } from './foeKit';
+import type { FoeAccessory, FoeExpression, FoePose } from './types';
 
 // ---------------------------------------------------------------- design data
 
@@ -77,7 +77,7 @@ interface Oval {
   ry: number;
 }
 
-interface PigDesign {
+interface FoeDesign {
   body: Blob;
   gloss: { x: number; y: number; size: number };
   /** Viewer-left eye and brow; the right ones are mirrored. */
@@ -123,91 +123,101 @@ function bodyBlob(s: BodyShape): Blob {
   return blobThrough(points);
 }
 
-const PIGLET: PigDesign = {
+const PUP: FoeDesign = {
   body: bodyBlob({ rx: 96, top: 94, bottom: 101, n: 2.15, cheek: 0.03, taper: 0.04 }),
   gloss: { x: -50, y: -56, size: 14 },
   eye: { x: -35, y: -14, rx: 27, ry: 31, pupil: 13 },
   brow: { outerX: -60, outerY: -56, outerW: 7, innerX: -20, innerY: -55, innerW: 9 },
   browThick: 0.9,
-  ear: { x: -50, y: -72, angle: -138, length: 58, width: 46, bend: -24, point: 0.15 },
+  ear: { x: -50, y: -72, angle: -138, length: 30, width: 40, bend: 0, point: 0.02 },
   snout: { x: 0, y: 30, rx: 26, ry: 19 },
   mouth: { x: 2, y: 64, w: 18, maxOpen: 0.8 },
   lidBias: 0,
   angerBias: 0,
 };
 
-const GRUNT: PigDesign = {
+const GRUNT: FoeDesign = {
   body: bodyBlob({ rx: 102, top: 90, bottom: 97, n: 2.35, cheek: 0.04, taper: 0.08 }),
   gloss: { x: -56, y: -54, size: 15 },
   eye: { x: -38, y: -28, rx: 21, ry: 24, pupil: 10 },
   brow: { outerX: -66, outerY: -60, outerW: 9, innerX: -22, innerY: -58, innerW: 14 },
   browThick: 1,
-  ear: { x: -54, y: -72, angle: -122, length: 54, width: 40, bend: -8, point: 0.65 },
+  ear: { x: -54, y: -72, angle: -122, length: 30, width: 40, bend: 0, point: 0.02 },
   snout: { x: 0, y: 14, rx: 39, ry: 28 },
   mouth: { x: 0, y: 62, w: 32, maxOpen: 1 },
   lidBias: 0.22,
   angerBias: 0.05,
 };
 
-const BRUTE: PigDesign = {
+const BRUTE: FoeDesign = {
   body: bodyBlob({ rx: 100, top: 86, bottom: 102, n: 2.9, cheek: 0.09, taper: 0.1 }),
   gloss: { x: -58, y: -56, size: 14 },
   eye: { x: -33, y: -30, rx: 16, ry: 17, pupil: 8.5 },
   brow: { outerX: -62, outerY: -56, outerW: 15, innerX: -4, innerY: -48, innerW: 21 },
   browThick: 1.15,
-  ear: { x: -60, y: -66, angle: -140, length: 42, width: 38, bend: -4, point: 0.5, notch: true },
+  ear: { x: -60, y: -66, angle: -140, length: 30, width: 40, bend: 0, point: 0.02, notch: true },
   snout: { x: 0, y: 14, rx: 47, ry: 32 },
   mouth: { x: 0, y: 68, w: 42, maxOpen: 1 },
   lidBias: 0.3,
   angerBias: 0.45,
 };
 
-const CORPORAL: PigDesign = {
+const CORPORAL: FoeDesign = {
   body: bodyBlob({ rx: 100, top: 92, bottom: 99, n: 2.6, cheek: 0.02, taper: 0.06 }),
   gloss: { x: -56, y: -50, size: 14 },
   eye: { x: -37, y: -10, rx: 20, ry: 21, pupil: 9.5 },
   brow: { outerX: -60, outerY: -36, outerW: 9, innerX: -20, innerY: -33, innerW: 13 },
   browThick: 1,
-  ear: { x: -86, y: -30, angle: 192, length: 44, width: 34, bend: 8, point: 0.55 },
+  ear: { x: -86, y: -30, angle: 192, length: 30, width: 40, bend: 0, point: 0.02 },
   snout: { x: 0, y: 26, rx: 36, ry: 26 },
   mouth: { x: 0, y: 70, w: 30, maxOpen: 0.9 },
   lidBias: 0.12,
   angerBias: 0.35,
 };
 
-const KNIGHT: PigDesign = {
+const KNIGHT: FoeDesign = {
   body: bodyBlob({ rx: 96, top: 98, bottom: 100, n: 2.2, cheek: 0.02, taper: 0.06 }),
   gloss: { x: -52, y: -58, size: 14 },
   eye: { x: -35, y: -18, rx: 20, ry: 23, pupil: 9.5 },
   brow: { outerX: -52, outerY: -48, outerW: 8, innerX: -18, innerY: -46, innerW: 12 },
   browThick: 1,
-  ear: { x: -50, y: -78, angle: -118, length: 48, width: 36, bend: -6, point: 0.6 },
+  ear: { x: -50, y: -78, angle: -118, length: 30, width: 40, bend: 0, point: 0.02 },
   snout: { x: 0, y: 15, rx: 34, ry: 25 },
   mouth: { x: 0, y: 47, w: 25, maxOpen: 0.65 },
   lidBias: 0.08,
   angerBias: 0.25,
 };
 
-const KING: PigDesign = {
+const KING: FoeDesign = {
   body: bodyBlob({ rx: 96, top: 88, bottom: 102, n: 2.4, cheek: 0.13, taper: 0.2 }),
   gloss: { x: -52, y: -52, size: 14 },
   eye: { x: -33, y: -36, rx: 19, ry: 21, pupil: 9 },
   brow: { outerX: -58, outerY: -66, outerW: 11, innerX: -18, innerY: -64, innerW: 15 },
   browThick: 1.2,
-  ear: { x: -54, y: -66, angle: -136, length: 46, width: 36, bend: -6, point: 0.6 },
+  ear: { x: -54, y: -66, angle: -136, length: 30, width: 40, bend: 0, point: 0.02 },
   snout: { x: 0, y: 2, rx: 36, ry: 26 },
   mouth: { x: 0, y: 60, w: 28, maxOpen: 0.9 },
   lidBias: 0.36,
   angerBias: 0,
 };
 
-const DESIGNS: Record<PigVariant, PigDesign> = {
-  small: PIGLET,
+/** Shieldbearer: a stocky guard peering over its shield. */
+const GUARD: FoeDesign = { ...CORPORAL, ear: { x: -58, y: -70, angle: -128, length: 30, width: 40, bend: 0, point: 0.02 }, eye: { x: -37, y: -24, rx: 20, ry: 22, pupil: 9.5 }, brow: { outerX: -62, outerY: -52, outerW: 10, innerX: -20, innerY: -47, innerW: 15 }, angerBias: 0.4 };
+/** Sapper: wide-eyed and a little too keen. */
+const SAPPER: FoeDesign = { ...GRUNT, eye: { x: -38, y: -26, rx: 24, ry: 27, pupil: 9 }, lidBias: -0.05, angerBias: 0.15 };
+/** Balloonist: a pup with its head in the clouds. */
+const AERONAUT: FoeDesign = { ...PUP, eye: { x: -35, y: -6, rx: 25, ry: 28, pupil: 12 }, brow: { outerX: -60, outerY: -40, outerW: 7, innerX: -20, innerY: -39, innerW: 9 }, lidBias: 0.05 };
+
+const DESIGNS: Record<FoeVariant, FoeDesign> = {
+  small: PUP,
   medium: GRUNT,
   large: BRUTE,
   helmet: CORPORAL,
   armored: KNIGHT,
   king: KING,
+  shield: GUARD,
+  sapper: SAPPER,
+  floater: AERONAUT,
 };
 
 // ---------------------------------------------------------------- rig
@@ -261,7 +271,7 @@ const IDLE: Rig = {
   tears: false,
 };
 
-function expressionRig(expression: PigExpression, time: number): Rig {
+function expressionRig(expression: FoeExpression, time: number): Rig {
   switch (expression) {
     case 'idle':
       return { ...IDLE };
@@ -304,7 +314,7 @@ function blendRig(from: Rig, to: Rig, k: number): Rig {
   };
 }
 
-function buildRig(design: PigDesign, pose: PigPose): Rig {
+function buildRig(design: FoeDesign, pose: FoePose): Rig {
   let rig = expressionRig(pose.expression, pose.time);
   const intensity = clamp01(pose.intensity ?? 1);
   if (intensity < 0.999 && (pose.expression === 'worried' || pose.expression === 'surprised')) {
@@ -323,7 +333,7 @@ function buildRig(design: PigDesign, pose: PigPose): Rig {
 
 const EAR_TWITCH = 0.35;
 
-function paintEars(ctx: CanvasRenderingContext2D, ear: Ear, rig: Rig, time: number, t: PigTones): void {
+function paintEars(ctx: CanvasRenderingContext2D, ear: Ear, rig: Rig, time: number, t: FoeTones): void {
   for (const side of [-1, 1] as const) {
     // Occasional quick twitch, each ear on its own rhythm.
     const twitch = Math.pow(Math.max(0, Math.sin(time * 1.3 + side * 1.7)), 40) * EAR_TWITCH;
@@ -360,7 +370,7 @@ function paintEars(ctx: CanvasRenderingContext2D, ear: Ear, rig: Rig, time: numb
 }
 
 function traceSnout(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number): void {
-  // A soft "squircle": flatter than an ellipse, like a real snout disc.
+  // A soft "squircle": the pale muzzle the nose sits on.
   const k = 0.86;
   ctx.moveTo(x, y - ry);
   ctx.bezierCurveTo(x + rx * k, y - ry, x + rx, y - ry * k, x + rx, y);
@@ -370,38 +380,199 @@ function traceSnout(ctx: CanvasRenderingContext2D, x: number, y: number, rx: num
   ctx.closePath();
 }
 
-function paintSnout(ctx: CanvasRenderingContext2D, s: Oval, rig: Rig, t: PigTones): void {
+/** A mole's face: pale muzzle, big pink nose, whiskers and two buck teeth. */
+function paintSnout(ctx: CanvasRenderingContext2D, s: Oval, rig: Rig, t: FoeTones): void {
   const rx = s.rx * rig.snoutW;
   const ry = s.ry * rig.snoutH;
   const x = s.x;
   const y = s.y + rig.snoutY;
+  // Whiskers behind the muzzle.
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = t.ink;
+  for (const side of [-1, 1]) {
+    for (const [dy, lift] of [[-0.25, -9], [0.2, 2], [0.6, 12]] as const) {
+      ctx.beginPath();
+      ctx.moveTo(x + side * rx * 0.7, y + ry * dy);
+      ctx.quadraticCurveTo(x + side * (rx + 16), y + ry * dy + lift * 0.4, x + side * (rx + 30), y + ry * dy + lift);
+      ctx.stroke();
+    }
+  }
   ctx.beginPath();
-  traceSnout(ctx, x, y, rx, ry);
+  traceSnout(ctx, x, y + ry * 0.2, rx, ry * 0.86);
+  ctx.fillStyle = '#e9eef5';
+  ctx.fill();
+  ctx.lineWidth = FEATURE_LINE;
+  ctx.strokeStyle = t.ink;
+  ctx.stroke();
+  // Buck teeth peeking out under the muzzle.
+  const tw = rx * 0.2;
+  const th = ry * 0.5;
+  ctx.fillStyle = t.tooth;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.rect(x - tw - 1, y + ry * 0.92, tw, th);
+  ctx.rect(x + 1, y + ry * 0.92, tw, th);
+  ctx.fill();
+  ctx.stroke();
+  // The nose: a fat pink heart-shaped button, wider than tall.
+  const nw = rx * 0.6 * (0.9 + 0.1 * rig.flare);
+  const nh = ry * 0.62 * (0.9 + 0.1 * rig.flare);
+  const ny = y - ry * 0.28;
+  ctx.beginPath();
+  ctx.moveTo(x, ny + nh);
+  ctx.bezierCurveTo(x - nw * 1.1, ny + nh * 0.5, x - nw * 1.15, ny - nh * 0.9, x - nw * 0.4, ny - nh * 0.9);
+  ctx.quadraticCurveTo(x, ny - nh * 0.95, x + nw * 0.4, ny - nh * 0.9);
+  ctx.bezierCurveTo(x + nw * 1.15, ny - nh * 0.9, x + nw * 1.1, ny + nh * 0.5, x, ny + nh);
+  ctx.closePath();
   ctx.fillStyle = t.snout;
   ctx.fill();
   ctx.lineWidth = FEATURE_LINE;
   ctx.strokeStyle = t.ink;
   ctx.stroke();
-  // Lower-right shade crescent and a soft top-left highlight.
   ctx.fillStyle = t.snoutLo;
   ctx.beginPath();
-  ctx.moveTo(x + rx * 0.9, y - ry * 0.25);
-  ctx.quadraticCurveTo(x + rx * 0.86, y + ry * 0.88, x - rx * 0.5, y + ry * 0.86);
-  ctx.quadraticCurveTo(x + rx * 0.58, y + ry * 0.5, x + rx * 0.9, y - ry * 0.25);
+  ctx.ellipse(x + nw * 0.3, ny + nh * 0.3, nw * 0.45, nh * 0.3, -0.3, 0, TAU);
   ctx.fill();
   ctx.fillStyle = t.snoutHi;
   ctx.beginPath();
-  ctx.ellipse(x - rx * 0.46, y - ry * 0.5, rx * 0.3, ry * 0.17, -0.25, 0, TAU);
+  ctx.ellipse(x - nw * 0.38, ny - nh * 0.42, nw * 0.3, nh * 0.2, -0.3, 0, TAU);
   ctx.fill();
-  // Nostrils.
-  const nw = rx * 0.15 * rig.flare;
-  const nh = ry * 0.36 * rig.flare;
   ctx.fillStyle = t.nostril;
   ctx.beginPath();
-  ctx.ellipse(x - rx * 0.37, y + ry * 0.06, nw, nh, -0.22, 0, TAU);
-  ctx.moveTo(x + rx * 0.37 + nw, y + ry * 0.06);
-  ctx.ellipse(x + rx * 0.37, y + ry * 0.06, nw, nh, 0.22, 0, TAU);
+  ctx.ellipse(x - nw * 0.3, ny + nh * 0.12, nw * 0.1, nh * 0.16, -0.2, 0, TAU);
+  ctx.ellipse(x + nw * 0.3, ny + nh * 0.12, nw * 0.1, nh * 0.16, 0.2, 0, TAU);
   ctx.fill();
+}
+
+// ---------------------------------------------------------------- extra gear
+
+/** Tower shield carried on the slingshot side. `wear` 0..2 splinters it. */
+function paintShield(ctx: CanvasRenderingContext2D, wear: 0 | 1 | 2): void {
+  ctx.save();
+  ctx.translate(-70, 18);
+  ctx.rotate(-0.08);
+  ctx.beginPath();
+  ctx.moveTo(-44, -84);
+  ctx.quadraticCurveTo(0, -98, 44, -84);
+  ctx.lineTo(44, 44);
+  ctx.quadraticCurveTo(40, 86, 0, 100);
+  ctx.quadraticCurveTo(-40, 86, -44, 44);
+  ctx.closePath();
+  const wood = ctx.createLinearGradient(-44, 0, 44, 0);
+  wood.addColorStop(0, '#e2b06a');
+  wood.addColorStop(1, '#a8703a');
+  ctx.fillStyle = wood;
+  ctx.fill();
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = '#2b1a12';
+  ctx.stroke();
+  ctx.save();
+  ctx.clip();
+  // Planks, iron rim and boss.
+  ctx.strokeStyle = '#7a4c22';
+  ctx.lineWidth = 3;
+  for (const px of [-16, 14]) {
+    ctx.beginPath();
+    ctx.moveTo(px, -100);
+    ctx.lineTo(px, 110);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#8d9bab';
+  ctx.fillRect(-50, -92, 100, 16);
+  ctx.fillRect(-50, 30, 100, 14);
+  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(0, -22, 17, 0, TAU);
+  ctx.fillStyle = '#b9c4d0';
+  ctx.fill();
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.fillStyle = '#ffffffb0';
+  ctx.beginPath();
+  ctx.arc(-5, -27, 5, 0, TAU);
+  ctx.fill();
+  if (wear > 0) {
+    ctx.strokeStyle = '#2b1a12';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-30, -70);
+    ctx.lineTo(-12, -40);
+    ctx.lineTo(-24, -8);
+    if (wear > 1) {
+      ctx.moveTo(34, 60);
+      ctx.lineTo(10, 30);
+      ctx.lineTo(26, 4);
+      ctx.moveTo(-36, 50);
+      ctx.lineTo(-10, 66);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Powder keg strapped to the sapper's back, with a fizzing fuse. */
+function paintKeg(ctx: CanvasRenderingContext2D, time: number): void {
+  ctx.save();
+  ctx.translate(44, -88);
+  ctx.rotate(0.22);
+  ctx.beginPath();
+  ctx.roundRect(-34, -34, 68, 62, 12);
+  ctx.fillStyle = '#b5482f';
+  ctx.fill();
+  ctx.lineWidth = 6.5;
+  ctx.strokeStyle = '#2b1a12';
+  ctx.stroke();
+  ctx.fillStyle = '#f2e2b0';
+  ctx.fillRect(-34, -8, 68, 16);
+  ctx.fillStyle = '#2b1a12';
+  ctx.fillRect(-34, -22, 68, 5);
+  ctx.fillRect(-34, 14, 68, 5);
+  ctx.beginPath();
+  ctx.moveTo(0, -34);
+  ctx.quadraticCurveTo(6, -54, 22, -56);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#dbb684';
+  ctx.stroke();
+  const flicker = 0.7 + 0.3 * Math.sin(time * 31);
+  ctx.fillStyle = '#ffb629';
+  ctx.beginPath();
+  ctx.arc(24, -57, 9 * flicker, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#fff5c4';
+  ctx.beginPath();
+  ctx.arc(24, -57, 4 * flicker, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Flying goggles pushed up on the balloonist's forehead. */
+function paintGoggles(ctx: CanvasRenderingContext2D): void {
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#2b1a12';
+  ctx.beginPath();
+  ctx.moveTo(-96, -58);
+  ctx.quadraticCurveTo(0, -84, 96, -58);
+  ctx.lineWidth = 11;
+  ctx.stroke();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#8a5a34';
+  ctx.stroke();
+  for (const x of [-30, 30]) {
+    ctx.beginPath();
+    ctx.ellipse(x, -72, 24, 19, x < 0 ? -0.12 : 0.12, 0, TAU);
+    ctx.fillStyle = '#9fe0f5';
+    ctx.fill();
+    ctx.lineWidth = 6.5;
+    ctx.strokeStyle = '#2b1a12';
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#d9a35b';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffffc0';
+    ctx.beginPath();
+    ctx.ellipse(x - 8, -78, 7, 4, -0.5, 0, TAU);
+    ctx.fill();
+  }
 }
 
 // ---------------------------------------------------------------- face
@@ -418,7 +589,7 @@ function mirrorEye(eye: EyeShape): EyeShape {
   return { x: -eye.x, y: eye.y, rx: eye.rx, ry: eye.ry, pupil: eye.pupil };
 }
 
-function eyeLook(eye: EyeShape, rig: Rig, pose: PigPose, swollen: number): EyeLook {
+function eyeLook(eye: EyeShape, rig: Rig, pose: FoePose, swollen: number): EyeLook {
   const blink = clamp01(pose.blink);
   const bottom = rig.bottom + swollen + blink * BLINK_FROM_BELOW;
   const top = Math.min(rig.top + swollen * 0.5, 1 - bottom);
@@ -433,7 +604,7 @@ function eyeLook(eye: EyeShape, rig: Rig, pose: PigPose, swollen: number): EyeLo
   };
 }
 
-function paintHappyEye(ctx: CanvasRenderingContext2D, eye: EyeShape, t: PigTones): void {
+function paintHappyEye(ctx: CanvasRenderingContext2D, eye: EyeShape, t: FoeTones): void {
   ctx.strokeStyle = t.ink;
   ctx.lineWidth = OUTLINE;
   ctx.beginPath();
@@ -442,7 +613,7 @@ function paintHappyEye(ctx: CanvasRenderingContext2D, eye: EyeShape, t: PigTones
   ctx.stroke();
 }
 
-function paintSpiralEye(ctx: CanvasRenderingContext2D, eye: EyeShape, spin: number, t: PigTones): void {
+function paintSpiralEye(ctx: CanvasRenderingContext2D, eye: EyeShape, spin: number, t: FoeTones): void {
   ctx.beginPath();
   ctx.ellipse(eye.x, eye.y, eye.rx, eye.ry, 0, 0, TAU);
   ctx.fillStyle = t.eyeWhite;
@@ -464,7 +635,7 @@ function paintSpiralEye(ctx: CanvasRenderingContext2D, eye: EyeShape, spin: numb
   ctx.stroke();
 }
 
-function paintCrossEye(ctx: CanvasRenderingContext2D, eye: EyeShape, t: PigTones): void {
+function paintCrossEye(ctx: CanvasRenderingContext2D, eye: EyeShape, t: FoeTones): void {
   const r = Math.min(eye.rx, eye.ry) * 0.72;
   ctx.strokeStyle = t.ink;
   ctx.lineWidth = OUTLINE;
@@ -476,7 +647,7 @@ function paintCrossEye(ctx: CanvasRenderingContext2D, eye: EyeShape, t: PigTones
   ctx.stroke();
 }
 
-function paintBrows(ctx: CanvasRenderingContext2D, design: PigDesign, rig: Rig, t: PigTones, fill: string): void {
+function paintBrows(ctx: CanvasRenderingContext2D, design: FoeDesign, rig: Rig, t: FoeTones, fill: string): void {
   const b = design.brow;
   const k = design.browThick;
   for (const side of [-1, 1] as const) {
@@ -488,7 +659,7 @@ function paintBrows(ctx: CanvasRenderingContext2D, design: PigDesign, rig: Rig, 
   }
 }
 
-function paintMouth(ctx: CanvasRenderingContext2D, design: PigDesign, rig: Rig, t: PigTones): void {
+function paintMouth(ctx: CanvasRenderingContext2D, design: FoeDesign, rig: Rig, t: FoeTones): void {
   const { x, w } = design.mouth;
   const y = design.mouth.y;
   const open = rig.open * design.mouth.maxOpen;
@@ -626,7 +797,7 @@ function paintMouth(ctx: CanvasRenderingContext2D, design: PigDesign, rig: Rig, 
   }
 }
 
-function paintTusks(ctx: CanvasRenderingContext2D, design: PigDesign, rig: Rig, t: PigTones): void {
+function paintTusks(ctx: CanvasRenderingContext2D, design: FoeDesign, rig: Rig, t: FoeTones): void {
   const { x, y, w } = design.mouth;
   const drop = rig.mouth === 'laugh' ? 8 : rig.mouth === 'o' ? 6 : 0;
   ctx.fillStyle = t.tooth;
@@ -647,7 +818,7 @@ function paintTusks(ctx: CanvasRenderingContext2D, design: PigDesign, rig: Rig, 
 
 // ---------------------------------------------------------------- skin details, damage, effects
 
-function paintBlush(ctx: CanvasRenderingContext2D, design: PigDesign, t: PigTones): void {
+function paintBlush(ctx: CanvasRenderingContext2D, design: FoeDesign, t: FoeTones): void {
   const x = -design.eye.x + 22;
   ctx.fillStyle = t.blush;
   ctx.beginPath();
@@ -658,7 +829,7 @@ function paintBlush(ctx: CanvasRenderingContext2D, design: PigDesign, t: PigTone
 }
 
 /** Static skin markings (inside the body clip): muzzle glow, creases, scars, bruises. */
-function paintSkin(ctx: CanvasRenderingContext2D, variant: PigVariant, design: PigDesign, damage: number, t: PigTones): void {
+function paintSkin(ctx: CanvasRenderingContext2D, variant: FoeVariant, design: FoeDesign, damage: number, t: FoeTones): void {
   const right = mirrorEye(design.eye);
   // Muzzle glow around the snout.
   ctx.fillStyle = t.muzzle;
@@ -748,7 +919,7 @@ const STUBBLE: readonly (readonly [number, number])[] = [
   [10, 82],
 ];
 
-function paintBandage(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, t: PigTones): void {
+function paintBandage(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, t: FoeTones): void {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
@@ -775,7 +946,7 @@ function paintBandage(ctx: CanvasRenderingContext2D, x: number, y: number, angle
   ctx.restore();
 }
 
-function paintSweat(ctx: CanvasRenderingContext2D, x: number, y: number, time: number, t: PigTones): void {
+function paintSweat(ctx: CanvasRenderingContext2D, x: number, y: number, time: number, t: FoeTones): void {
   const cycle = (time * 0.9) % 1;
   const dy = cycle * 14;
   const alpha = cycle > 0.8 ? (1 - cycle) / 0.2 : 1;
@@ -797,7 +968,7 @@ function paintSweat(ctx: CanvasRenderingContext2D, x: number, y: number, time: n
   ctx.restore();
 }
 
-function paintStars(ctx: CanvasRenderingContext2D, y: number, time: number, t: PigTones): void {
+function paintStars(ctx: CanvasRenderingContext2D, y: number, time: number, t: FoeTones): void {
   ctx.strokeStyle = t.ink;
   ctx.lineWidth = 3.5;
   ctx.fillStyle = t.star;
@@ -822,20 +993,20 @@ const CROWN_BOUNDS: LayerBounds = { left: -72, top: -166, width: 144, height: 96
 /** Shaded body with its static markings and the gear that sits inside the silhouette. */
 function paintBodyLayer(
   ctx: CanvasRenderingContext2D,
-  variant: PigVariant,
-  design: PigDesign,
+  variant: FoeVariant,
+  design: FoeDesign,
   damage: number,
   helmet: boolean,
   knight: boolean,
   wear: 0 | 1 | 2,
-  t: PigTones,
+  t: FoeTones,
   royal: RoyalTones,
   steel: MetalTones,
 ): void {
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  beginPigBody(ctx, design.body, t);
+  beginFoeBody(ctx, design.body, t);
   paintSkin(ctx, variant, design, damage, t);
   shadeBody(ctx, design.body, t);
   paintGloss(ctx, design.gloss.x, design.gloss.y, design.gloss.size, t.gloss);
@@ -846,16 +1017,17 @@ function paintBodyLayer(
   ctx.restore();
 }
 
-/** Pig facing the viewer, collision circle of radius CHARACTER_RADIUS centred on the origin. */
-export function paintPig(ctx: CanvasRenderingContext2D, variant: PigVariant, pose: PigPose): void {
+/** Foe facing the viewer, collision circle of radius CHARACTER_RADIUS centred on the origin. */
+export function paintFoe(ctx: CanvasRenderingContext2D, variant: FoeVariant, pose: FoePose): void {
   const design = DESIGNS[variant];
   const flash = pose.flash ?? 0;
-  const t = flashTones(PIG_TONES[variant], flash);
+  const t = flashTones(FOE_TONES[variant], flash);
   const rig = buildRig(design, pose);
   const wear = pose.armorDamage ?? 0;
   const helmet = variant === 'helmet' && pose.armorOn;
   const knight = variant === 'armored' && pose.armorOn;
   const king = variant === 'king';
+  const shield = variant === 'shield' && pose.armorOn;
   const royal = flashTones(ROYAL, flash);
   const time = pose.time;
 
@@ -865,14 +1037,15 @@ export function paintPig(ctx: CanvasRenderingContext2D, variant: PigVariant, pos
 
   // Behind the body.
   if (king) paintCape(ctx, royal, time);
+  if (variant === 'sapper') paintKeg(ctx, time);
   if (knight) paintPlume(ctx, royal, wear, time);
   else paintEars(ctx, design.ear, rig, time, t);
 
-  // Static layers come from the cache unless the pig is flashing white.
+  // Static layers come from the cache unless the foe is flashing white.
   const k = flash * FLASH_STEPS >= 0.5 ? 0 : deviceScale(ctx);
-  const body = pigLayer(`body|${variant}|${pose.damage}|${helmet ? 1 : 0}${knight ? wear : 'x'}`, BODY_BOUNDS, k);
+  const body = foeLayer(`body|${variant}|${pose.damage}|${helmet ? 1 : 0}${knight ? wear : 'x'}`, BODY_BOUNDS, k);
   if (body) {
-    if (body.blank) paintBodyLayer(body.ctx, variant, design, pose.damage, helmet, knight, wear, PIG_TONES[variant], ROYAL, STEEL);
+    if (body.blank) paintBodyLayer(body.ctx, variant, design, pose.damage, helmet, knight, wear, FOE_TONES[variant], ROYAL, STEEL);
     blitLayer(ctx, body);
   } else {
     paintBodyLayer(ctx, variant, design, pose.damage, helmet, knight, wear, t, royal, flashTones(STEEL, flash));
@@ -880,7 +1053,7 @@ export function paintPig(ctx: CanvasRenderingContext2D, variant: PigVariant, pos
   if (rig.mouth === 'laugh' && variant !== 'small') paintBlush(ctx, design, t);
 
   if (knight) {
-    const layer = pigLayer(`knight|${wear}`, KNIGHT_BOUNDS, k);
+    const layer = foeLayer(`knight|${wear}`, KNIGHT_BOUNDS, k);
     if (layer) {
       if (layer.blank) paintKnightHelm(layer.ctx, STEEL, wear);
       blitLayer(ctx, layer);
@@ -943,7 +1116,7 @@ export function paintPig(ctx: CanvasRenderingContext2D, variant: PigVariant, pos
 
   // Equipment and effects in front of the face.
   if (helmet) {
-    const layer = pigLayer(`helmet|${wear}`, HELMET_BOUNDS, k);
+    const layer = foeLayer(`helmet|${wear}`, HELMET_BOUNDS, k);
     if (layer) {
       if (layer.blank) paintSoldierHelmet(layer.ctx, IRON, wear);
       blitLayer(ctx, layer);
@@ -951,12 +1124,14 @@ export function paintPig(ctx: CanvasRenderingContext2D, variant: PigVariant, pos
       paintSoldierHelmet(ctx, flashTones(IRON, flash), wear);
     }
   }
+  if (variant === 'floater') paintGoggles(ctx);
+  if (shield) paintShield(ctx, wear);
   if (king && pose.expression !== 'defeated') {
     const lift = rig.lift * 10 + (pose.expression === 'surprised' ? 8 : 0);
     const tilt = pose.expression === 'hurt' || pose.expression === 'stunned' ? 0.2 : -0.08 + Math.sin(time * 1.1) * 0.02;
     ctx.save();
     crownTransform(ctx, lift, tilt);
-    const layer = pigLayer('crown', CROWN_BOUNDS, k);
+    const layer = foeLayer('crown', CROWN_BOUNDS, k);
     if (layer) {
       if (layer.blank) paintCrownShape(layer.ctx, ROYAL);
       blitLayer(ctx, layer);
@@ -987,8 +1162,8 @@ export function paintPig(ctx: CanvasRenderingContext2D, variant: PigVariant, pos
   ctx.restore();
 }
 
-/** Pieces that fly off a pig, painted roughly centred on the origin so they tumble about themselves. */
-export function paintPigAccessory(ctx: CanvasRenderingContext2D, kind: PigAccessory): void {
+/** Pieces that fly off a foe, painted roughly centred on the origin so they tumble about themselves. */
+export function paintFoeAccessory(ctx: CanvasRenderingContext2D, kind: FoeAccessory): void {
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -999,6 +1174,9 @@ export function paintPigAccessory(ctx: CanvasRenderingContext2D, kind: PigAccess
     ctx.translate(0, 34);
     paintPlume(ctx, ROYAL, 2, 0);
     paintKnightHelm(ctx, STEEL, 2);
+  } else if (kind === 'shield') {
+    ctx.translate(70, -18);
+    paintShield(ctx, 2);
   } else {
     ctx.translate(0, 116);
     paintCrownShape(ctx, ROYAL);

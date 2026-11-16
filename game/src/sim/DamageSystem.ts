@@ -13,7 +13,7 @@
  *   solver runs and the attacker carries on with reduced speed: it smashes through instead of bouncing.
  */
 import { WorldManifold, type Contact, type ContactImpulse } from 'planck';
-import { BIRDS, DAMAGE, MATERIALS, PIGS, SUBSTEP } from '../core/config';
+import { ABILITY, BIRDS, DAMAGE, MATERIALS, FOES, SUBSTEP } from '../core/config';
 import type { DynamicEntity, Entity } from './entities';
 import type { GameSim } from './GameSim';
 
@@ -36,36 +36,40 @@ function pairKey(a: Entity, b: Entity): number {
 
 /** Damage multiplier of `attacker` against `target`. */
 function powerAgainst(attacker: Entity, target: Entity): number {
-  if (attacker.kind !== 'bird' || attacker.type === 'egg') return 1;
+  if (attacker.kind !== 'bird') return 1;
   const table = BIRDS[attacker.type].power;
-  if (target.kind === 'pig') return table.pig;
+  if (target.kind === 'foe') return table.foe;
   if (target.kind === 'block') return table[target.material];
   return 1;
 }
 
+/** Frozen glass-like threshold: frozen pieces (even rubber and metal) chip under light hits. */
+const FROZEN_MIN_ENERGY = 1.5;
+
 function minEnergy(target: Entity): number {
-  if (target.kind === 'block') return MATERIALS[target.material].minEnergy;
-  if (target.kind === 'pig') return PIGS[target.variant].minEnergy;
+  if (target.kind === 'block') return target.frozen ? Math.min(FROZEN_MIN_ENERGY, MATERIALS[target.material].minEnergy) : MATERIALS[target.material].minEnergy;
+  if (target.kind === 'foe') return FOES[target.variant].minEnergy;
   return Infinity;
 }
 
 /** Damage `target` takes from an impact of the given energy; 0 when it shrugs the hit off. */
 function damageTo(target: Entity, attacker: Entity, energy: number): number {
-  if (target.kind !== 'block' && target.kind !== 'pig') return 0;
+  if (target.kind !== 'block' && target.kind !== 'foe') return 0;
   const scaled = energy * powerAgainst(attacker, target);
-  return scaled >= minEnergy(target) ? scaled : 0;
+  if (scaled < minEnergy(target)) return 0;
+  return target.frozen ? scaled * ABILITY.freeze.brittle : scaled;
 }
 
 function wouldDestroy(target: Entity, damage: number): boolean {
   if (damage <= 0) return false;
   if (target.kind === 'block') return damage >= target.hp;
-  // Armour has to be broken first; an armoured pig never pops in a single hit.
-  if (target.kind === 'pig') return target.armor <= 0 && damage >= target.hp;
+  // Armour has to be broken first; an armoured foe never pops in a single hit.
+  if (target.kind === 'foe') return target.armor <= 0 && !target.floating && damage >= target.hp;
   return false;
 }
 
 function passThrough(target: Entity): number {
-  return target.kind === 'block' ? MATERIALS[target.material].passThrough : DAMAGE.pigPassThrough;
+  return target.kind === 'block' ? MATERIALS[target.material].passThrough : DAMAGE.foePassThrough;
 }
 
 export class DamageSystem {
