@@ -6,6 +6,7 @@
  */
 import { Rng, TAU } from '../../core/math';
 import { mix, rgba } from './envKit';
+import { EXTRA_DECOR, EXTRA_PAINTERS } from './envDecorExtra';
 import type { DecorInfo } from './types';
 
 /** Non-colliding scenery available to level designers, keyed by kind (sizes in metres). */
@@ -34,6 +35,7 @@ export const DECOR: Record<string, DecorInfo> = {
   lantern: { theme: 'snowlands', w: 0.6, h: 2.2, glow: { x: 0.08, y: 1.83, r: 1.3 } },
   snowman: { theme: 'snowlands', w: 1.2, h: 1.8 },
   frozen_bush: { theme: 'snowlands', w: 1.6, h: 1 },
+  ...EXTRA_DECOR,
 };
 
 /** Default per-level backdrop seed when the level does not supply one. */
@@ -41,7 +43,7 @@ export function envSeed(worldWidth: number): number {
   return Math.round(worldWidth * 10) + 1;
 }
 
-type Painter = (ctx: CanvasRenderingContext2D, rng: Rng, seed: number) => void;
+export type Painter = (ctx: CanvasRenderingContext2D, rng: Rng, seed: number) => void;
 
 export function paintDecor(ctx: CanvasRenderingContext2D, kind: string, seed: number): void {
   const painter = PAINTERS[kind];
@@ -69,7 +71,7 @@ export function paintDecorGlow(ctx: CanvasRenderingContext2D, kind: string): voi
 // ---------------------------------------------------------------- helpers
 
 /** Fills with a top-left -> bottom-right gradient across the given box and adds a soft tinted edge. */
-function form(ctx: CanvasRenderingContext2D, path: Path2D, x0: number, y0: number, x1: number, y1: number, light: string, base: string, dark: string, edge = 3): void {
+export function form(ctx: CanvasRenderingContext2D, path: Path2D, x0: number, y0: number, x1: number, y1: number, light: string, base: string, dark: string, edge = 3): void {
   const g = ctx.createLinearGradient(x0, y0, x1, y1);
   g.addColorStop(0, light);
   g.addColorStop(0.45, base);
@@ -161,7 +163,7 @@ function crown(ctx: CanvasRenderingContext2D, lobes: [number, number, number][],
 }
 
 /** Small soft contact shadow on the ground. */
-function contact(ctx: CanvasRenderingContext2D, w: number, alpha = 0.22): void {
+export function contact(ctx: CanvasRenderingContext2D, w: number, alpha = 0.22): void {
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, w / 2);
   g.addColorStop(0, `rgba(30,20,40,${alpha})`);
   g.addColorStop(1, 'rgba(30,20,40,0)');
@@ -1167,37 +1169,28 @@ const snowman: Painter = (ctx, rng) => {
   ctx.lineTo(70, -150);
   ctx.stroke();
   ball(0, -166, 28);
-  // Foe face: ears, snout, pebble eyes and a grin.
-  ctx.fillStyle = '#eef4ff';
+  // A Burrower built of snow: round ears, a pink pebble nose, two buck teeth.
   for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(s * 14, -190);
-    ctx.lineTo(s * 26, -206);
-    ctx.lineTo(s * 28, -184);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(120,150,190,0.7)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    const ear = new Path2D();
+    ear.arc(s * 22, -188, 9, 0, TAU);
+    form(ctx, ear, s * 22 - 9, -197, s * 22 + 9, -179, '#ffffff', '#eef4ff', '#b5cbea', 2);
   }
-  const snout = new Path2D();
-  snout.ellipse(4, -160, 12, 9, 0, 0, TAU);
-  form(ctx, snout, -8, -169, 16, -151, '#ffe2e8', '#f6c6d0', '#d697a6', 2);
-  ctx.fillStyle = '#7a4a58';
+  const nose = new Path2D();
+  nose.ellipse(3, -164, 7, 5.4, 0, 0, TAU);
+  form(ctx, nose, -4, -170, 10, -158, '#ffd3de', '#f29ab0', '#c96a84', 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = 'rgba(120,150,190,0.8)';
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
-  ctx.ellipse(0, -160, 2.4, 3.4, 0, 0, TAU);
-  ctx.ellipse(8, -160, 2.4, 3.4, 0, 0, TAU);
+  ctx.rect(-3, -153, 5.4, 8);
+  ctx.rect(3.2, -153, 5.4, 8);
   ctx.fill();
+  ctx.stroke();
   ctx.fillStyle = '#2b2a33';
   ctx.beginPath();
   ctx.arc(-9, -176, 3.6, 0, TAU);
   ctx.arc(15, -176, 3.6, 0, TAU);
   ctx.fill();
-  for (let i = 0; i < 5; i++) {
-    ctx.beginPath();
-    ctx.arc(-8 + i * 5, -145 + Math.sin((i / 4) * Math.PI) * 3, 1.8, 0, TAU);
-    ctx.fill();
-  }
   // Coal buttons.
   for (const y of [-124, -104]) {
     ctx.beginPath();
@@ -1287,4 +1280,5 @@ const PAINTERS: Record<string, Painter> = {
   lantern,
   snowman,
   frozen_bush: frozenBush,
+  ...EXTRA_PAINTERS,
 };

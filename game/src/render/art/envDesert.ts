@@ -170,41 +170,38 @@ function ruins(): ParallaxLayer {
   ellipse(stone, px + 210, top - 12, 26, 14);
   ellipse(stone, px + 250, top - 10, 22, 12, 0.2);
 
-  // An eroded colossal bird head (an old guardian of the badlands) on the second plateau.
+  // A colossal stone slingshot: the monument the old flock left on the second plateau.
   const bx = tile * 0.58;
   const bTop = ridgeY(bx) + 30 - 120;
-  const head = new Path2D();
-  head.moveTo(bx - 80, bTop + 2);
-  head.bezierCurveTo(bx - 96, bTop - 90, bx - 60, bTop - 168, bx + 4, bTop - 172);
-  head.bezierCurveTo(bx + 52, bTop - 172, bx + 74, bTop - 140, bx + 80, bTop - 110);
-  // Beak.
-  head.lineTo(bx + 152, bTop - 92);
-  head.lineTo(bx + 82, bTop - 62);
-  head.bezierCurveTo(bx + 86, bTop - 30, bx + 70, bTop - 6, bx + 60, bTop + 2);
-  head.closePath();
-  // Crest feathers.
-  for (const [dx, h] of [[-30, 50], [-6, 64], [18, 46]] as const) {
-    head.moveTo(bx + dx - 14, bTop - 160);
-    head.quadraticCurveTo(bx + dx - 18, bTop - 160 - h, bx + dx + 6, bTop - 168 - h);
-    head.quadraticCurveTo(bx + dx + 2, bTop - 160 - h * 0.5, bx + dx + 16, bTop - 166);
-    head.closePath();
-  }
-  stone.addPath(head);
-  circle(dark, bx + 22, bTop - 112, 14);
-  dark.moveTo(bx - 6, bTop - 140);
-  dark.lineTo(bx + 44, bTop - 136);
-  dark.lineTo(bx + 42, bTop - 128);
-  dark.lineTo(bx - 4, bTop - 132);
+  const fork = new Path2D();
+  fork.moveTo(bx - 26, bTop + 2);
+  fork.lineTo(bx - 22, bTop - 86);
+  fork.bezierCurveTo(bx - 30, bTop - 120, bx - 66, bTop - 132, bx - 72, bTop - 190);
+  fork.lineTo(bx - 40, bTop - 196);
+  fork.bezierCurveTo(bx - 36, bTop - 150, bx - 10, bTop - 136, bx, bTop - 116);
+  fork.bezierCurveTo(bx + 10, bTop - 136, bx + 36, bTop - 150, bx + 40, bTop - 196);
+  fork.lineTo(bx + 72, bTop - 190);
+  fork.bezierCurveTo(bx + 66, bTop - 132, bx + 30, bTop - 120, bx + 22, bTop - 86);
+  fork.lineTo(bx + 26, bTop + 2);
+  fork.closePath();
+  // Stepped plinth, and the top of the right arm broken off and lying beside it.
+  fork.rect(bx - 52, bTop - 14, 104, 16);
+  fork.rect(bx - 40, bTop - 26, 80, 14);
+  stone.addPath(fork);
+  ellipse(stone, bx + 120, bTop - 6, 24, 12, -0.3);
+  // Carved bands on the grip and weathering cracks.
+  dark.rect(bx - 23, bTop - 70, 46, 4);
+  dark.rect(bx - 23, bTop - 58, 46, 4);
+  dark.rect(bx - 23, bTop - 46, 46, 4);
+  dark.moveTo(bx + 8, bTop - 108);
+  dark.lineTo(bx + 16, bTop - 92);
+  dark.lineTo(bx + 10, bTop - 78);
+  dark.lineTo(bx + 14, bTop - 78);
+  dark.lineTo(bx + 20, bTop - 92);
+  dark.lineTo(bx + 12, bTop - 110);
   dark.closePath();
-  dark.rect(bx + 82, bTop - 82, 56, 3);
-  // Cracks.
-  dark.moveTo(bx - 50, bTop - 60);
-  dark.lineTo(bx - 30, bTop - 40);
-  dark.lineTo(bx - 36, bTop - 20);
-  dark.lineTo(bx - 32, bTop - 20);
-  dark.lineTo(bx - 26, bTop - 40);
-  dark.lineTo(bx - 46, bTop - 62);
-  dark.closePath();
+  dark.rect(bx + 52, bTop - 150, 14, 3);
+  dark.rect(bx - 66, bTop - 160, 14, 3);
 
   // Gateway arch on the third plateau.
   const gx = tile * 0.86;

@@ -7,27 +7,39 @@
  *   npx tsx tools/check-levels.ts --json out.json   also write the results (scores, birds used)
  */
 import { writeFileSync } from 'node:fs';
+import type { LevelDef } from '../src/core/types';
 import { LEVELS } from '../src/levels/campaign';
 import { levelProblems } from '../src/levels/schema';
 import { checkStable, solve } from './solver';
 
 const args = process.argv.slice(2);
+// --set <module> <export>: check an exported level list (array or record) instead of the campaign.
+const setAt = args.indexOf('--set');
+let levels: LevelDef[] = LEVELS;
+if (setAt >= 0) {
+  const mod = (await import(`../src/levels/${args[setAt + 1]}.ts`)) as Record<string, unknown>;
+  const value = mod[args[setAt + 2] as string];
+  levels = (Array.isArray(value) ? value : Object.values(value as object)) as LevelDef[];
+  args.splice(setAt, 3);
+}
 const jsonAt = args.indexOf('--json');
 const jsonPath = jsonAt >= 0 ? args[jsonAt + 1] : undefined;
 if (jsonAt >= 0) args.splice(jsonAt, 2);
-const [from, to] = [Number(args[0] ?? 0), Number(args[1] ?? LEVELS.length - 1)];
+const [from, to] = [Number(args[0] ?? 0), Number(args[1] ?? levels.length - 1)];
 
 const report: Record<string, unknown>[] = [];
 let failures = 0;
-for (let i = from; i <= to && i < LEVELS.length; i++) {
-  const level = LEVELS[i]!;
+for (let i = from; i <= to && i < levels.length; i++) {
+  const level = levels[i]!;
   const start = Date.now();
   const invalid = levelProblems(level);
   const unstable = invalid.length === 0 ? checkStable(level) : [];
-  const result = invalid.length === 0 ? solve(level) : null;
+  let result = invalid.length === 0 ? solve(level) : null;
+  // Greedy play fails the big set pieces; give those a wider search before calling them unsolved.
+  if (result && !result.won) result = solve(level, 12000, 4);
   const ok = invalid.length === 0 && unstable.length === 0 && !!result?.won;
   if (!ok) failures++;
-  const detail = !result ? `invalid: ${invalid.slice(0, 2).join('; ')}` : result.won ? `score ${result.score} (2* ${level.stars.two}, 3* ${level.stars.three})` : `foes left ${result.foesLeft} [${result.left}]`;
+  const detail = !result ? `invalid: ${invalid.slice(0, 2).join('; ')}` : result.won ? `score ${result.score} trials ${result.trials}` : `foes left ${result.foesLeft} [${result.left}]`;
   console.log(
     `${ok ? 'PASS' : 'FAIL'} ${level.id.padEnd(6)} ${level.name.padEnd(22)} stable=${unstable.length === 0 ? 'yes' : unstable.join('; ')} solved=${!!result?.won} birds=${result?.birdsUsed ?? 0}/${level.birds.length} ${detail} ${((Date.now() - start) / 1000).toFixed(0)}s`,
   );

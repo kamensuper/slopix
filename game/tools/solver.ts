@@ -157,42 +157,68 @@ function targetsOf(sim: GameSim): { x: number; y: number }[] {
   return [...foes, ...extras.slice(0, 6)];
 }
 
-export function solve(level: LevelDef, budget = 1400): SolveResult {
-  let prefix: Action[] = [];
-  let trials = 0;
-
-  for (let shot = 0; shot < level.birds.length; shot++) {
-    const sim = replay(level, prefix);
-    if (sim.phase !== 'aiming') break;
-    const type = sim.queue[0] as BirdType;
-    const launchScale = BIRDS[type].launch;
-    const targets = targetsOf(sim);
-    const candidates: { angle: number; power: number; x: number; y: number }[] = [];
-    for (const t of targets) {
-      for (const power of POWERS) {
-        const aim = solveAim(sim.anchor, t.x, t.y, power, launchScale, sim.gravityScale);
-        for (const angle of [aim.low, aim.high]) if (angle !== null && angle > -0.4 && angle < 1.5) candidates.push({ angle, power, x: t.x, y: t.y });
-      }
+/** Every trial for the next shot after `prefix`; stops early at a win or when the budget runs out. */
+function expand(level: LevelDef, prefix: Action[], budget: { left: number }): Trial[] {
+  const sim = replay(level, prefix);
+  if (sim.phase !== 'aiming') return [];
+  const type = sim.queue[0] as BirdType;
+  const launchScale = BIRDS[type].launch;
+  const targets = targetsOf(sim);
+  const candidates: { angle: number; power: number; x: number; y: number }[] = [];
+  for (const t of targets) {
+    for (const power of POWERS) {
+      const aim = solveAim(sim.anchor, t.x, t.y, power, launchScale, sim.gravityScale, sim.wind);
+      for (const angle of [aim.low, aim.high]) if (angle !== null && angle > -0.4 && angle < 1.5) candidates.push({ angle, power, x: t.x, y: t.y });
     }
-    // Plain sweep as a fallback (and the only thing that finds shots in wind); abilities fire relative to the nearest foe.
-    const nearest = targets[0];
-    if (nearest) for (const power of POWERS) for (const deg of SWEEP_DEG) candidates.push({ angle: (deg * Math.PI) / 180, power, x: nearest.x, y: nearest.y });
-    const rank = (t: Trial): number => (t.won ? 1e9 : 0) + t.foes * 1e6 + t.score;
-    let round: Trial | null = null;
-    search: for (let mode = 0; mode < timings(type); mode++) {
-      for (const c of candidates) {
-        if (trials >= budget) break search;
-        const trial = tryShot(level, prefix, c.angle, c.power, c.x, c.y, mode);
-        trials++;
-        if (trial && (!round || rank(trial) > rank(round))) round = trial;
-        if (round?.won) break search;
-      }
-    }
-    if (!round) break;
-    prefix = round.actions;
-    if (round.won) break;
   }
-  const final = replay(level, prefix);
+  // Plain sweep as a fallback; abilities fire relative to the nearest foe.
+  const nearest = targets[0];
+  if (nearest) for (const power of POWERS) for (const deg of SWEEP_DEG) candidates.push({ angle: (deg * Math.PI) / 180, power, x: nearest.x, y: nearest.y });
+  const out: Trial[] = [];
+  for (let mode = 0; mode < timings(type); mode++) {
+    for (const c of candidates) {
+      if (budget.left <= 0) return out;
+      budget.left--;
+      const trial = tryShot(level, prefix, c.angle, c.power, c.x, c.y, mode);
+      if (!trial) continue;
+      out.push(trial);
+      if (trial.won) return out;
+    }
+  }
+  return out;
+}
+
+const rank = (t: Trial): number => (t.won ? 1e9 : 0) + t.foes * 1e6 + t.score;
+
+/**
+ * Searches for a winning sequence of shots. `width` 1 is greedy (best shot each turn); a wider beam
+ * keeps several lines of play alive, which the big multi-stage levels need.
+ */
+export function solve(level: LevelDef, budget = 2600, width = 1): SolveResult {
+  const pool = { left: budget };
+  let beam: Trial[] = [{ actions: [], foes: 0, score: 0, won: false }];
+  let best: Trial = beam[0] as Trial;
+  for (let shot = 0; shot < level.birds.length && !best.won; shot++) {
+    const next: Trial[] = [];
+    for (const line of beam) {
+      const trials = expand(level, line.actions, pool);
+      next.push(...trials);
+      if (trials.some((t) => t.won)) break;
+    }
+    if (next.length === 0) break;
+    next.sort((a, b) => rank(b) - rank(a));
+    const seen = new Set<string>();
+    beam = [];
+    for (const t of next) {
+      const key = `${t.foes}|${t.score}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      beam.push(t);
+      if (beam.length >= width) break;
+    }
+    best = beam[0] as Trial;
+  }
+  const final = replay(level, best.actions);
   while (final.foesAlive === 0 && phaseOf(final) !== 'won') step(final);
   return {
     won: phaseOf(final) === 'won',
@@ -203,7 +229,7 @@ export function solve(level: LevelDef, budget = 1400): SolveResult {
       .filter((p) => p.alive)
       .map((p) => `${p.variant}@${p.x.toFixed(1)},${p.y.toFixed(1)} hp${Math.round(p.hp)}/${p.armor.toFixed(0)}`)
       .join(' '),
-    actions: prefix,
-    trials,
+    actions: best.actions,
+    trials: budget - pool.left,
   };
 }

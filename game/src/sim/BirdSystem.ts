@@ -2,7 +2,7 @@
 import { ABILITY, BIRDS, FOES, MATERIAL_RULES, MATERIALS, PHYSICS, SHOT, SLING, WORLD } from '../core/config';
 import { clamp, DEG, wrapAngle } from '../core/math';
 import type { BirdEntity, BlockEntity, Entity, FoeEntity, SurfaceTag } from './entities';
-import { surfaceDistance } from './explosions';
+import { gapBetween, surfaceDistance } from './explosions';
 import type { GameSim } from './GameSim';
 import type { XY } from './geometry';
 import { canLaunch, constrainPull, launchVelocity, pullPower, type Vec } from './slingshot';
@@ -244,23 +244,26 @@ export class BirdSystem {
       arcs.push(x, y, fx, fy);
       const seen = new Set<BlockEntity>([first]);
       live.push(first);
-      for (let i = 0; i < live.length && live.length < cfg.maxChain; i++) {
+      // Breadth-first through everything conductive that touches (or all but touches) a live piece.
+      for (let i = 0; i < live.length; i++) {
         const from = live[i] as BlockEntity;
         const fp = from.body.getPosition();
-        for (let edge = from.body.getContactList(); edge; edge = edge.next) {
-          if (!edge.contact.isTouching()) continue;
-          const other = edge.other?.getUserData() as Entity | null;
-          if (!other || !other.alive) continue;
-          if (other.kind === 'foe') shocked.add(other);
-          else if (other.kind === 'block') {
-            if (other.material === 'tnt') crates.add(other);
-            else if (MATERIALS[other.material].conducts && !seen.has(other) && live.length < cfg.maxChain) {
-              seen.add(other);
-              live.push(other);
-              const op = other.body.getPosition();
-              arcs.push(fp.x, fp.y, op.x, op.y);
-            }
+        for (const other of sim.blocks) {
+          if (!other.alive || other === from || seen.has(other)) continue;
+          const crate = other.material === 'tnt';
+          if (!crate && !MATERIALS[other.material].conducts) continue;
+          if (crate && crates.has(other)) continue;
+          if (gapBetween(from, other) > cfg.gap) continue;
+          if (crate) crates.add(other);
+          else if (live.length < cfg.maxChain) {
+            seen.add(other);
+            live.push(other);
+            const op = other.body.getPosition();
+            arcs.push(fp.x, fp.y, op.x, op.y);
           }
+        }
+        for (const foe of sim.foes) {
+          if (foe.alive && !shocked.has(foe) && gapBetween(from, foe) <= cfg.gap) shocked.add(foe);
         }
       }
     } else if (direct) {

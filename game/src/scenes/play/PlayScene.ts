@@ -527,7 +527,7 @@ export class PlayScene implements Scene {
   /** Test helper: the pouch offset that sends the loaded bird through a world point (low arc). */
   aimPull(targetX: number, targetY: number, power: number): { x: number; y: number } | null {
     const bird = this.sim.queue[0];
-    const angle = solveAim(this.sim.anchor, targetX, targetY, power, bird ? BIRDS[bird].launch : 1, this.sim.gravityScale).low;
+    const angle = solveAim(this.sim.anchor, targetX, targetY, power, bird ? BIRDS[bird].launch : 1, this.sim.gravityScale, this.sim.wind).low;
     return angle === null ? null : pullFromAim(angle, power, { x: 0, y: 0 });
   }
 

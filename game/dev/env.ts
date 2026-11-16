@@ -14,7 +14,7 @@ import type { EnvView, TerrainSpec } from '../src/render/art/types';
 
 const params = new URLSearchParams(location.search);
 const only = params.get('theme') as ThemeId | null;
-const themes: ThemeId[] = only ? [only] : ['grasslands', 'desert', 'snowlands'];
+const themes: ThemeId[] = only ? [only] : ['grasslands', 'desert', 'snowlands', 'storm', 'ironworks', 'celestial'];
 const time = Number(params.get('t') ?? 6);
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const dpr = Math.min(2, window.devicePixelRatio || 1);

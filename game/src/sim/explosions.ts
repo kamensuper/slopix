@@ -1,6 +1,6 @@
 /** Radial explosions: damage and outward impulses that fall off with distance from the blast centre. */
 import { EXPLOSION_FALLOFF, EXPLOSION_LIFT, EXPLOSION_MAX_KICK, type ExplosionConfig } from '../core/config';
-import type { DynamicEntity } from './entities';
+import type { BlockEntity, DynamicEntity, FoeEntity } from './entities';
 import { closestOnPolygon, type XY } from './geometry';
 
 const local: XY = { x: 0, y: 0 };
@@ -80,4 +80,37 @@ export function pushFromBlast(entity: DynamicEntity, x: number, y: number, confi
   point.y = (nearest.y + centre.y) / 2;
   entity.body.applyLinearImpulse(impulse, point, true);
   return falloff;
+}
+
+const probe: XY = { x: 0, y: 0 };
+
+/** Smallest distance from the corners (or the rim, for round things) of `from` to the surface of `to`. */
+function cornersTo(from: BlockEntity | FoeEntity, to: BlockEntity | FoeEntity): number {
+  const p = from.body.getPosition();
+  if (from.kind === 'foe' || !from.outline) {
+    const radius = from.kind === 'foe' ? from.radius : from.w / 2;
+    return Math.max(0, surfaceDistance(to, p.x, p.y, probe) - radius);
+  }
+  const angle = from.body.getAngle();
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  let best = Infinity;
+  for (const [lx, ly] of from.outline) {
+    const d = surfaceDistance(to, p.x + lx * c - ly * s, p.y + lx * s + ly * c, probe);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/**
+ * Gap between two pieces (0 when they touch or overlap). Exact for the cases that matter here:
+ * boxes side by side or stacked, and a round foe against a flat face.
+ */
+export function gapBetween(a: BlockEntity | FoeEntity, b: BlockEntity | FoeEntity): number {
+  const pa = a.body.getPosition();
+  const pb = b.body.getPosition();
+  const reach = a.boundRadius + b.boundRadius;
+  const far = Math.hypot(pa.x - pb.x, pa.y - pb.y) - reach;
+  if (far > 1) return far;
+  return Math.min(cornersTo(a, b), cornersTo(b, a));
 }

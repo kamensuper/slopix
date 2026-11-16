@@ -98,7 +98,7 @@ export interface BackdropFrame {
   viewR: number;
 }
 
-export type AmbientKind = 'pollen' | 'sand' | 'snow';
+export type AmbientKind = 'pollen' | 'sand' | 'snow' | 'rain' | 'embers' | 'stardust';
 
 export interface SceneDef {
   /**
@@ -425,7 +425,7 @@ export class EnvRenderer {
   }
 
   private count(kind: AmbientKind): number {
-    return kind === 'snow' ? MAX_PARTICLES : kind === 'sand' ? 46 : 34;
+    return kind === 'snow' || kind === 'rain' ? MAX_PARTICLES : kind === 'sand' ? 46 : kind === 'pollen' ? 34 : 40;
   }
 
   private spawnAll(kind: AmbientKind, W: number, H: number): void {
@@ -453,6 +453,24 @@ export class EnvRenderer {
       p[o + 2] = -(40 + depth * 90);
       p[o + 3] = (r() - 0.5) * 8;
       p[o + 6] = r() < 0.5 ? 0 : 1;
+    } else if (kind === 'rain') {
+      p[o] = r() * (W + 200);
+      p[o + 1] = anywhere ? r() * H : -20;
+      p[o + 2] = -(150 + depth * 110);
+      p[o + 3] = 520 + depth * 380;
+      p[o + 6] = 0;
+    } else if (kind === 'embers') {
+      p[o] = r() * W;
+      p[o + 1] = anywhere ? r() * H : H + 10;
+      p[o + 2] = 6 + depth * 16;
+      p[o + 3] = -(18 + depth * 40);
+      p[o + 6] = r() < 0.3 ? 1 : 0;
+    } else if (kind === 'stardust') {
+      p[o] = r() * W;
+      p[o + 1] = anywhere ? r() * H : H + 10;
+      p[o + 2] = (r() - 0.5) * 8;
+      p[o + 3] = -(5 + depth * 12);
+      p[o + 6] = r() < 0.25 ? 1 : 0;
     } else {
       // Pollen motes drifting on the breeze; every seventh particle is a falling leaf.
       const leaf = i % 7 === 3 ? 1 : 0;
@@ -488,6 +506,12 @@ export class EnvRenderer {
       } else if (kind === 'sand') {
         x += p[o + 2]! * boost * dt;
         y += (p[o + 3]! + wob * 10 - this.gust * 12) * dt;
+      } else if (kind === 'rain') {
+        x += p[o + 2]! * dt;
+        y += p[o + 3]! * dt;
+      } else if (kind === 'embers' || kind === 'stardust') {
+        x += (p[o + 2]! + wob * (kind === 'embers' ? 16 : 6)) * dt;
+        y += p[o + 3]! * dt;
       } else {
         x += (p[o + 2]! + wob * 9) * dt;
         y += (p[o + 3]! + Math.cos(time * 1.3 + p[o + 5]!) * 7) * dt;
@@ -542,6 +566,58 @@ export class EnvRenderer {
         ctx.fill();
       }
       if (this.gust > 0.05) this.drawWisps(ctx, time);
+    } else if (kind === 'rain') {
+      // Slanted streaks in two depth buckets, and now and then a flicker of distant lightning.
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const o = i * STRIDE;
+          const d = p[o + 4]!;
+          if ((d > 0.55 ? 1 : 0) !== pass) continue;
+          const len = 10 + d * 16;
+          ctx.moveTo(p[o]!, p[o + 1]!);
+          ctx.lineTo(p[o]! + len * 0.28, p[o + 1]! - len);
+        }
+        ctx.globalAlpha = pass ? 0.42 : 0.24;
+        ctx.strokeStyle = '#dfe9ff';
+        ctx.lineWidth = pass ? 1.4 : 1;
+        ctx.stroke();
+      }
+      const cyc = mod(time, 11.7);
+      const flash = cyc < 0.09 || (cyc > 0.22 && cyc < 0.3) ? 0.1 : cyc < 0.6 ? 0.03 * (1 - cyc / 0.6) : 0;
+      if (flash > 0) {
+        ctx.globalAlpha = flash;
+        ctx.fillStyle = '#f2f6ff';
+        ctx.fillRect(0, 0, this.partW, this.partH);
+      }
+    } else if (kind === 'embers' || kind === 'stardust') {
+      const hot = kind === 'embers';
+      for (let tint = 0; tint < 2; tint++) {
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const o = i * STRIDE;
+          if (p[o + 6]! !== tint) continue;
+          const d = p[o + 4]!;
+          const tw = 0.6 + 0.4 * Math.sin(time * (2 + d * 3) + p[o + 5]!);
+          const r = (hot ? 1 + d * 1.6 : 0.9 + d * 1.5) * (tint ? 1.5 : 1) * tw;
+          if (!hot && tint) {
+            // Four-point glint.
+            const x = p[o]!;
+            const y = p[o + 1]!;
+            ctx.moveTo(x, y - r * 3);
+            ctx.quadraticCurveTo(x, y, x + r * 3, y);
+            ctx.quadraticCurveTo(x, y, x, y + r * 3);
+            ctx.quadraticCurveTo(x, y, x - r * 3, y);
+            ctx.quadraticCurveTo(x, y, x, y - r * 3);
+          } else {
+            ctx.moveTo(p[o]! + r, p[o + 1]!);
+            ctx.arc(p[o]!, p[o + 1]!, r, 0, 6.2832);
+          }
+        }
+        ctx.globalAlpha = hot ? (tint ? 0.9 : 0.65) : tint ? 0.85 : 0.55;
+        ctx.fillStyle = hot ? (tint ? '#ffe08a' : '#ff8a3a') : tint ? '#e9fbff' : '#b9a8ff';
+        ctx.fill();
+      }
     } else {
       ctx.beginPath();
       for (let i = 0; i < n; i++) {

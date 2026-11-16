@@ -1,5 +1,5 @@
 /**
- * Environment artwork: the three illustrated worlds (sky, parallax layers, ground, ambience),
+ * Environment artwork: the six illustrated worlds (sky, parallax layers, ground, ambience),
  * terrain pieces and decor. The heavy lifting lives in the env*.ts modules; this file keeps the
  * stable entry points used by the renderer.
  */
@@ -8,14 +8,30 @@ import { envSeed } from './envDecor';
 import { desertScene } from './envDesert';
 import { grassScene } from './envGrass';
 import { EnvRenderer, type SceneDef } from './envLayers';
+import { celestialScene } from './envCelestial';
+import { ironScene } from './envIron';
 import { snowScene } from './envSnow';
+import { stormScene } from './envStorm';
 import type { EnvView } from './types';
 
 export { DECOR, paintDecor, paintDecorGlow } from './envDecor';
 export { paintTerrain } from './envTerrain';
 
 export function sceneFor(theme: ThemeId): SceneDef {
-  return theme === 'desert' ? desertScene() : theme === 'snowlands' ? snowScene() : grassScene();
+  switch (theme) {
+    case 'desert':
+      return desertScene();
+    case 'snowlands':
+      return snowScene();
+    case 'storm':
+      return stormScene();
+    case 'ironworks':
+      return ironScene();
+    case 'celestial':
+      return celestialScene();
+    default:
+      return grassScene();
+  }
 }
 
 const shared = new EnvRenderer(sceneFor);
@@ -41,7 +57,7 @@ export function paintGround(ctx: CanvasRenderingContext2D, theme: ThemeId, view:
   ctx.restore();
 }
 
-/** Subtle ambient particles (pollen and leaves, sand, snow) over the playfield. */
+/** Subtle ambient particles (pollen and leaves, sand, snow, rain, embers, stardust) over the playfield. */
 export function paintForeground(ctx: CanvasRenderingContext2D, theme: ThemeId, view: EnvView): void {
   const dpr = dprOf(ctx);
   ctx.save();
