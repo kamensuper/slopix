@@ -3,7 +3,7 @@
  * camera, and renders the level with interpolated transforms.
  */
 import type { IAudioManager } from '../../audio/types';
-import { BIRDS, CAMERA, PHYSICS, SCORE, SHOT, TICK } from '../../core/config';
+import { BIRDS, CAMERA, FOES, PHYSICS, SCORE, SHOT, TICK } from '../../core/config';
 import type { SimEvent } from '../../core/events';
 import { clamp, clamp01 } from '../../core/math';
 import type { BirdType, LevelDef } from '../../core/types';
@@ -46,6 +46,20 @@ type CamMode = 'intro' | 'sling' | 'follow' | 'free' | 'overview';
 
 const MAX_TICKS_PER_FRAME = 5;
 const INTRO_HOLD = 1.4;
+
+/** A short cinematic: letterbox bars, the camera pushed in on a point and a title that punches in. */
+interface Cine {
+  kind: 'boss' | 'finisher';
+  /** Seconds of real time it has run, and how long it lasts. */
+  age: number;
+  hold: number;
+  x: number;
+  y: number;
+  /** Zoom relative to the normal sling framing. */
+  zoom: number;
+  title: string;
+  sub: string;
+}
 const SLOW_SCALE = 0.35;
 /** A hard first impact freezes the action for this long: it reads as weight. */
 const HIT_STOP = 0.05;
@@ -81,6 +95,7 @@ export class PlayScene implements Scene {
   private pinchDist = 0;
   private endTimer = -1;
   private finished = false;
+  private cine: Cine | null = null;
   private readonly bonusQueue: { at: number; index: number; bird: BirdType }[] = [];
 
   constructor(
@@ -113,6 +128,13 @@ export class PlayScene implements Scene {
     this.drainEvents();
     this.host.audio.play('level_start');
     if (this.level.hint) this.host.onHint(this.level.hint, 4);
+    // Boss levels open on the boss: the camera pushes in while he has a good laugh.
+    const boss = this.sim.foes.find((f) => f.variant === 'king');
+    if (boss && !this.host.inputBlocked() && !this.host.reducedMotion()) {
+      this.cine = { kind: 'boss', age: 0, hold: 2.8, x: boss.x, y: boss.y + 0.5, zoom: 1.9, title: FOES.king.name.toUpperCase(), sub: FOES.king.trait };
+      this.actors.laughUntil = this.time + 2.6;
+      this.host.audio.play('foe_grunt');
+    }
   }
 
   exit(): void {
@@ -169,6 +191,19 @@ export class PlayScene implements Scene {
 
   private updateCamera(dt: number): void {
     this.modeTime += dt;
+    const cine = this.cine;
+    if (cine) {
+      cine.age += dt;
+      if (cine.age >= cine.hold || this.sling.aiming) {
+        this.cine = null;
+        this.setMode(cine.kind === 'boss' ? 'sling' : 'follow');
+      } else {
+        this.camera.smooth = 0.3;
+        this.camera.setTarget(cine.x, cine.y, this.slingZoom() * cine.zoom);
+        this.camera.update(dt);
+        return;
+      }
+    }
     const bird = this.sim.activeBird;
     switch (this.mode) {
       case 'intro':
@@ -223,6 +258,13 @@ export class PlayScene implements Scene {
   private onEvent(event: SimEvent): void {
     this.feedback.handle(event);
     this.host.onSimEvent?.(event, this.sim);
+    if (event.type === 'foeDefeated' && event.remaining === 0 && !this.host.reducedMotion() && !this.fast) {
+      // The finisher: slow motion, the camera on the last Burrower and a title for how it was won.
+      const spare = this.waiting().length;
+      const title = spare >= 2 ? 'FLOCK FURY!' : spare === 1 ? 'CLEAN SWEEP!' : 'JUST IN TIME!';
+      this.cine = { kind: 'finisher', age: 0, hold: 1.5, x: event.x, y: Math.max(2, event.y + 0.4), zoom: 1.45, title, sub: '' };
+      this.slowLeft = Math.max(this.slowLeft, 1.1);
+    }
     switch (event.type) {
       case 'birdImpact':
         if (event.first && event.speed > HIT_STOP_SPEED && !this.host.reducedMotion() && !this.fast) this.hitStop = HIT_STOP;
@@ -334,6 +376,66 @@ export class PlayScene implements Scene {
   }
 
   /** Birds standing on the ground next to the slingshot. */
+  /** Letterbox bars, speed lines and the title of the running cinematic (screen space). */
+  private drawCine(ctx: CanvasRenderingContext2D): void {
+    const c = this.cine;
+    if (!c) return;
+    const { width: w, height: h, dpr } = this.view;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const k = Math.min(clamp01(c.age / 0.25), clamp01((c.hold - c.age) / 0.25));
+    const ease = k * k * (3 - 2 * k);
+    if (c.kind === 'finisher') {
+      const cx = this.camera.toScreenX(c.x);
+      const cy = this.camera.toScreenY(c.y);
+      const reach = Math.hypot(w, h);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.5 * ease})`;
+      ctx.beginPath();
+      for (let i = 0; i < 28; i++) {
+        const a = (i / 28) * Math.PI * 2 + Math.sin(i * 12.9898) * 0.2 + c.age * 0.15;
+        const inner = reach * (0.24 + 0.08 * Math.abs(Math.sin(i * 7.3 + c.age * 9)));
+        const half = 0.012 + 0.01 * Math.abs(Math.sin(i * 3.7));
+        ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+        ctx.lineTo(cx + Math.cos(a - half) * reach, cy + Math.sin(a - half) * reach);
+        ctx.lineTo(cx + Math.cos(a + half) * reach, cy + Math.sin(a + half) * reach);
+        ctx.closePath();
+      }
+      ctx.fill();
+    }
+    const bar = h * 0.11 * ease;
+    ctx.fillStyle = '#120a06';
+    ctx.fillRect(0, 0, w, bar);
+    ctx.fillRect(0, h - bar, w, bar);
+    const pop = c.age < 0.35 ? 1 + (1 - c.age / 0.35) ** 2 * 0.9 : 1;
+    const size = Math.round(Math.min(w * 0.085, h * 0.16));
+    ctx.save();
+    ctx.translate(w / 2, c.kind === 'boss' ? h * 0.74 : h * 0.27);
+    ctx.rotate(c.kind === 'boss' ? 0 : -0.05);
+    ctx.scale(pop, pop);
+    ctx.globalAlpha = ease;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.font = `${size}px "Lilita One", "Fredoka Variable", sans-serif`;
+    ctx.strokeStyle = '#2b1a12';
+    ctx.lineWidth = size * 0.22;
+    ctx.strokeText(c.title, 0, size * 0.07);
+    ctx.strokeText(c.title, 0, 0);
+    const g = ctx.createLinearGradient(0, -size / 2, 0, size / 2);
+    g.addColorStop(0, c.kind === 'boss' ? '#ffd9d0' : '#fff7c2');
+    g.addColorStop(1, c.kind === 'boss' ? '#ff5a3c' : '#ffb629');
+    ctx.fillStyle = g;
+    ctx.fillText(c.title, 0, 0);
+    if (c.sub) {
+      const small = Math.round(size * 0.34);
+      ctx.font = `${small}px "Fredoka Variable", sans-serif`;
+      ctx.lineWidth = small * 0.3;
+      ctx.strokeText(c.sub, 0, size * 0.8);
+      ctx.fillStyle = '#fff3d6';
+      ctx.fillText(c.sub, 0, size * 0.8);
+    }
+    ctx.restore();
+  }
+
   private waiting(): readonly BirdType[] {
     return this.sim.phase === 'aiming' ? this.sim.queue.slice(1) : this.sim.queue;
   }
@@ -524,6 +626,7 @@ export class PlayScene implements Scene {
     r.drawForeground(level.theme);
     r.screenSpace();
     this.texts.draw(ctx, cam);
+    this.drawCine(ctx);
     r.end();
   }
 

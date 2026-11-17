@@ -69,6 +69,9 @@ interface Well {
   until: number;
 }
 const BOLT_LIFE = 0.34;
+/** Callouts when one shot has broken this many blocks, or defeated this many foes. */
+const BREAK_CALLOUTS: Record<number, string> = { 4: 'NICE!', 8: 'SMASH!', 13: 'WRECKED!', 20: 'DEMOLITION!', 30: 'TOTAL FURY!' };
+const FOE_CALLOUTS: Record<number, string> = { 2: 'DOUBLE!', 3: 'TRIPLE!', 4: 'FLOCK STRIKE!' };
 const SMOKE_GREY = '#5b5652';
 
 function rnd(lo: number, hi: number): number {
@@ -127,6 +130,9 @@ export class Feedback {
   private readonly trailLast = new Map<number, { x: number; y: number }>();
   /** Burn marks explosions leave on the ground. */
   private readonly scorches: { x: number; r: number; born: number }[] = [];
+  /** Blocks broken and foes defeated by the current shot, for the combo callouts. */
+  private shotBreaks = 0;
+  private shotFoes = 0;
 
   constructor(private readonly deps: FeedbackDeps) {}
 
@@ -273,6 +279,13 @@ export class Feedback {
         spin: 0,
       });
     }
+  }
+
+  /** A big word over the action ("SMASH!"), with a burst behind it. */
+  private callout(text: string, x: number, y: number, color: string, size: number): void {
+    this.burst(x, y, 1.2, 2.6, 0.3, color);
+    this.deps.texts.spawn(text, x, y, color, size, 1.5, 1.1);
+    this.sound('score_bonus', x, 0.8);
   }
 
   /** Comic burst star that pops outwards; `color` tints it (default fiery). */
@@ -500,6 +513,8 @@ export class Feedback {
     this.deps.audio.play('sling_release', { intensity: event.power, pan: this.pan(event.x) });
     this.deps.audio.play('bird_launch', { bird: event.bird, pan: this.pan(event.x) });
     this.trailDots.length = 0;
+    this.shotBreaks = 0;
+    this.shotFoes = 0;
     this.trailLast.clear();
     // The pouch snaps: a pale shock ring, a puff of air and a loose feather or two.
     this.streaks(event.x, event.y, 5, 6 + event.power * 5, '#ffffff', 0.3);
@@ -624,6 +639,10 @@ export class Feedback {
     this.deps.camera.shake((0.04 + size * 0.06) * weight * (0.6 + force * 0.6));
     if (weight > 1.2 && speed > 4) this.deps.camera.kick(clamp(event.vx * 0.04, -0.6, 0.6), -0.4 * weight * force);
 
+    // Destruction combo: a callout each time one shot passes a milestone.
+    this.shotBreaks++;
+    const word = BREAK_CALLOUTS[this.shotBreaks];
+    if (word) this.callout(word, event.x, event.y + 1.2, '#ffd23f', 34 + this.shotBreaks);
     // Lots of pieces breaking at once deserves a moment of slow motion.
     const now = this.deps.now();
     const breaks = this.recentBreaks;
@@ -663,6 +682,9 @@ export class Feedback {
   private onFoeDefeated(event: SimEventOf<'foeDefeated'>): void {
     const radius = FOES[event.variant].radius;
     this.deps.actors.popFoe(event, radius, 0);
+    this.shotFoes++;
+    const word = FOE_CALLOUTS[Math.min(this.shotFoes, 4)];
+    if (word && event.remaining > 0) this.callout(word, event.x, event.y + 1.6, '#ff8fb3', 44);
     // A round green-white poof that bursts outwards, then drifts up.
     const n = this.quota(7, 4);
     for (let i = 0; i < n; i++) {
