@@ -8,7 +8,7 @@ GRUB_PLATFORM_DIR ?= /usr/lib/grub/i386-pc
 CFLAGS := -std=c11 -O2 -g -MMD -MP -ffile-prefix-map="$(CURDIR)"=. -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -m64 -mno-red-zone -mgeneral-regs-only
 include doom.mk
 .DEFAULT_GOAL := all
-OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/slop_package.o build/files_app.o build/vfs.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/user_elf.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/apps.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
+OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/files_app.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/user_elf.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/apps.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
 ifneq ($(BENCH),)
 CFLAGS += -DRENDER_BENCH
 endif
@@ -229,8 +229,6 @@ build/ui_chrome.o: src/ui/chrome.c src/ui/shell.h src/apps.h src/preferences.h s
 	$(CC) $(CFLAGS) -c $< -o $@
 build/desktop.o build/apps.o: src/ui/shell.h
 
-build/vfs.o: src/fs/vfs.c src/fs/vfs.h
-	$(CC) $(CFLAGS) -c $< -o $@
 build/fat_backend.o: src/fs/fat_backend.c src/fs/vfs.h src/storage/storage.h
 	$(CC) $(CFLAGS) -c $< -o $@
 build/desktop_service.o: src/ui/desktop_service.c src/ui/desktop_backend.h
@@ -239,8 +237,8 @@ build/desktop.o: src/ui/desktop_backend.h
 build/audio.o build/sb16.o: src/audio/device.h
 build/kernel.o build/process.o build/ui_shell.o build/ata.o build/fat32.o: src/fs/vfs.h
 .PHONY: boundaries-test
-boundaries-test:
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/boundaries_test.c src/ui/desktop_service.c src/fs/vfs.c -o build/boundaries-test
+boundaries-test: build/librust-host-vfs.a
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/boundaries_test.c src/ui/desktop_service.c tests/rust_host_stubs.c build/librust-host-vfs.a -ldl -lpthread -lm -o build/boundaries-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/boundaries-test
 
 build/files_app.o: src/apps/files.c src/apps/files.h src/apps.h src/fs/vfs.h src/clipboard.h src/kernel.h
@@ -297,13 +295,13 @@ genesis-disk: sdk build/HELLO.SLOP build/STORE.SLOP
 	python3 tools/build_genesis_disk.py storage/genesis-test.img
 	@echo 'Boot with: SLOPIX_DISK=storage/genesis-test.img make run'
 .PHONY: genesis-host-test
-genesis-host-test: sdk | build
+genesis-host-test: sdk build/librust-host-vfs-slop_package.a | build
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/user_gui_host_test.c src/user/gui.c -o build/user-gui-host-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/user-gui-host-test
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/user_demo_elf_test.c src/user/vm.c src/user/elf.c -o build/user-demo-elf-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/user-demo-elf-test sdk/DEMO.ELF
 	python3 tests/slop_package_test.py
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_package_fat_test.c src/storage/fat32.c src/fs/vfs.c src/fs/fat_backend.c src/slop_package.c -o build/genesis-package-fat-test
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_package_fat_test.c src/storage/fat32.c src/fs/fat_backend.c tests/rust_host_stubs.c build/librust-host-vfs-slop_package.a -ldl -lpthread -lm -o build/genesis-package-fat-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/genesis-package-fat-test storage/genesis-test.img
 	ASAN_OPTIONS=detect_leaks=0 ./build/genesis-package-fat-test storage/genesis-packages.img
 
@@ -341,10 +339,10 @@ genesis-bundles-disk: sdk build/BROWSE.SLP build/HELLOGUI.SLP build/DEMO.SLOP bu
 	python3 tools/build_genesis_disk.py --bundles storage/genesis-bundles.img
 genesis-browser-disk: sdk build/BROWSE.SLP build/HELLO.SLOP
 	python3 tools/build_genesis_disk.py --browser-ready storage/genesis-browser.img
-genesis-bundle-test: sdk build/BROWSE.SLP build/HELLOGUI.SLP | build
+genesis-bundle-test: sdk build/BROWSE.SLP build/HELLOGUI.SLP build/librust-host-vfs-slop_package.a | build
 	@test -f storage/genesis-bundles.img || (echo "Run make genesis-bundles-disk first"; exit 1)
 	python3 tests/slop_package_test.py
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_package_fat_test.c src/storage/fat32.c src/fs/vfs.c src/fs/fat_backend.c src/slop_package.c -o build/genesis-package-fat-test
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_package_fat_test.c src/storage/fat32.c src/fs/fat_backend.c tests/rust_host_stubs.c build/librust-host-vfs-slop_package.a -ldl -lpthread -lm -o build/genesis-package-fat-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/genesis-package-fat-test storage/genesis-bundles.img
 
 .PHONY: genesis-browser-test
@@ -360,12 +358,12 @@ genesis-apps-elf-test: sdk | build
 # Does not require rustc, GRUB or QEMU.
 .PHONY: genesis-cp03-host-test genesis-cp03-guest-test
 
-genesis-cp03-host-test: sdk build/BROWSE.SLP build/HELLOGUI.SLP | build
+genesis-cp03-host-test: sdk build/BROWSE.SLP build/HELLOGUI.SLP build/librust-host-vfs-slop_package.a | build
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/user_gui_host_test.c src/user/gui.c -o build/user-gui-host-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/user-gui-host-test
 	$(MAKE) genesis-browser-test genesis-apps-elf-test
 	python3 tests/slop_package_test.py
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_package_fat_test.c src/storage/fat32.c src/fs/vfs.c src/fs/fat_backend.c src/slop_package.c -o build/genesis-package-fat-test
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_package_fat_test.c src/storage/fat32.c src/fs/fat_backend.c tests/rust_host_stubs.c build/librust-host-vfs-slop_package.a -ldl -lpthread -lm -o build/genesis-package-fat-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/genesis-package-fat-test storage/genesis-cp03-bundles.img
 
 genesis-cp03-guest-test: all

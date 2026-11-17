@@ -18,6 +18,10 @@ pub mod clipboard;
 pub mod perf;
 #[cfg(any(not(host_subset), part = "preferences"))]
 pub mod preferences;
+#[cfg(any(not(host_subset), part = "vfs"))]
+pub mod vfs;
+#[cfg(any(not(host_subset), part = "slop_package"))]
+pub mod slop_package;
 
 /// Kernel main-thread state shared with C callbacks.
 ///
