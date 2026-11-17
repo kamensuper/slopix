@@ -135,7 +135,15 @@ export type ParticleKind =
   /** Four-point sparkle (glass and metal glints); meant for additive blending. */
   | 'glint'
   /** Soft radial impact flash with faint rays; meant for additive blending. */
-  | 'flash';
+  | 'flash'
+  /** Comic-book impact burst: a spiky star, optionally tinted with `color`. */
+  | 'burst'
+  /** Thin tapered speed line; tinted with `color`. */
+  | 'streak'
+  /** Six-armed snowflake. */
+  | 'snow'
+  /** Small zigzag of lightning. */
+  | 'zap';
 
 /** Every particle kind offers this many visual variants (0 .. PARTICLE_VARIANTS - 1). */
 export const PARTICLE_VARIANTS = 4;

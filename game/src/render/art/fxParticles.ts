@@ -5,7 +5,7 @@
  */
 import { clamp, Rng, TAU } from '../../core/math';
 import { INK } from '../../core/palette';
-import { blobPath, mixHex, rgba, sparkle, type Pts } from './materialUtil';
+import { mixHex, rgba, sparkle, type Pts } from './materialUtil';
 import type { ParticleKind } from './types';
 
 const LX = -0.6;
@@ -342,23 +342,50 @@ function feather(ctx: CanvasRenderingContext2D, v: number, color: string | undef
 
 // ---------------------------------------------------------------- puffs and glows
 
-function puff(ctx: CanvasRenderingContext2D, base: string, highlight: string, alpha: number, rng: Rng): void {
-  const lobes = 4 + Math.floor(rng.next() * 2);
+/** Scalloped cartoon cloud: a ring of round lobes around a core, as one path (non-zero fill). */
+function cloudPath(rng: Rng, r: number, lobes: number): Path2D {
+  const p = new Path2D();
+  const turn = rng.range(0, TAU);
   for (let i = 0; i < lobes; i++) {
-    const a = (i / lobes) * TAU + rng.range(-0.4, 0.4);
-    const d = i === 0 ? 0 : rng.range(7, 13);
+    const a = turn + (i / lobes) * TAU;
+    const d = r * rng.range(0.44, 0.56);
+    const lr = r * rng.range(0.38, 0.5);
     const x = Math.cos(a) * d;
-    const y = Math.sin(a) * d * 0.8;
-    const r = i === 0 ? 20 : rng.range(11, 16);
-    const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.1, x, y, r);
-    g.addColorStop(0, rgba(highlight, alpha));
-    g.addColorStop(0.55, rgba(base, alpha * 0.85));
-    g.addColorStop(1, rgba(base, 0));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
-    ctx.fill();
+    const y = Math.sin(a) * d;
+    p.moveTo(x + lr, y);
+    p.arc(x, y, lr, 0, TAU);
   }
+  p.moveTo(r * 0.62, 0);
+  p.arc(0, 0, r * 0.62, 0, TAU);
+  return p;
+}
+
+/** Cel-shaded puff: flat base, a shaded underside, a crisp highlight; smoke also gets an outline. */
+function puff(ctx: CanvasRenderingContext2D, base: string, highlight: string, rng: Rng, outline: boolean): void {
+  const r = 27;
+  const path = cloudPath(rng, r, 6 + Math.floor(rng.next() * 2));
+  if (outline) {
+    ctx.strokeStyle = rgba(mixHex(base, '#1a0e08', 0.6), 0.9);
+    ctx.lineWidth = 3;
+    ctx.stroke(path);
+  }
+  ctx.fillStyle = base;
+  ctx.fill(path);
+  ctx.save();
+  ctx.clip(path);
+  ctx.fillStyle = rgba(mixHex(base, '#1a0e08', 0.32), 0.55);
+  ctx.beginPath();
+  ctx.rect(-40, -40, 80, 80);
+  ctx.arc(-7, -9, r * 0.98, 0, TAU, true);
+  ctx.fill('evenodd');
+  ctx.fillStyle = rgba(highlight, 0.9);
+  ctx.beginPath();
+  ctx.ellipse(-9, -11, r * 0.4, r * 0.27, -0.6, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(7, -16, r * 0.11, 0, TAU);
+  ctx.fill();
+  ctx.restore();
 }
 
 function spark(ctx: CanvasRenderingContext2D, v: number): void {
@@ -437,16 +464,118 @@ function flash(ctx: CanvasRenderingContext2D, v: number): void {
   ctx.fill();
 }
 
+/** Cel-shaded fireball: scalloped bands from deep red through orange and yellow to a white-hot core. */
 function fire(ctx: CanvasRenderingContext2D, rng: Rng): void {
-  const path = new Path2D();
-  blobPath(path, 0, 0, 30, 28, 9, 0.28, rng);
-  const g = ctx.createRadialGradient(-3, -3, 0, 0, 0, 30);
-  g.addColorStop(0, 'rgba(255, 252, 228, 1)');
-  g.addColorStop(0.25, 'rgba(255, 220, 90, 0.95)');
-  g.addColorStop(0.6, 'rgba(255, 128, 30, 0.75)');
-  g.addColorStop(1, 'rgba(200, 40, 12, 0)');
+  const outer = cloudPath(rng, 27, 7);
+  ctx.strokeStyle = '#8f1d0a';
+  ctx.lineWidth = 3;
+  ctx.stroke(outer);
+  ctx.fillStyle = '#ee4a1c';
+  ctx.fill(outer);
+  ctx.fillStyle = '#ff9320';
+  ctx.fill(cloudPath(rng, 20, 6));
+  ctx.fillStyle = '#ffd23f';
+  ctx.fill(cloudPath(rng, 13.5, 5));
+  ctx.fillStyle = '#fff7cf';
+  ctx.beginPath();
+  ctx.arc(-1, -1, 6.5, 0, TAU);
+  ctx.fill();
+}
+
+/** Comic-book burst: three nested spiky stars with an ink outline. */
+function burst(ctx: CanvasRenderingContext2D, v: number, rng: Rng, color?: string): void {
+  const spikes = [9, 11, 10, 12][v] as number;
+  const jit: number[] = [];
+  for (let i = 0; i < spikes; i++) jit.push(rng.range(0.72, 1));
+  const turn = rng.range(0, TAU);
+  const star = (ro: number, ri: number): Path2D => {
+    const p = new Path2D();
+    for (let i = 0; i < spikes; i++) {
+      const a = turn + (i / spikes) * TAU;
+      const b = a + TAU / spikes / 2;
+      const r = ro * (jit[i] as number);
+      if (i === 0) p.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else p.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      p.lineTo(Math.cos(b) * ri, Math.sin(b) * ri);
+    }
+    p.closePath();
+    return p;
+  };
+  const outer = star(30, 15);
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.5;
+  ctx.stroke(outer);
+  ctx.fillStyle = color ?? '#ff8a1f';
+  ctx.fill(outer);
+  ctx.fillStyle = color ? mixHex(color, '#ffffff', 0.55) : '#ffd84a';
+  ctx.fill(star(23.5, 12));
+  ctx.fillStyle = color ? '#ffffff' : '#fffbe8';
+  ctx.fill(star(15, 7.5));
+}
+
+/** Speed line: a thin tapered stroke, transparent at the tail. */
+function streak(ctx: CanvasRenderingContext2D, v: number, color?: string): void {
+  const len = [30, 26, 30, 22][v] as number;
+  const w = [2.6, 2, 3.2, 2.4][v] as number;
+  const c = color ?? '#ffffff';
+  const g = ctx.createLinearGradient(-len, 0, len, 0);
+  g.addColorStop(0, rgba(c, 0));
+  g.addColorStop(0.5, rgba(c, 0.95));
+  g.addColorStop(1, rgba(c, 1));
   ctx.fillStyle = g;
-  ctx.fill(path);
+  ctx.beginPath();
+  ctx.moveTo(-len, 0);
+  ctx.quadraticCurveTo(len * 0.3, -w, len, 0);
+  ctx.quadraticCurveTo(len * 0.3, w, -len, 0);
+  ctx.fill();
+}
+
+function snow(ctx: CanvasRenderingContext2D, v: number): void {
+  const r = [24, 20, 26, 18][v] as number;
+  const draw = (width: number, style: string): void => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + v * 0.2;
+      const cx = Math.cos(a);
+      const cy = Math.sin(a);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(cx * r, cy * r);
+      for (const k of [0.5, 0.75]) {
+        const bl = r * 0.26 * (1.3 - k);
+        for (const s of [-1, 1]) {
+          ctx.moveTo(cx * r * k, cy * r * k);
+          ctx.lineTo(cx * r * k + Math.cos(a + s * 0.9) * bl, cy * r * k + Math.sin(a + s * 0.9) * bl);
+        }
+      }
+    }
+    ctx.stroke();
+  };
+  draw(6.5, 'rgba(96, 170, 226, 0.9)');
+  draw(3, '#ffffff');
+}
+
+function zap(ctx: CanvasRenderingContext2D, v: number, rng: Rng): void {
+  const pts: number[] = [-28, 0];
+  const flip = v % 2 === 0 ? 1 : -1;
+  for (let i = 1; i < 5; i++) pts.push(-28 + (56 * i) / 5, (i % 2 === 0 ? -1 : 1) * rng.range(6, 13) * flip);
+  pts.push(28, 0);
+  const line = (w: number, style: string): void => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = w;
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0] as number, pts[1] as number);
+    for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i] as number, pts[i + 1] as number);
+    ctx.stroke();
+  };
+  line(8, '#4347c9');
+  line(4.5, '#fff27a');
+  line(1.6, '#ffffff');
 }
 
 export function paintParticleArt(ctx: CanvasRenderingContext2D, kind: ParticleKind, variant: number, color?: string): void {
@@ -470,10 +599,10 @@ export function paintParticleArt(ctx: CanvasRenderingContext2D, kind: ParticleKi
       metal(ctx, v, rng);
       break;
     case 'dust':
-      puff(ctx, color ?? '#e6dcc8', mixHex(color ?? '#e6dcc8', '#ffffff', 0.5), 0.9, rng);
+      puff(ctx, color ?? '#e6dcc8', mixHex(color ?? '#e6dcc8', '#ffffff', 0.6), rng, false);
       break;
     case 'smoke':
-      puff(ctx, color ?? '#4e4743', mixHex(color ?? '#4e4743', '#b9b0a8', 0.45), 0.92, rng);
+      puff(ctx, color ?? '#57504c', mixHex(color ?? '#57504c', '#cfc6be', 0.5), rng, true);
       break;
     case 'spark':
       spark(ctx, v);
@@ -492,6 +621,18 @@ export function paintParticleArt(ctx: CanvasRenderingContext2D, kind: ParticleKi
       break;
     case 'fire':
       fire(ctx, rng);
+      break;
+    case 'burst':
+      burst(ctx, v, rng, color);
+      break;
+    case 'streak':
+      streak(ctx, v, color);
+      break;
+    case 'snow':
+      snow(ctx, v);
+      break;
+    case 'zap':
+      zap(ctx, v, rng);
       break;
   }
   ctx.restore();

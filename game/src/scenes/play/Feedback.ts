@@ -122,6 +122,11 @@ export class Feedback {
   private budgetUsed = 0;
   private readonly bolts: Bolt[] = [];
   private readonly wells: Well[] = [];
+  /** Dots left along the last shot's flight path: x, y pairs in metres. */
+  private readonly trailDots: number[] = [];
+  private readonly trailLast = new Map<number, { x: number; y: number }>();
+  /** Burn marks explosions leave on the ground. */
+  private readonly scorches: { x: number; r: number; born: number }[] = [];
 
   constructor(private readonly deps: FeedbackDeps) {}
 
@@ -266,6 +271,36 @@ export class Feedback {
         // Normal blending: additive sparks vanish against snow and bright sand.
         align: true,
         spin: 0,
+      });
+    }
+  }
+
+  /** Comic burst star that pops outwards; `color` tints it (default fiery). */
+  private burst(x: number, y: number, size: number, sizeEnd: number, life: number, color?: string): void {
+    if (this.quota(1, 1) === 0) return;
+    const o: EmitOptions = { size, sizeEnd, life, gravity: 0, spin: 1.2, fadeFrom: 0.6 };
+    if (color) o.color = color;
+    this.emit('burst', x, y, o);
+  }
+
+  /** Speed lines flying straight out from a point. */
+  private streaks(x: number, y: number, count: number, speed: number, color = '#ffffff', r0 = 0.2): void {
+    const n = this.quota(count);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rnd(-0.25, 0.25);
+      const v = speed * rnd(0.6, 1.1);
+      this.emit('streak', x + Math.cos(a) * r0, y + Math.sin(a) * r0, {
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        size: rnd(0.7, 1.3),
+        sizeEnd: 0.3,
+        life: rnd(0.16, 0.3),
+        gravity: 0,
+        drag: 3,
+        align: true,
+        spin: 0,
+        color,
+        fadeFrom: 0.3,
       });
     }
   }
@@ -464,7 +499,10 @@ export class Feedback {
   private onLaunch(event: SimEventOf<'birdLaunched'>): void {
     this.deps.audio.play('sling_release', { intensity: event.power, pan: this.pan(event.x) });
     this.deps.audio.play('bird_launch', { bird: event.bird, pan: this.pan(event.x) });
+    this.trailDots.length = 0;
+    this.trailLast.clear();
     // The pouch snaps: a pale shock ring, a puff of air and a loose feather or two.
+    this.streaks(event.x, event.y, 5, 6 + event.power * 5, '#ffffff', 0.3);
     this.deps.particles.ring(event.x, event.y, 0.15, 0.6 + event.power * 0.6, 0.22, '#ffffff', 0.12);
     this.puffs(event.x, event.y, 2, '#ffffff', 0.5 + event.power * 0.3);
     if (event.power > 0.6) this.feathers(event.x, event.y, 1 + Math.round(event.power), this.featherColor(event.bird));
@@ -475,7 +513,10 @@ export class Feedback {
     this.deps.actors.hit(event.id, this.deps.now(), 0.6 + strength);
     this.feathers(event.x, event.y, Math.round(2 + strength * 5), this.featherColor(event.bird));
     this.stars(event.x, event.y, 2 + Math.round(strength * 2));
-    if (event.first && strength > 0.35) this.flash(event.x, event.y, 0.8 + strength * 1.2, 0.5 + strength * 0.4);
+    if (event.first && strength > 0.3) {
+      this.burst(event.x, event.y, 0.5 + strength * 0.6, 1.1 + strength * 1.6, 0.18);
+      this.streaks(event.x, event.y, Math.round(4 + strength * 6), 8 + strength * 8, '#ffffff', 0.3);
+    }
     this.deps.audio.play('bird_impact', { bird: event.bird, intensity: 0.4 + strength * 0.6, pan: this.pan(event.x) });
     if (event.bird === 'ember') this.sound('fuse', event.x, 0.8);
     this.deps.camera.shake(0.06 + strength * 0.14);
@@ -642,7 +683,8 @@ export class Feedback {
       });
     }
     this.deps.particles.ring(event.x, event.y, radius * 0.4, radius * 2.6, 0.3, '#f4ffe6', 0.14);
-    this.flash(event.x, event.y, radius * 3.2, 0.6, 0.16);
+    this.burst(event.x, event.y, radius * 1.6, radius * 3.8, 0.2, '#ffffff');
+    this.streaks(event.x, event.y, 8, 9, '#ffffff', radius);
     this.stars(event.x, event.y, 6, 5.5);
     if (event.variant === 'king') {
       this.deps.particles.spawn({
@@ -680,8 +722,8 @@ export class Feedback {
     const particles = this.deps.particles;
     switch (event.ability) {
       case 'boost': {
-        particles.ring(x, y, 0.2, 1.6, 0.3, '#fff3a0', 0.2);
-        this.flash(x, y, 1.4, 0.7, 0.12);
+        particles.ring(x, y, 0.2, 1.8, 0.3, '#fff3a0', 0.24);
+        this.burst(x, y, 0.6, 1.7, 0.18, '#ffd23f');
         const speed = Math.hypot(event.vx, event.vy) || 1;
         const n = this.quota(10);
         for (let i = 0; i < n; i++) {
@@ -701,13 +743,15 @@ export class Feedback {
       }
       case 'split':
         particles.ring(x, y, 0.15, 1.3, 0.28, '#d6f1ff', 0.18);
-        this.flash(x, y, 1.1, 0.5, 0.12);
+        this.burst(x, y, 0.5, 1.3, 0.18, '#b7e36a');
+        this.streaks(x, y, 6, 8, '#eeffc4', 0.2);
         this.puffs(x, y, 4, '#e8f7ff', 0.7);
         this.feathers(x, y, 5, BIRD_COLORS.sprig.body);
         this.sound('ability_split', x, 1);
         break;
       case 'slam':
         particles.ring(x, y, 0.3, 1.5, 0.25, '#f1dfc0', 0.22);
+        this.burst(x, y, 0.6, 1.6, 0.2, '#ead5b0');
         this.feathers(x, y, 4, BIRD_COLORS.brawn.body);
         this.puffs(x, y + 0.4, 3, '#ffffff', 0.7);
         this.sound('ability_slam', x, 1);
@@ -733,29 +777,35 @@ export class Feedback {
       return;
     }
     const particles = this.deps.particles;
-    // 1. White-hot core flash.
-    this.flash(x, y, radius * 2.2, 1, 0.2);
-    // 2. Fireball: overlapping blobs that swell and cool.
-    const fire = this.quota(5 + 3 * scale, 4);
+    // 1. A short white pop.
+    this.flash(x, y, radius * 1.5, 0.9, 0.1);
+    // 2. Fireball: cel-shaded blobs that swell, roll outwards and burn away, under a comic burst.
+    const fire = this.quota(6 + 4 * scale, 5);
     for (let i = 0; i < fire; i++) {
-      const a = rnd(0, Math.PI * 2);
-      const d = i === 0 ? 0 : rnd(0.2, 0.55) * radius;
+      const a = (i / fire) * Math.PI * 2 + rnd(-0.4, 0.4);
+      const d = i === 0 ? 0 : rnd(0.15, 0.45) * radius;
       this.emit('fire', x + Math.cos(a) * d, y + Math.sin(a) * d, {
-        vx: Math.cos(a) * rnd(0.5, 2),
-        vy: Math.sin(a) * rnd(0.5, 2) + 1,
-        size: radius * rnd(0.45, 0.7),
-        sizeEnd: radius * rnd(1.1, 1.6),
-        life: rnd(0.24, 0.4),
-        gravity: -0.1,
-        additive: true,
-        alpha: 0.85,
-        spin: 1.5,
-        fadeFrom: 0.2,
+        vx: Math.cos(a) * rnd(1.5, 4) * scale,
+        vy: Math.sin(a) * rnd(1.5, 4) * scale + 1.2,
+        size: radius * rnd(0.4, 0.6),
+        sizeEnd: radius * rnd(0.9, 1.25),
+        life: rnd(0.3, 0.5),
+        gravity: -0.12,
+        drag: 2.2,
+        alpha: 0.96,
+        spin: 2.5,
+        fadeFrom: 0.55,
       });
     }
-    // 3. Shock waves.
-    particles.ring(x, y, radius * 0.1, radius * 1.05, 0.34, '#ffffff', 0.42);
-    particles.ring(x, y, radius * 0.05, radius * 0.7, 0.5, '#ffd27a', 0.28);
+    this.burst(x, y, radius * 0.9, radius * 2.2, 0.24);
+    // 3. Shock waves, speed lines and a burn mark on the ground.
+    particles.ring(x, y, radius * 0.1, radius * 1.15, 0.36, '#ffffff', 0.5);
+    particles.ring(x, y, radius * 0.05, radius * 0.75, 0.5, '#ffb347', 0.3);
+    this.streaks(x, y, Math.round(12 * scale), 16 * scale, '#fff3c4', radius * 0.3);
+    if (y < radius * 0.7) {
+      this.scorches.push({ x, r: radius * 0.55 * scale, born: this.deps.now() });
+      if (this.scorches.length > 12) this.scorches.shift();
+    }
     // 4. A rolling smoke column, darker and slower than the fire.
     const smoke = this.quota(9 * scale + 2, 4);
     for (let i = 0; i < smoke; i++) {
@@ -850,6 +900,8 @@ export class Feedback {
       this.emit('dust', x + dir * rnd(0, 0.5), Math.max(0.1, y - 0.2), { vx: dir * rnd(3, 9), vy: rnd(0.3, 2.2), size, sizeEnd: size * 2.3, life: rnd(0.7, 1.2), gravity: -0.02, drag: 2.4, alpha: 0.7, spin: 1, color: dust, fadeFrom: 0.2 });
     }
     this.debris('stone', x, y, 0.8, 0, 3, 0.6, false);
+    this.burst(x, y + 0.2, radius * 0.45, radius * 1.15, 0.22, '#e6cc9c');
+    this.streaks(x, y + 0.2, 10, 12, '#ffffff', 0.4);
     this.stars(x, y, 5, 6);
     this.sound('explosion', x, 0.45);
     this.sound('stone_break', x, 1);
@@ -861,6 +913,8 @@ export class Feedback {
   private onNovaBurst(x: number, y: number, radius: number): void {
     const particles = this.deps.particles;
     this.flash(x, y, radius * 1.8, 0.9, 0.18);
+    this.burst(x, y, radius * 0.5, radius * 1.5, 0.24, NOVA);
+    this.streaks(x, y, 12, 14, '#f0dcff', radius * 0.2);
     particles.ring(x, y, radius * 0.1, radius * 1.1, 0.36, NOVA, 0.36);
     particles.ring(x, y, radius * 0.05, radius * 0.7, 0.5, '#ffffff', 0.2);
     this.glints(x, y, 10, radius * 0.6);
@@ -884,6 +938,14 @@ export class Feedback {
       const size = rnd(0.4, 0.8);
       this.emit('dust', x + Math.cos(a) * d, y + Math.sin(a) * d, { vx: Math.cos(a) * rnd(0.5, 2), vy: rnd(-0.6, 0.4), size, sizeEnd: size * 1.8, life: rnd(0.8, 1.4), gravity: 0.03, drag: 2, alpha: 0.55, spin: 1, color: FROST, fadeFrom: 0.3 });
     }
+    this.burst(x, y, radius * 0.35, radius * 1.0, 0.24, '#8fd4f7');
+    this.streaks(x, y, 10, 11, '#eafaff', radius * 0.2);
+    const flakes = this.quota(12, 4);
+    for (let i = 0; i < flakes; i++) {
+      const a = rnd(0, Math.PI * 2);
+      const d = rnd(0.1, 0.9) * radius;
+      this.emit('snow', x + Math.cos(a) * d, y + Math.sin(a) * d, { vx: rnd(-1.2, 1.2), vy: rnd(0.5, 2.2), size: rnd(0.3, 0.55), life: rnd(1.1, 1.9), gravity: 0.12, drag: 1.5, spin: 2.5, fadeFrom: 0.5 });
+    }
     this.feathers(x, y, 4, BIRD_COLORS.rime.dark);
     this.sound('ability_freeze', x, 1);
     this.deps.camera.shake(0.12);
@@ -893,10 +955,12 @@ export class Feedback {
     const now = this.deps.now();
     this.bolts.push({ arcs: event.arcs, until: now + BOLT_LIFE, seed: Math.random() * 1000 });
     this.flash(event.x, event.y, 2.2, 0.9, 0.12);
+    this.burst(event.x, event.y, 0.6, 1.8, 0.18, VOLT);
     for (let i = 0; i < event.arcs.length; i += 4) {
       const ex = event.arcs[i + 2] as number;
       const ey = event.arcs[i + 3] as number;
       this.sparks(ex, ey, 3, 7, 0, 1, 0.35);
+      if (this.quota(2) === 2) for (let k = 0; k < 2; k++) this.emit('zap', ex, ey, { vx: rnd(-3, 3), vy: rnd(-1, 4), size: rnd(0.5, 0.9), sizeEnd: 0.2, life: rnd(0.15, 0.3), gravity: 0, spin: 14 });
       if (i % 8 === 0) this.flash(ex, ey, 1.1, 0.7, 0.1);
     }
     this.deps.audio.play('ability_shock', { intensity: clamp01(event.hits / 8), pan: this.pan(event.x) });
@@ -1017,6 +1081,64 @@ export class Feedback {
     }
   }
 
+  /** Drops a dot along a flying bird's path; the dots stay until the next launch. */
+  flightDot(id: number, x: number, y: number): void {
+    const last = this.trailLast.get(id);
+    if (last && (x - last.x) ** 2 + (y - last.y) ** 2 < 0.36) return;
+    if (last) {
+      last.x = x;
+      last.y = y;
+    } else this.trailLast.set(id, { x, y });
+    if (this.trailDots.length < 600) this.trailDots.push(x, y);
+  }
+
+  /** The dotted flight path, drawn behind the birds (screen space). */
+  drawTrail(ctx: CanvasRenderingContext2D, cam: Camera, dpr: number): void {
+    const dots = this.trailDots;
+    if (dots.length === 0) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(43, 26, 18, 0.35)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    for (let i = 0; i < dots.length; i += 2) {
+      const r = Math.max(1.5, (i % 4 === 0 ? 0.085 : 0.06) * cam.zoom);
+      ctx.beginPath();
+      ctx.arc(cam.toScreenX(dots[i] as number), cam.toScreenY(dots[i + 1] as number), r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  /** Burn marks on the ground, drawn under the playfield (screen space). */
+  drawUnder(ctx: CanvasRenderingContext2D, cam: Camera, dpr: number): void {
+    if (this.scorches.length === 0) return;
+    const now = this.deps.now();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (let i = this.scorches.length - 1; i >= 0; i--) {
+      const s = this.scorches[i] as { x: number; r: number; born: number };
+      const age = now - s.born;
+      if (age > 14) {
+        this.scorches.splice(i, 1);
+        continue;
+      }
+      const a = 0.55 * clamp01((14 - age) / 5);
+      const rx = s.r * cam.zoom;
+      const ry = Math.max(3, rx * 0.16);
+      ctx.save();
+      ctx.translate(cam.toScreenX(s.x), cam.toScreenY(0) + ry * 0.4);
+      ctx.scale(1, ry / rx);
+      const g = ctx.createRadialGradient(0, 0, rx * 0.1, 0, 0, rx);
+      g.addColorStop(0, `rgba(24, 16, 12, ${a})`);
+      g.addColorStop(0.6, `rgba(40, 26, 18, ${a * 0.6})`);
+      g.addColorStop(1, 'rgba(40, 26, 18, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, rx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   /** Speed streaks behind a dashing Zip or a diving Brawn; call once per frame while it applies. */
   boostTrail(x: number, y: number, vx: number, vy: number): void {
     if (this.quota(2) < 2) return;
@@ -1031,7 +1153,7 @@ export class Feedback {
       align: true,
       spin: 0,
     });
-    this.emit('dust', x, y, { vx: -vx * 0.05, vy: -vy * 0.05, size: 0.5, sizeEnd: 0.15, life: 0.3, gravity: 0, alpha: 0.35, color: BIRD_COLORS.zip.light, spin: 0.5 });
+    this.emit('streak', x + rnd(-0.3, 0.3), y + rnd(-0.3, 0.3), { vx: vx * 0.25, vy: vy * 0.25, size: rnd(1, 1.6), sizeEnd: 0.5, life: 0.2, gravity: 0, align: true, spin: 0, color: '#ffffff', fadeFrom: 0.2 });
   }
 
   /** Smoke and sparks from a lit fuse. */

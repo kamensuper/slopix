@@ -308,6 +308,7 @@ export class PlayScene implements Scene {
       if (((bird.type === 'zip' && bird.abilityUsed) || bird.slamming) && !bird.impacted) this.feedback.boostTrail(bird.x, bird.y, bird.vx, bird.vy);
       if (bird.fuseEndTick >= 0 && this.sim.tick % 3 === 0) this.feedback.fuseSmoke(bird.x, bird.y + bird.radius);
       if (!bird.impacted && !bird.spawned) flight = Math.hypot(bird.vx, bird.vy);
+      if (!bird.impacted && bird.alive) this.feedback.flightDot(bird.id, bird.x, bird.y);
     }
     this.host.audio.setFlight(flight);
     this.feedback.wellDust();
@@ -489,6 +490,7 @@ export class PlayScene implements Scene {
     level.terrain.forEach((t, i) => r.drawTerrain(level.theme, t, i));
     r.screenSpace();
     drawSurfaces(ctx, cam, level, this.paused ? 0 : this.time);
+    this.feedback.drawUnder(ctx, cam, this.view.dpr);
     this.sling.drawBack(r, ctx, cam);
     for (const block of sim.blocks) {
       const flash = block.hitTick >= 0 ? clamp01(1 - (sim.tick - block.hitTick) / 6) : 0;
@@ -509,6 +511,7 @@ export class PlayScene implements Scene {
     drawConditions(ctx, cam, sim, alpha, this.time);
     this.actors.drawGhosts(r, this.time);
     this.sling.drawQueue(r, this.waiting(), this.time, this.sim.phase === 'aiming');
+    this.feedback.drawTrail(ctx, cam, this.view.dpr);
     this.actors.drawBirds(r, sim, alpha, this.time);
     this.sling.drawLoaded(r, this.time, 0);
     this.sling.drawFront(r, ctx, cam);

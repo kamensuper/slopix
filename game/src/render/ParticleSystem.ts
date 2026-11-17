@@ -300,13 +300,21 @@ export class ParticleSystem {
     for (const r of this.rings) {
       if (!r.active) continue;
       const t = r.age / r.life;
-      const eased = 1 - (1 - t) * (1 - t);
-      const radius = (r.r0 + (r.r1 - r.r0) * eased) * camera.zoom;
-      ctx.globalAlpha = (1 - t) * 0.85;
-      ctx.strokeStyle = r.color;
-      ctx.lineWidth = Math.max(1, r.width * camera.zoom * (1 - t * 0.7));
+      const eased = 1 - (1 - t) ** 3;
+      const radius = Math.max(0.5, (r.r0 + (r.r1 - r.r0) * eased) * camera.zoom);
+      const a = (1 - t) ** 1.4;
+      const lw = Math.max(1.5, r.width * camera.zoom * (1 - t * 0.75));
       ctx.beginPath();
       ctx.arc(camera.toScreenX(r.x), camera.toScreenY(r.y), radius, 0, Math.PI * 2);
+      ctx.strokeStyle = r.color;
+      ctx.globalAlpha = a * 0.3;
+      ctx.lineWidth = lw * 2.1;
+      ctx.stroke();
+      ctx.globalAlpha = a * 0.9;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = lw * 0.4;
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
