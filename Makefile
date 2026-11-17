@@ -8,7 +8,7 @@ GRUB_PLATFORM_DIR ?= /usr/lib/grub/i386-pc
 CFLAGS := -std=c11 -O2 -g -MMD -MP -ffile-prefix-map="$(CURDIR)"=. -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -m64 -mno-red-zone -mgeneral-regs-only
 include doom.mk
 .DEFAULT_GOAL := all
-OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/files_app.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/user_elf.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/apps.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
+OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/files_app.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/apps.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
 ifneq ($(BENCH),)
 CFLAGS += -DRENDER_BENCH
 endif
@@ -206,8 +206,6 @@ build/input.o: src/perf.h
 
 build/user_vm.o: src/user/vm.c src/user/vm.h src/memory.h
 	$(CC) $(CFLAGS) -c $< -o $@
-build/user_elf.o: src/user/elf.c src/user/elf.h src/user/vm.h
-	$(CC) $(CFLAGS) -c $< -o $@
 build/process.o: src/user/process.c src/user/process.h src/user/vm.h src/user/elf.h sdk/slopix.h
 	$(CC) $(CFLAGS) -c $< -o $@
 build/user_arch.o: src/user/arch.c src/user/process.h
@@ -219,8 +217,8 @@ build/sse.o: src/sse.S
 .PHONY: user-test sdk
 sdk:
 	$(MAKE) -C sdk
-user-test: sdk
-	$(HOSTCC) -std=c11 -O1 -g -no-pie -fsanitize=address,undefined tests/user_vm_test.c src/user/vm.c src/user/elf.c -o build/user-vm-test
+user-test: sdk build/librust-host-user_elf.a
+	$(HOSTCC) -std=c11 -O1 -g -no-pie -fsanitize=address,undefined tests/user_vm_test.c src/user/vm.c tests/rust_host_stubs.c build/librust-host-user_elf.a -ldl -lpthread -lm -o build/user-vm-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/user-vm-test sdk/HELLO.ELF
 
 build/ui_shell.o: src/ui/shell.c src/ui/shell.h src/apps.h src/preferences.h src/ui/chrome_geom.h
@@ -295,10 +293,10 @@ genesis-disk: sdk build/HELLO.SLOP build/STORE.SLOP
 	python3 tools/build_genesis_disk.py storage/genesis-test.img
 	@echo 'Boot with: SLOPIX_DISK=storage/genesis-test.img make run'
 .PHONY: genesis-host-test
-genesis-host-test: sdk build/librust-host-vfs-slop_package.a | build
+genesis-host-test: sdk build/librust-host-vfs-slop_package.a build/librust-host-user_elf.a | build
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/user_gui_host_test.c src/user/gui.c -o build/user-gui-host-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/user-gui-host-test
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/user_demo_elf_test.c src/user/vm.c src/user/elf.c -o build/user-demo-elf-test
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/user_demo_elf_test.c src/user/vm.c tests/rust_host_stubs.c build/librust-host-user_elf.a -ldl -lpthread -lm -o build/user-demo-elf-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/user-demo-elf-test sdk/DEMO.ELF
 	python3 tests/slop_package_test.py
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_package_fat_test.c src/storage/fat32.c src/fs/fat_backend.c tests/rust_host_stubs.c build/librust-host-vfs-slop_package.a -ldl -lpthread -lm -o build/genesis-package-fat-test
@@ -350,8 +348,8 @@ genesis-browser-test: sdk | build
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/browser_html_test.c -o build/browser-html-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/browser-html-test
 .PHONY: genesis-apps-elf-test
-genesis-apps-elf-test: sdk | build
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_apps_elf_test.c src/user/vm.c src/user/elf.c -o build/genesis-apps-elf-test
+genesis-apps-elf-test: sdk build/librust-host-user_elf.a | build
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/genesis_apps_elf_test.c src/user/vm.c tests/rust_host_stubs.c build/librust-host-user_elf.a -ldl -lpthread -lm -o build/genesis-apps-elf-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/genesis-apps-elf-test sdk/BROWSE.ELF sdk/HELLOGUI.ELF sdk/DEMO.ELF
 
 # Checkpoint 03: run host integration on the *new* disposable images.
@@ -407,8 +405,8 @@ genesis-cp04-bundles-disk: sdk build/BROWSE.SLP build/HELLOGUI.SLP build/DEMO.SL
 # Checkpoint 05: independent Ring-3 desktop clients, safe metadata syscalls.
 .PHONY: genesis-cp05-host-test genesis-cp05-disks genesis-cp07-disks genesis-cp05-disk-test
 
-genesis-cp05-host-test: sdk | build
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined tests/genesis_apps_elf_test.c src/user/vm.c src/user/elf.c -o build/genesis-cp05-elf-test
+genesis-cp05-host-test: sdk build/librust-host-user_elf.a | build
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined tests/genesis_apps_elf_test.c src/user/vm.c tests/rust_host_stubs.c build/librust-host-user_elf.a -ldl -lpthread -lm -o build/genesis-cp05-elf-test
 	./build/genesis-cp05-elf-test sdk/TERM.ELF sdk/FIND.ELF sdk/SET.ELF sdk/FILES.ELF sdk/BROWSE.ELF sdk/DEMO.ELF sdk/HELLOGUI.ELF sdk/DOOM.ELF sdk/BENCH.ELF
 	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined tests/user_gui_host_test.c src/user/gui.c -o build/genesis-cp05-gui-test
 	./build/genesis-cp05-gui-test
@@ -474,8 +472,8 @@ libc-host-test: build/libc-host-test
 	./build/libc-host-test
 
 # The real ELF loader must accept the libc-linked binary (PT_LOAD only).
-build/libc-elf-test: tests/genesis_apps_elf_test.c src/user/vm.c src/user/elf.c | build
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror $^ -o $@
+build/libc-elf-test: tests/genesis_apps_elf_test.c src/user/vm.c tests/rust_host_stubs.c build/librust-host-user_elf.a | build
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror $^ -ldl -lpthread -lm -o $@
 
 libc-elf-test: build/libc-elf-test sdk
 	./build/libc-elf-test sdk/LIBCDEMO.ELF sdk/BENCH.ELF sdk/TERM.ELF

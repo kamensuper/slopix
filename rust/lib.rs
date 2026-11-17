@@ -22,6 +22,8 @@ pub mod preferences;
 pub mod vfs;
 #[cfg(any(not(host_subset), part = "slop_package"))]
 pub mod slop_package;
+#[cfg(any(not(host_subset), part = "user_elf"))]
+pub mod user_elf;
 
 /// Kernel main-thread state shared with C callbacks.
 ///

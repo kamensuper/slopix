@@ -4,3 +4,4 @@
 #include <stdlib.h>
 void rust_panic_abort(void){abort();}
 void rust_eh_personality(void){abort();}
+void user_loader_checkpoint(void){}
