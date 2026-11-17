@@ -510,7 +510,150 @@ void process_report(void(*line)(const char*)){
  for(unsigned i=0;i<PROCESSES;i++){struct process*p=&tasks[i];if(!p->pid)continue;char s[200]="PROCESS ";field(s,"pid=",p->pid);copystr(s+length(s)," state=",200-length(s));copystr(s+length(s),states[p->state],200-length(s));field(s," pages=",p->vm.count+(p->vm.tables[0]?USER_TABLES:0));field(s," slices=",p->slices);field(s," us=",p->runtime);field(s," exit=",(uint32_t)p->exit_status);field(s," fault=",p->fault);field(s," crashed=",p->crashed);field(s," paused=",p->suspended);copystr(s+length(s)," policy=",200-length(s));copystr(s+length(s),policy_name(p->policy),200-length(s));field(s," prio=",p->priority);field(s," vr=",p->vruntime);line(s);}
  char s[200]="SCHED ";field(s,"switches=",switches);field(s," preemptions=",preemptions);field(s," crashes=",crashes);field(s," max_slice_us=",max_slice);field(s," deadline_misses=",deadline_misses);line(s);
 }
+/* ---- Time travel: whole-process checkpoints ------------------------------
+ * A checkpoint is a private copy of one Ring-3 process: every mapped user
+ * page, the trap frame, x87/SSE state, TLS base, heap break, descriptor table
+ * and scheduler parameters. Rewinding rebuilds a fresh address space from the
+ * copy and swaps it in only after every allocation succeeded, so a failed
+ * rewind leaves the process untouched. It works on live processes and on
+ * exited, killed or crashed ones (revive). PIDs are never reused, so a
+ * checkpoint always names exactly one program.
+ * Not rewound: files on disk, GUI windows, audio voices and other processes.
+ * Futex waiters come back READY (a spurious wakeup, which futex callers must
+ * already tolerate); sleepers keep their remaining sleep time.
+ * Main kernel thread only, never from an IRQ and never while RUNNING. */
+#define SNAPSHOTS 4u
+#define SNAP_RESERVE_PAGES 2048u
+struct snapshot {
+ int used;unsigned pid,id,state,policy,priority,count;
+ uint64_t taken,heap,fs_base,wake,futex_addr,vruntime,deadline_ns,period_ns,runtime_ns;
+ struct user_frame frame;_Alignas(16) unsigned char fp[512];
+ char name[13];struct user_file files[FD_MAX];
+ /* va/flags of the original mapping; pa is the checkpoint's private copy. */
+ struct user_page pages[USER_MAX_PAGES];
+};
+static struct snapshot snapshots[SNAPSHOTS];
+static unsigned next_snapshot=1;
+static struct user_vm rebuild;
+static void snapshot_free(struct snapshot*s){
+ for(unsigned i=0;i<s->count;i++)mr_pmm_free(s->pages[i].pa);
+ s->count=0;s->used=0;
+}
+static struct snapshot*snapshot_find(unsigned id){
+ for(unsigned i=0;i<SNAPSHOTS;i++)if(snapshots[i].used&&snapshots[i].id==id)return &snapshots[i];
+ return 0;
+}
+static struct process*find_process(unsigned pid){
+ for(unsigned i=0;i<PROCESSES;i++)if(tasks[i].pid==pid&&tasks[i].state!=EMPTY)return &tasks[i];
+ return 0;
+}
+/* Returns the checkpoint id, or -1 bad/running/exited PID, -2 out of memory. */
+static int snapshot_take(unsigned pid){
+ struct process*p=find_process(pid);
+ if(!p||p->state==EXITED||p->state==RUNNING||!p->vm.tables[0])return -1;
+ if(mr_pmm_stat(0)<(uint64_t)p->vm.count+SNAP_RESERVE_PAGES)return -2;
+ struct snapshot*s=0;
+ for(unsigned i=0;i<SNAPSHOTS;i++)if(!snapshots[i].used){s=&snapshots[i];break;}
+ if(!s){ /* All slots full: evict the oldest checkpoint. */
+  s=&snapshots[0];
+  for(unsigned i=1;i<SNAPSHOTS;i++)if(snapshots[i].id<s->id)s=&snapshots[i];
+  snapshot_free(s);
+ }
+ s->count=0;
+ for(unsigned i=0;i<p->vm.count;i++){
+  uint64_t copy=mr_pmm_alloc();if(!copy){snapshot_free(s);return -2;}
+  memcpy((void*)(uintptr_t)copy,(const void*)(uintptr_t)p->vm.pages[i].pa,4096);
+  s->pages[s->count++]=(struct user_page){p->vm.pages[i].va,copy,p->vm.pages[i].flags};
+  if(!(i&255))audio_checkpoint();
+ }
+ s->pid=p->pid;s->id=next_snapshot++;s->state=p->state;s->policy=p->policy;s->priority=p->priority;
+ s->taken=timer_us();s->heap=p->vm.heap;s->fs_base=p->fs_base;s->wake=p->wake;s->futex_addr=p->futex_addr;
+ s->vruntime=p->vruntime;s->deadline_ns=p->deadline_ns;s->period_ns=p->period_ns;s->runtime_ns=p->runtime_ns;
+ s->frame=p->frame;memcpy(s->fp,p->fp,sizeof(s->fp));copystr(s->name,p->name,sizeof(s->name));
+ memcpy(s->files,p->files,sizeof(s->files));s->used=1;
+ message("PROCESS_SNAPSHOT pid=",p->pid,s->count);
+ return (int)s->id;
+}
+/* Returns 0, or -1 running, -2 out of memory, -3 no free process slot. */
+static int snapshot_restore(const struct snapshot*s){
+ struct process*p=find_process(s->pid);
+ if(p&&p->state==RUNNING)return -1;
+ if(!p){
+  for(unsigned i=0;i<PROCESSES&&!p;i++)if(tasks[i].state==EMPTY||tasks[i].state==EXITED)p=&tasks[i];
+  if(!p)return -3;
+ }
+ if(mr_pmm_stat(0)<(uint64_t)s->count+USER_TABLES+64)return -2;
+ /* Build the whole replacement first; the old process is untouched on failure. */
+ if(!user_vm_create(&rebuild))return -2;
+ for(unsigned i=0;i<s->count;i++){
+  if(!user_vm_map(&rebuild,s->pages[i].va,s->pages[i].flags)){user_vm_destroy(&rebuild);return -2;}
+  memcpy((void*)(uintptr_t)rebuild.pages[i].pa,(const void*)(uintptr_t)s->pages[i].pa,4096);
+  if(!(i&255))audio_checkpoint();
+ }
+ if(p->pid==s->pid)console_flush(p);
+ if(p->vm.tables[0])user_vm_destroy(&p->vm);
+ if(p->pid!=s->pid){unsigned char*b=(unsigned char*)p;for(size_t i=0;i<sizeof(*p);i++)b[i]=0;}
+ memcpy(&p->vm,&rebuild,sizeof(rebuild));
+ for(unsigned i=0;i<USER_TABLES;i++)rebuild.tables[i]=0;
+ rebuild.count=0;
+ p->vm.heap=s->heap;
+ uint64_t now=timer_us();
+ p->pid=s->pid;p->frame=s->frame;memcpy(p->fp,s->fp,sizeof(p->fp));
+ p->fs_base=s->fs_base;p->policy=s->policy;p->priority=s->priority;p->vruntime=s->vruntime;
+ p->deadline_ns=s->deadline_ns;p->period_ns=s->period_ns;p->runtime_ns=s->runtime_ns;
+ p->next_deadline_ns=p->policy==POLICY_DEADLINE?(now+p->period_ns/1000)*1000:0;
+ copystr(p->name,s->name,sizeof(p->name));memcpy(p->files,s->files,sizeof(p->files));
+ p->exit_status=0;p->crashed=0;p->fault=0;p->reason=0;p->console_used=0;
+ p->futex_addr=0;p->wake=0;p->state=READY;
+ if(s->state==BLOCKED&&!s->futex_addr&&s->wake>s->taken){p->state=BLOCKED;p->wake=now+(s->wake-s->taken);}
+ message("PROCESS_REWIND pid=",p->pid,s->id);
+ return 0;
+}
+static unsigned parse_number(char**s){
+ unsigned n=0;while(**s==' ')(*s)++;
+ while(**s>='0'&&**s<='9'&&n<0x10000000)n=n*10+(unsigned)(*(*s)++-'0');
+ while(**s==' ')(*s)++;return n;
+}
+static const char*snapshot_error(int r){
+ return r==-1?"Invalid, running or exited PID":r==-2?"Not enough free memory for a checkpoint":r==-3?"No free process slot":"Checkpoint failed";
+}
+static int time_travel_command(const char*name,char*args,void(*line)(const char*)){
+ if(equal(name,"snap")){
+  unsigned pid=parse_number(&args);int r=pid&&!*args?snapshot_take(pid):-1;
+  if(r<0){line(snapshot_error(r));return 1;}
+  struct snapshot*s=snapshot_find((unsigned)r);
+  char m[200]="Checkpoint saved ";field(m,"id=",(unsigned)r);field(m," pid=",pid);field(m," pages=",s?s->count:0);line(m);return 1;
+ }
+ if(equal(name,"rewind")){
+  unsigned pid=parse_number(&args),id=parse_number(&args);struct snapshot*s=0;
+  if(pid&&!*args)for(unsigned i=0;i<SNAPSHOTS;i++){
+   struct snapshot*q=&snapshots[i];
+   if(q->used&&q->pid==pid&&(id?q->id==id:(!s||q->id>s->id)))s=q;
+  }
+  if(!s){line("No checkpoint for that PID; use snap PID first");return 1;}
+  int r=snapshot_restore(s);
+  if(r<0){line(snapshot_error(r));return 1;}
+  char m[200]="Rewound ";field(m,"pid=",pid);field(m," to checkpoint id=",s->id);field(m," age_ms=",(timer_us()-s->taken)/1000);line(m);return 1;
+ }
+ if(equal(name,"snaps")){
+  unsigned shown=0;
+  for(unsigned i=0;i<SNAPSHOTS;i++){
+   struct snapshot*q=&snapshots[i];if(!q->used)continue;
+   char m[200]="CHECKPOINT ";field(m,"id=",q->id);field(m," pid=",q->pid);
+   copystr(m+length(m)," name=",200-length(m));copystr(m+length(m),q->name,200-length(m));
+   field(m," pages=",q->count);field(m," age_ms=",(timer_us()-q->taken)/1000);line(m);shown++;
+  }
+  if(!shown)line("No checkpoints. Use snap PID");return 1;
+ }
+ if(equal(name,"snapdrop")){
+  unsigned id=parse_number(&args);struct snapshot*q=id&&!*args?snapshot_find(id):0;
+  if(!q){line("Unknown checkpoint id");return 1;}
+  snapshot_free(q);line("Checkpoint deleted");return 1;
+ }
+ return 0;
+}
 int process_command(const char*name,char*args,void(*line)(const char*)){
+ if(time_travel_command(name,args,line))return 1;
  if(equal(name,"net")){net_report(line);return 1;}
  if(equal(name,"ps")){process_report(line);return 1;}
  if(equal(name,"sysinfo")){line("x86-64 / Ring-3 / supervisor kernel / NX + W^X / int80 ABI v2 / EDF");process_report(line);return 1;}
