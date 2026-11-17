@@ -897,6 +897,99 @@ const TONES: Record<BirdType, BirdTones> = {
   nova: NOVA_TONES,
 };
 
+/** Where each bird's near wing hinges on its flank, and how big it is. */
+const WINGS: Record<BirdType, { x: number; y: number; size: number }> = {
+  pip: { x: -8, y: 30, size: 0.95 },
+  zip: { x: -2, y: 26, size: 1.05 },
+  ember: { x: -14, y: 30, size: 1 },
+  sprig: { x: -12, y: 30, size: 0.95 },
+  brawn: { x: -18, y: 36, size: 1.12 },
+  rime: { x: -12, y: 30, size: 1 },
+  jolt: { x: -12, y: 30, size: 1 },
+  nova: { x: -14, y: 32, size: 1 },
+};
+
+/**
+ * The near wing: three primaries under a rounded shoulder, hinged on the flank and pointing back.
+ * It folds at rest, tucks while aiming, beats in flight, spreads for the ability and droops when dazed.
+ */
+function paintWing(ctx: CanvasRenderingContext2D, type: BirdType, pose: BirdPose, tones: BirdTones): void {
+  const wing = WINGS[type];
+  const t = pose.time;
+  let lift = -0.25 + 0.04 * Math.sin(t * 2.3);
+  let reach = 0.9;
+  let chord = 1;
+  switch (pose.state) {
+    case 'aiming':
+      lift = -0.45 - 0.2 * (pose.pull ?? 0);
+      reach = 0.85;
+      break;
+    case 'flying': {
+      const beat = Math.sin(t * 26);
+      lift = 0.3 + 0.8 * beat;
+      reach = 1.15;
+      chord = 0.72 + 0.28 * Math.abs(Math.cos(t * 26));
+      break;
+    }
+    case 'ability':
+      lift = type === 'zip' ? -0.12 : 0.95 + 0.08 * Math.sin(t * 40);
+      reach = 1.25;
+      break;
+    case 'hit':
+      lift = 1.1;
+      reach = 1.1;
+      break;
+    case 'dazed':
+      lift = -0.6 + 0.08 * Math.sin(t * 3);
+      break;
+    default:
+      break;
+  }
+  const L = 86 * wing.size * reach;
+  const W = 42 * wing.size * chord;
+  ctx.save();
+  ctx.translate(wing.x, wing.y);
+  ctx.rotate(lift);
+  const path = new Path2D();
+  path.moveTo(10, -W * 0.5);
+  path.quadraticCurveTo(-L * 0.55, -W * 0.85, -L, -W * 0.1);
+  path.quadraticCurveTo(-L * 0.9, W * 0.16, -L * 0.78, W * 0.12);
+  path.quadraticCurveTo(-L * 0.92, W * 0.36, -L * 0.84, W * 0.46);
+  path.quadraticCurveTo(-L * 0.72, W * 0.5, -L * 0.6, W * 0.42);
+  path.quadraticCurveTo(-L * 0.7, W * 0.7, -L * 0.58, W * 0.78);
+  path.quadraticCurveTo(-L * 0.2, W * 0.86, 12, W * 0.4);
+  path.closePath();
+  ctx.lineWidth = FEATURE_LINE;
+  ctx.strokeStyle = tones.ink;
+  ctx.fillStyle = tones.lo;
+  ctx.fill(path);
+  ctx.save();
+  ctx.clip(path);
+  // Shoulder coverts in the body colour, a lit leading edge and the seams between the primaries.
+  ctx.fillStyle = tones.body;
+  ctx.beginPath();
+  ctx.ellipse(-L * 0.2, -W * 0.12, L * 0.42, W * 0.5, -0.12, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = tones.hi;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(4, -W * 0.36);
+  ctx.quadraticCurveTo(-L * 0.5, -W * 0.66, -L * 0.9, -W * 0.14);
+  ctx.stroke();
+  ctx.strokeStyle = tones.ink;
+  ctx.globalAlpha *= 0.45;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-L * 0.78, W * 0.12);
+  ctx.quadraticCurveTo(-L * 0.55, W * 0.1, -L * 0.36, W * 0.02);
+  ctx.moveTo(-L * 0.6, W * 0.42);
+  ctx.quadraticCurveTo(-L * 0.42, W * 0.4, -L * 0.26, W * 0.3);
+  ctx.stroke();
+  ctx.restore();
+  ctx.stroke(path);
+  ctx.restore();
+}
+
 export function paintBird(ctx: CanvasRenderingContext2D, type: BirdType, pose: BirdPose): void {
   const design = DESIGNS[type];
   const flash = pose.flash ?? 0;
@@ -923,6 +1016,7 @@ export function paintBird(ctx: CanvasRenderingContext2D, type: BirdType, pose: B
   paintGloss(ctx, design.gloss.x, design.gloss.y, design.gloss.size, tones.gloss);
   endBody(ctx);
 
+  paintWing(ctx, type, pose, tones);
   paintFace(ctx, design, rig, pose, tones);
   design.over?.(ctx, pose, tones);
   ctx.restore();
