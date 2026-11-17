@@ -11,11 +11,12 @@ const T = 'ironworks';
 /** 5-1: a boulder parked on a running belt behind a glass chock. Break the chock, the belt does the rest. */
 function assemblyLine(): LevelDef {
   const b = new LevelBuilder('5-1', 'Assembly Line', T, ['pip', 'pip', 'zip']);
-  b.size(50, 26).hint('The belt carries whatever lies on it. Something is holding the boulder back.');
+  b.size(50, 26).hint('The belt carries whatever lands on it. Cut the boulder loose.');
   b.decor('pipes', 19).decor('lamp_post', 23).decor('barrel', 41).decor('cog_pile', 44).decor('warning_sign', 12, { front: true });
   const belt = b.ledge(28, 0, 8, 3, 'conveyor', 3);
-  b.ball('stone', 26, belt, 1.3);
-  b.rect('glass', 27, belt, 0.3, 0.9);
+  // A boulder on a crane rope just above the belt: one hit snaps the rope, the belt carries it off the end.
+  b.ledge(25.5, belt + 5.6, 2.4, 0.5);
+  b.hang('stone', 'circle', 25.5, belt + 0.95, 1.3, 1.3, belt + 5.6, 40);
   hut(b, 33.8, 0, { w: 2.4, h: 1.8, mat: 'glass', top: 'wood', foe: 'medium' });
   b.foe('small', 36.4, 0);
   return b.stars(16000, 25000).build();
@@ -87,7 +88,7 @@ function gearworks(): LevelDef {
 
 /** 5-7: a slab of ironwood and metal slung on two ropes over the guard room. */
 function thePress(): LevelDef {
-  const b = new LevelBuilder('5-7', 'The Press', T, ['zip', 'zip', 'pip']);
+  const b = new LevelBuilder('5-7', 'The Press', T, ['zip', 'zip', 'brawn', 'pip']);
   b.size(52, 28).hint('Two ropes hold the press up.');
   b.decor('furnace', 20).decor('pipes', 41).decor('lamp_post', 24).decor('cog_pile', 45).decor('warning_sign', 12, { front: true });
   b.ledge(30, 8.4, 9, 0.7);
@@ -120,7 +121,7 @@ function coldForge(): LevelDef {
 /** 5-9: two belts running towards a pit. Whatever lands on them ends up in it, including the crate. */
 function scrapBelt(): LevelDef {
   const b = new LevelBuilder('5-9', 'Scrap Belt', T, ['pip', 'sprig', 'ember']);
-  b.size(54, 26).hint('Both belts feed the pit. So does everything you knock onto them.');
+  b.size(54, 26).hint('Both belts feed the pit. So does everything you drop onto them.');
   b.decor('pipes', 20).decor('cog_pile', 46).decor('lamp_post', 23).decor('barrel', 49).decor('warning_sign', 12, { front: true });
   const left = b.ledge(27.5, 0, 5, 2.4, 'conveyor', 2.5);
   const right = b.ledge(36.5, 0, 5, 2.4, 'conveyor', -2.5);
@@ -129,11 +130,12 @@ function scrapBelt(): LevelDef {
   b.foe('helmet', 33, 0);
   b.plank('glass', 32, 2.4, 4.4, 0.3);
   // Crates held back from the belts' edges by glass chocks.
-  b.tnt(28.4, left);
-  b.rect('glass', 29.4, left, 0.3, 0.8);
-  b.ball('stone', 35.9, right, 1.1);
-  b.rect('glass', 34.9, right, 0.3, 0.8);
-  b.foe('small', 37.8, right);
+  // Crates on crane ropes above the belts: knock one down and the belt feeds it to the pit.
+  b.ledge(27, left + 5.2, 2, 0.5);
+  b.hang('tnt', 'rect', 27, left + 0.7, 0.8, 0.8, left + 5.2, 40);
+  b.ledge(37, right + 5.4, 2, 0.5);
+  b.hang('stone', 'circle', 37, right + 0.85, 1.1, 1.1, right + 5.4, 90);
+  b.foe('small', 38.6, right);
   return b.stars(22000, 34000).build();
 }
 
@@ -187,8 +189,8 @@ function theFoundry(): LevelDef {
   b.foe('shield', 28.9, 0);
   // The belt hall: a crate on a belt behind a chock, feeding the works.
   const belt = b.ledge(33.5, 0, 5, 2.6, 'conveyor', 3);
-  b.tnt(32.4, belt);
-  b.rect('glass', 33.4, belt, 0.3, 0.8);
+  b.ledge(32, belt + 4.8, 2, 0.5);
+  b.hang('tnt', 'rect', 32, belt + 0.7, 0.8, 0.8, belt + 4.8, 30);
   // The works: metal frame with the plated guard, ironwood upper floor with the Foreman.
   b.rect('metal', 37.2, 0, 0.4, 2.8);
   b.rect('metal', 42.8, 0, 0.4, 2.8);
