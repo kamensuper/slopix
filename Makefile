@@ -8,7 +8,7 @@ GRUB_PLATFORM_DIR ?= /usr/lib/grub/i386-pc
 CFLAGS := -std=c11 -O2 -g -MMD -MP -ffile-prefix-map="$(CURDIR)"=. -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -m64 -mno-red-zone -mgeneral-regs-only
 include doom.mk
 .DEFAULT_GOAL := all
-OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/slop_package.o build/files_app.o build/vfs.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/user_elf.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/preferences.o build/apps.o build/perf.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
+OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/slop_package.o build/files_app.o build/vfs.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/user_elf.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/apps.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
 ifneq ($(BENCH),)
 CFLAGS += -DRENDER_BENCH
 endif
@@ -186,21 +186,19 @@ graphics-resize-test: | build
 
 build/desktop.o: src/audio/audio.h
 
-build/preferences.o: src/preferences.c src/preferences.h src/kernel.h
-	$(CC) $(CFLAGS) -Wno-misleading-indentation -c $< -o $@
 build/apps.o: src/apps.c src/apps.h src/preferences.h src/perf.h
 	$(CC) $(CFLAGS) -Wno-misleading-indentation -c $< -o $@
 .PHONY: preferences-test
-preferences-test:
-	$(HOSTCC) -std=c11 -O1 -g -Wno-misleading-indentation -fsanitize=address,undefined tests/preferences_test.c src/preferences.c -o build/preferences-test
+preferences-test: build/librust-host-preferences.a
+	$(HOSTCC) -std=c11 -O1 -g -Wno-misleading-indentation -fsanitize=address,undefined tests/preferences_test.c tests/rust_host_stubs.c build/librust-host-preferences.a -ldl -lpthread -lm -o build/preferences-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/preferences-test
 
 build/desktop.o build/terminal.o: src/apps.h src/preferences.h src/perf.h
 build/display.o build/kernel.o: src/preferences.h
-build/perf.o build/doom/d_main.o: src/perf.h
+build/doom/d_main.o: src/perf.h
 .PHONY: perf-test
-perf-test:
-	$(HOSTCC) -std=c11 -O1 -g -fsanitize=address,undefined tests/perf_test.c src/perf.c -o build/perf-test
+perf-test: build/librust-host-perf.a
+	$(HOSTCC) -std=c11 -O1 -g -fsanitize=address,undefined tests/perf_test.c tests/rust_host_stubs.c build/librust-host-perf.a -ldl -lpthread -lm -o build/perf-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/perf-test
 test: preferences-test perf-test
 test: slopde-test

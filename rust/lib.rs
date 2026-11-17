@@ -14,6 +14,10 @@ pub mod memory;
 pub mod heap;
 #[cfg(any(not(host_subset), part = "clipboard"))]
 pub mod clipboard;
+#[cfg(any(not(host_subset), part = "perf"))]
+pub mod perf;
+#[cfg(any(not(host_subset), part = "preferences"))]
+pub mod preferences;
 
 /// Kernel main-thread state shared with C callbacks.
 ///
