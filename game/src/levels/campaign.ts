@@ -1,12 +1,19 @@
 /**
- * The campaign: the ten featured levels in three worlds, plus the metadata menus need.
- * The older 30-level set (chapter1-3.ts) stays in the source as LEGACY_LEVELS but is not played.
+ * The campaign: five worlds. The first three are the featured hand-composed levels (the Frostbound
+ * Heights also take the four frost levels), then the Stormreach Skies and the Ironworks.
+ *
+ * A level's `id` is its save key and never changes; the number shown to the player comes from its
+ * position in its world, so levels can be inserted without disturbing saved progress.
+ * Levels that do not yet pass tools/check-levels.ts are listed in HELD_BACK and not played.
  */
 import type { CampaignMeta, ChapterMeta, LevelDef, LevelMeta, ThemeId } from '../core/types';
 import { CHAPTER_1 } from './chapter1';
 import { CHAPTER_2 } from './chapter2';
 import { CHAPTER_3 } from './chapter3';
 import { FEATURED } from './featured';
+import { FROST_NEW } from './worldFrost';
+import { IRON } from './worldIron';
+import { STORM } from './worldStorm';
 
 export interface ChapterDef {
   id: string;
@@ -16,9 +23,25 @@ export interface ChapterDef {
   levels: LevelDef[];
 }
 
-const THEMES: ThemeId[] = ['grasslands', 'desert', 'snowlands'];
+/** Built but not yet proven stable and winnable; kept out of the campaign until they are. */
+export const HELD_BACK: readonly string[] = ['4-12', '5-9', '5-10'];
+const ready = (levels: LevelDef[]): LevelDef[] => levels.filter((level) => !HELD_BACK.includes(level.id));
 
-export const CHAPTERS: ChapterDef[] = FEATURED.map((chapter, i) => ({ ...chapter, theme: THEMES[i] as ThemeId }));
+const [wild, badlands, frost] = FEATURED as [(typeof FEATURED)[number], (typeof FEATURED)[number], (typeof FEATURED)[number]];
+const [ironRoof, avalanche, iceBridge, baronsPeak] = frost.levels as [LevelDef, LevelDef, LevelDef, LevelDef];
+
+export const CHAPTERS: ChapterDef[] = [
+  { ...wild, theme: 'grasslands' },
+  { ...badlands, theme: 'desert' },
+  {
+    ...frost,
+    theme: 'snowlands',
+    // Ice and frost are taught between the featured set pieces; the Baron stays the finale.
+    levels: [ironRoof, FROST_NEW.curlingStones, FROST_NEW.thinIce, avalanche, FROST_NEW.coldSnap, iceBridge, FROST_NEW.deepFreeze, baronsPeak],
+  },
+  { id: '4', title: 'The Stormreach Skies', subtitle: 'Wind, balloons and lightning', theme: 'storm', levels: ready(STORM) },
+  { id: '5', title: 'The Ironworks', subtitle: 'Belts, presses, rubber and powder', theme: 'ironworks', levels: ready(IRON) },
+];
 
 /** Every campaign level in order. */
 export const LEVELS: LevelDef[] = CHAPTERS.flatMap((chapter) => chapter.levels);

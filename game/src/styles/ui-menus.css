@@ -306,8 +306,8 @@
 }
 .chapter-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 300px));
-  gap: clamp(16px, calc(var(--vw, 1vw) * 2.4), 30px);
+  grid-template-columns: repeat(5, minmax(0, 224px));
+  gap: clamp(10px, calc(var(--vw, 1vw) * 1.4), 20px);
   justify-content: center;
   width: 100%;
 }

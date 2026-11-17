@@ -37,7 +37,7 @@ npm run e2e            # headless Chrome: real mouse + touch play-through (needs
   is impulse/velocity based with per-pair cooldowns, so resting contacts do no damage.
 - Five birds: Red, Chuck (boost), Bomb (tap or fuse explosion), the Blues (split into three),
   Matilda (egg drop + upward kick). Six foe types: small, medium, large, helmet, armoured, king.
-- 30 hand-built levels across Grasslands, Desert and Snowlands (`src/levels`). Every level is checked
+- 35 campaign levels across five worlds (`src/levels/campaign.ts`); see docs/PROGRESS.md for what is held back. Every level is checked
   by `levels:check`: it must not move before it is hit and must be winnable with its own birds.
   Star thresholds were set from the solver's winning scores (two stars ≈ 60 %, three ≈ 90 %).
 - Scoring with floating numbers, unused-bird bonus, per-level three-star rating, best scores and unlocks.

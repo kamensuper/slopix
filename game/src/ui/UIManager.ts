@@ -319,9 +319,9 @@ export class UIManager implements IUIManager {
           tile.type = 'button';
           tile.dataset.action = `level-${lvl.index}`;
           tile.disabled = !unlocked;
-          tile.setAttribute('aria-label', unlocked ? `Level ${lvl.id}, ${lvl.name}, ${stars} of 3 stars` : `Level ${lvl.id}, locked`);
+          tile.setAttribute('aria-label', unlocked ? `Level ${ch.index + 1}-${lvl.number}, ${lvl.name}, ${stars} of 3 stars` : `Level ${ch.index + 1}-${lvl.number}, locked`);
           const describe = (): void => {
-            caption.textContent = unlocked ? `${lvl.id}  ${lvl.name}${best > 0 ? `  ·  Best ${fmt(best)}` : ''}` : 'Locked: clear the previous level first';
+            caption.textContent = unlocked ? `${ch.index + 1}-${lvl.number}  ${lvl.name}${best > 0 ? `  ·  Best ${fmt(best)}` : ''}` : 'Locked: clear the previous level first';
           };
           tile.addEventListener('focus', describe);
           tile.addEventListener('pointerenter', describe);
@@ -334,7 +334,7 @@ export class UIManager implements IUIManager {
         const next = ch.levels.find((l) => progress.isLevelUnlocked(l.index) && progress.getStars(l.index) === 0) ?? ch.levels.find((l) => progress.isLevelUnlocked(l.index));
         if (next) tiles[ch.levels.indexOf(next)]?.setAttribute('data-primary', '1');
         return el('div', `screen screen-levels theme-${ch.theme}`, [
-          el('div', 'screen-head', [this.backButton('chapters'), this.ribbon(ch.title, ch.theme === 'desert' ? 'orange' : ch.theme === 'snowlands' ? 'blue' : 'green'), this.starChip(progress.chapterStars(ch.index), ch.levels.length * 3, 'head-stars')]),
+          el('div', 'screen-head', [this.backButton('chapters'), this.ribbon(ch.title, ch.theme === 'desert' || ch.theme === 'ironworks' ? 'orange' : ch.theme === 'snowlands' || ch.theme === 'storm' ? 'blue' : 'green'), this.starChip(progress.chapterStars(ch.index), ch.levels.length * 3, 'head-stars')]),
           el('div', 'level-board', [el('div', 'level-grid', tiles), caption]),
         ]);
       }
