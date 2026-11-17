@@ -85,7 +85,12 @@ static inline uint64_t sx_gui_poll(void){return (uint64_t)sx_call(SX_GUI_POLL,0,
 #define SX_GUI_EVENT_KEY 1u
 #define SX_GUI_EVENT_MOUSE 2u
 #define SX_GUI_EVENT_VISIBILITY 3u
-/* 5 is reserved for RESIZE. CLOSE asks the app to save and exit; the
+/* Type 5: window client area changed. Apps may call sx_gui_open(w,h) again to
+ * re-allocate their surface at the new size (max 640x400). */
+#define SX_GUI_EVENT_RESIZE 5u
+static inline unsigned sx_gui_resize_w(uint64_t e){return (unsigned)(e&4095u);}
+static inline unsigned sx_gui_resize_h(uint64_t e){return (unsigned)((e>>12)&4095u);}
+/* CLOSE asks the app to save and exit; the
  * desktop ends it after a short grace period if it does not. */
 #define SX_GUI_EVENT_CLOSE 6u
 static inline unsigned sx_gui_event_type(uint64_t e){return (unsigned)(e>>32);}

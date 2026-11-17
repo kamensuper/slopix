@@ -100,6 +100,16 @@ static void app_restore_process(int id){
  if(id>=0&&id<APPS&&user_app_pid[id]){gui_send_visibility(user_app_pid[id],1);process_resume(user_app_pid[id]);}
 }
 static int resizing=-1;
+/* Last client size reported to each app (type-5 event), keyed by PID. */
+static unsigned sent_pid[APP_COUNT],sent_w[APP_COUNT],sent_h[APP_COUNT];
+static void sync_client_size(int id){
+ if(id<0||id>=APPS||!user_app_pid[id]||!windows[id].open||id==resizing)return;
+ /* Same client rectangle gui_draw/gui_client_pointer use (SlopDE 3 chrome). */
+ struct chrome_rect cr=chrome_client(0,0,windows[id].box.w,windows[id].box.h);
+ int cw=cr.w,ch=cr.h;if(cw<1||ch<1)return;
+ if(sent_pid[id]==user_app_pid[id]&&sent_w[id]==(unsigned)cw&&sent_h[id]==(unsigned)ch)return;
+ if(gui_send_resize(user_app_pid[id],(unsigned)cw,(unsigned)ch)){sent_pid[id]=user_app_pid[id];sent_w[id]=(unsigned)cw;sent_h[id]=(unsigned)ch;}
+}
 static void dock_layout(void){ui_shell_layout_changed();}
 
 static struct region overlap(struct region a,struct region b);
@@ -343,7 +353,10 @@ void slopde_step(uint64_t now) {
             {int crashed=0;unsigned fault=0;if(process_exit_info(user_app_pid[i],&crashed,&fault)&&crashed)toast_app((int)i,"quit unexpectedly");}
             close_deadline[i]=0;
             user_app_pid[i]=0;dock_damage();event((int)i,"userspace-process-exited");
-        }else if(gui_take_dirty(user_app_pid[i])&&windows[i].open)invalidate((int)i);
+        }else{
+            sync_client_size((int)i);
+            if(gui_take_dirty(user_app_pid[i])&&windows[i].open)invalidate((int)i);
+        }
     }
     struct bounds area=cube_area();
     int visible=0; /* Never schedule the obsolete Ring-0 3D renderer. */
