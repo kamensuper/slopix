@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../src/apps/files.c"
-#include "../src/clipboard.c"
 void*heap_alloc(size_t n){return malloc(n);}int heap_free(void*p){free(p);return 1;}
 struct preferences prefs;
 static unsigned listed=1,writes,deletes;static int writable=1,fail_io,binary;static uint32_t source_size=4;static char saved[1024],saved_name[13];

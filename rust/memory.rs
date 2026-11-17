@@ -1,4 +1,3 @@
-#![cfg_attr(not(test), no_std)]
 //! Physical-page bookkeeping only. No heap, paging instructions, or pointer dereferences.
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -92,13 +91,6 @@ fn with_pages<T>(busy: T, operation: impl FnOnce(&mut Pages) -> T) -> T {
 #[no_mangle] pub extern "C" fn mr_pmm_free(address: u64) -> i32 { with_pages(BUSY, |p| p.release(address)) }
 #[no_mangle] pub extern "C" fn mr_pmm_stat(which: u32) -> u64 {
     with_pages(u64::MAX, |p| match which { 0 => p.available - p.used, 1 => p.used, 2 => p.available, 3 => p.limit as u64, _ => u64::MAX })
-}
-#[cfg(not(test))]
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    extern "C" { fn rust_panic_abort() -> !; }
-    // SAFETY: supplied by the linked C kernel, never returns or unwinds.
-    unsafe { rust_panic_abort() }
 }
 #[cfg(test)]
 mod tests {

@@ -8,7 +8,7 @@ GRUB_PLATFORM_DIR ?= /usr/lib/grub/i386-pc
 CFLAGS := -std=c11 -O2 -g -MMD -MP -ffile-prefix-map="$(CURDIR)"=. -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -m64 -mno-red-zone -mgeneral-regs-only
 include doom.mk
 .DEFAULT_GOAL := all
-OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/slop_package.o build/heap.o build/files_app.o build/clipboard.o build/vfs.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/user_elf.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/preferences.o build/apps.o build/perf.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
+OBJS := build/rtl8139.o build/net_stack.o build/net_http.o build/account.o build/auth.o build/slop_package.o build/files_app.o build/vfs.o build/fat_backend.o build/desktop_service.o build/ui_shell.o build/ui_chrome.o build/dwm.o build/user_vm.o build/user_elf.o build/process.o build/user_gui.o build/user_arch.o build/user_asm.o build/preferences.o build/apps.o build/perf.o build/display.o build/audio.o build/sb16.o build/audio_demo.o build/entry.o build/kernel.o build/ata.o build/fat32.o build/arch.o build/graphics.o build/terminal.o build/input.o build/desktop.o build/cube.o build/memory.o build/runtime.o build/brand.o build/sse.o
 ifneq ($(BENCH),)
 CFLAGS += -DRENDER_BENCH
 endif
@@ -23,15 +23,21 @@ build/%.o: src/%.c src/kernel.h src/font.h src/sine.h src/icons.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 build/dwm.o: src/ui/dwm.c src/kernel.h src/font.h src/sine.h src/icons.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
-build/libslopix_memory.a: rust/memory.rs rust-toolchain.toml | build
-	$(RUSTC) --edition=2021 --crate-name slopix_memory --crate-type=staticlib --target x86_64-unknown-none -C panic=abort -C opt-level=2 -C relocation-model=static $< -o $@
+RUST_SRCS := $(wildcard rust/*.rs)
+RUSTFLAGS_COMMON := --edition=2021 -C panic=abort -C opt-level=2
+build/libslopix.a: $(RUST_SRCS) rust-toolchain.toml | build
+	$(RUSTC) $(RUSTFLAGS_COMMON) --crate-name slopix --crate-type=staticlib --target x86_64-unknown-none -C relocation-model=static rust/lib.rs -o $@
+# Host staticlib holding only the Rust parts named in the target, separated by
+# dashes (build/librust-host-heap-clipboard.a), so a C host test can stub the rest.
+build/librust-host-%.a: $(RUST_SRCS) | build
+	$(RUSTC) $(RUSTFLAGS_COMMON) --crate-name slopix_host --crate-type=staticlib --cfg host_subset $(foreach part,$(subst -, ,$*),--cfg 'part="$(part)"') rust/lib.rs -o $@
 src/icons.h: tools/build_icons.py $(foreach icon,$(ICONS),assets/icons/source/$(icon)-256.png)
 	python3 tools/build_icons.py --icons $(ICONS)
 icons:
 	python3 tools/build_icons.py --icons $(ICONS)
 	python3 tools/build_ui_icons.py
-build/kernel.elf: $(OBJS) build/libslopix_memory.a linker.ld
-	$(LD) $(LDFLAGS) $(OBJS) build/libslopix_memory.a -o $@
+build/kernel.elf: $(OBJS) build/libslopix.a linker.ld
+	$(LD) $(LDFLAGS) $(OBJS) build/libslopix.a -o $@
 	grub-file --is-x86-multiboot2 $@
 	@test -z "`nm -u $@`"
 build/slopix.iso: build/kernel.elf boot/grub/grub.cfg tools/build_iso.py
@@ -73,12 +79,10 @@ slopde-test: slopde-geom-test slopde-window-test slopde-anim-test slopde-transit
 renderer-test: build/renderer-test build/graphics-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/renderer-test
 	ASAN_OPTIONS=detect_leaks=0 timeout 30s ./build/graphics-test
-build/memory-rust-tests: rust/memory.rs | build
-	$(RUSTC) --edition=2021 --test $< -o $@
-build/libmemory-host.a: rust/memory.rs | build
-	$(RUSTC) --edition=2021 --crate-name slopix_memory_host --crate-type=staticlib -C panic=abort -C opt-level=2 $< -o $@
-build/memory-abi-test: tests/memory_abi_test.c src/memory.h build/libmemory-host.a
-	$(HOSTCC) -std=c11 -Wall -Wextra -Werror $< build/libmemory-host.a -ldl -lpthread -lm -o $@
+build/memory-rust-tests: $(RUST_SRCS) | build
+	$(RUSTC) --edition=2021 --test --cfg host_subset --cfg 'part="memory"' rust/lib.rs -o $@
+build/memory-abi-test: tests/memory_abi_test.c src/memory.h build/librust-host-memory.a
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror $< build/librust-host-memory.a -ldl -lpthread -lm -o $@
 memory-test: build/memory-rust-tests build/memory-abi-test
 	./build/memory-rust-tests
 	./build/memory-abi-test
@@ -244,14 +248,12 @@ boundaries-test:
 build/files_app.o: src/apps/files.c src/apps/files.h src/apps.h src/fs/vfs.h src/clipboard.h src/kernel.h
 	$(CC) $(CFLAGS) -c $< -o $@
 build/apps.o: src/apps/files.h
-build/clipboard.o: src/clipboard.c src/clipboard.h
-	$(CC) $(CFLAGS) -c $< -o $@
 
 build/terminal.o: src/clipboard.h
 
 .PHONY: files-test
-files-test:
-	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/files_test.c -o build/files-test
+files-test: tests/rust_host_stubs.c build/librust-host-clipboard.a
+	$(HOSTCC) -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined tests/files_test.c $^ -o build/files-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/files-test
 
 # Track module headers as well as explicit asset/build prerequisites.
@@ -262,7 +264,7 @@ $(OBJS): | build
 
 test: user-test boundaries-test files-test
 
-build/heap-test: tests/heap_test.c src/heap.c src/clipboard.c
+build/heap-test: tests/heap_test.c tests/rust_host_stubs.c build/librust-host-heap-clipboard.a
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -O1 -g -fsanitize=address,undefined $^ -o $@
 heap-test: build/heap-test
 	ASAN_OPTIONS=detect_leaks=0 ./build/heap-test

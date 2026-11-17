@@ -2,7 +2,7 @@
 #include "memory.h"
 extern char kernel_end[];
 static void check(int32_t result) {if(result)panic("physical memory bookkeeping rejected boot map");}
-void rust_panic_abort(void) {panic("Rust memory component panic (abort)");}
+void rust_panic_abort(void) {panic("Rust kernel component panic (abort)");}
 void memory_init(uint32_t info,uint64_t fb_addr,uint64_t fb_bytes) {
     uintptr_t begin=(uintptr_t)info+8,end=(uintptr_t)info+*(const uint32_t *)(uintptr_t)info;
     check(mr_pmm_reset(0x100000000ULL));
